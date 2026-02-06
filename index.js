@@ -75,10 +75,15 @@ async function api(path, options) {
 }
 
 function backendHelpText() {
+    const origin = (window.location && window.location.origin) ? window.location.origin : '';
     if (window.location && window.location.protocol === 'file:') {
-        return 'Du hast die Website per Doppelklick geöffnet (file://). Bitte starte den Server und öffne: http://localhost:3000';
+        return 'Du hast die Website per Doppelklick geöffnet (file://). Login/Upload funktionieren nur über den Server. Starte im Projektordner: npm start. Öffne dann: http://localhost:3000 (oder http://localhost:3001 / http://localhost:3002 falls 3000 belegt). Tipp: PORT=3002 npm start';
     }
-    return 'Backend nicht erreichbar. Starte den Server mit: npm start und öffne http://localhost:3000';
+    return `Backend nicht erreichbar. Wahrscheinlich hast du die Seite über VS Code "Live Server" / GitHub Pages / falschen Port geöffnet. Öffne die Website über denselben Server wie das Backend (same-origin).
+
+Aktuell geöffnet: ${origin || '(unbekannt)'}
+Starte Server: npm start
+Öffne dann: http://localhost:3000 (oder 3001/3002 falls belegt; z.B. PORT=3002 npm start)`;
 }
 
 let currentMe = { loggedIn: false, username: null, role: 'user' };
@@ -715,6 +720,58 @@ document.addEventListener('DOMContentLoaded', function() {
     const playlistsList = $('playlistsList');
     const playlistTracks = $('playlistTracks');
 
+    const fileInput = $('trackFile');
+    const coverInput = $('trackCover');
+    const titleInput = $('trackTitle');
+    const descInput = $('trackDescription');
+    const tagsInput = $('trackTags');
+
+    function hasExtraUploadFields() {
+        const t = titleInput && titleInput.value ? String(titleInput.value).trim() : '';
+        const d = descInput && descInput.value ? String(descInput.value).trim() : '';
+        const g = tagsInput && tagsInput.value ? String(tagsInput.value).trim() : '';
+        const c = coverInput && coverInput.files && coverInput.files.length ? true : false;
+        return Boolean(t || d || g || c);
+    }
+
+    function looksLikeAudioFile(file) {
+        if (!file) return false;
+        const type = String(file.type || '').toLowerCase();
+        if (type.startsWith('audio/')) return true;
+        if (type === 'video/mp4' || type === 'audio/mp4') return true;
+        if (type === 'audio/webm' || type === 'video/webm') return true;
+        const name = String(file.name || '').toLowerCase();
+        return /\.(mp3|wav|ogg|flac|m4a|aac|mp4|webm|opus)$/.test(name);
+    }
+
+    function maybeAutoUpload() {
+        if (!uploadForm || !fileInput) return;
+        const files = fileInput.files ? Array.from(fileInput.files) : [];
+        if (!files.length) return;
+        if (!currentMe || !currentMe.loggedIn) {
+            setMessage(authMsg, 'Bitte zuerst einloggen.', 'error');
+            return;
+        }
+        // Auto-upload only when user did not fill extra fields.
+        if (hasExtraUploadFields()) return;
+
+        setMessage(uploadMsg, 'Upload startet…', 'info');
+        if (typeof uploadForm.requestSubmit === 'function') {
+            uploadForm.requestSubmit();
+        } else {
+            uploadForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', () => {
+            const files = fileInput.files ? Array.from(fileInput.files) : [];
+            if (!files.length) return;
+            setMessage(uploadMsg, files.length === 1 ? `Ausgewählt: ${files[0].name}` : `Ausgewählt: ${files.length} Dateien`, 'success');
+            maybeAutoUpload();
+        });
+    }
+
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -801,7 +858,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (progressBar) progressBar.style.width = '100%';
                 await refreshMeAndTracks();
             } catch (err) {
-                const msg = err && err.isNetworkError ? backendHelpText() : (err.message || 'Upload fehlgeschlagen.');
+                let msg = err && err.isNetworkError ? backendHelpText() : (err.message || 'Upload fehlgeschlagen.');
+                if (msg === 'Only audio files are allowed.') msg = 'Nur Audio-Dateien sind erlaubt (MP3, WAV, OGG, FLAC, M4A).';
+                if (msg === 'Only cover images (PNG/JPG/WEBP/GIF) are allowed.') msg = 'Nur Cover-Bilder sind erlaubt (PNG/JPG/WEBP/GIF).';
                 setMessage(uploadMsg, msg, 'error');
                 if (err.status === 401) {
                     setMessage(authMsg, 'Bitte zuerst einloggen.', 'error');
@@ -816,7 +875,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (dropZone) {
-        const fileInput = $('trackFile');
         dropZone.addEventListener('click', () => fileInput && fileInput.click());
         dropZone.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -837,13 +895,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         dropZone.addEventListener('drop', (e) => {
             const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-            const audios = files.filter(f => String(f.type || '').startsWith('audio/'));
+            const audios = files.filter(f => looksLikeAudioFile(f));
             const picked = audios.length ? audios : files;
             if (!picked.length || !fileInput) return;
             const dt = new DataTransfer();
             picked.forEach(f => dt.items.add(f));
             fileInput.files = dt.files;
             setMessage(uploadMsg, picked.length === 1 ? `Ausgewählt: ${picked[0].name}` : `Ausgewählt: ${picked.length} Dateien`, 'success');
+            maybeAutoUpload();
         });
     }
 

@@ -40,6 +40,15 @@ Am einfachsten über GitHub Deploy:
    - Environment Variables setzen:
      - `SESSION_SECRET` (irgendein langer zufälliger String)
      - optional `NODE_ENV=production`
+       - optional (empfohlen) **Admin automatisch erstellen**:
+          - `BOOTSTRAP_ADMIN_USERNAME` (z.B. `admin`)
+          - `BOOTSTRAP_ADMIN_PASSWORD` (starkes Passwort)
+       - optional (empfohlen) **Persistent Storage**:
+          - Render **Disks** aktivieren und z.B. auf `/var/data` mounten
+          - `STORAGE_DIR=/var/data`
+
+24/7 Hinweis:
+- Auf **Free** kann der Service schlafen/neu starten. Für wirklich immer-an nimm einen bezahlten Plan oder einen eigenen Server/VPS.
 
 Hinweis (wichtig):
 - `uploads/` ist auf Render ohne **Persistent Disk** nicht dauerhaft. Nach einem Redeploy können Uploads weg sein.

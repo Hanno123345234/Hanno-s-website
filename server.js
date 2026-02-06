@@ -14,8 +14,10 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PROD = NODE_ENV === 'production';
 
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, 'data');
-const UPLOADS_DIR = path.join(ROOT, 'uploads');
+// Optional persistent storage paths (useful on Render with a mounted disk)
+const STORAGE_ROOT = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : ROOT;
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(STORAGE_ROOT, 'data');
+const UPLOADS_DIR = process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(STORAGE_ROOT, 'uploads');
 const COVERS_DIR = path.join(UPLOADS_DIR, 'covers');
 const USERS_PATH = path.join(DATA_DIR, 'users.json');
 const TRACKS_PATH = path.join(DATA_DIR, 'tracks.json');
@@ -41,6 +43,32 @@ function readJson(filePath) {
 
 function writeJson(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+function bootstrapAdminFromEnv() {
+  const username = String(process.env.BOOTSTRAP_ADMIN_USERNAME || '').trim();
+  const password = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
+  if (!username || !password) return;
+
+  try {
+    const db = readJson(USERS_PATH);
+    const users = Array.isArray(db.users) ? db.users : [];
+    const exists = users.find(u => String(u.username || '').trim().toLowerCase() === username.toLowerCase());
+    if (exists) return;
+
+    const hash = bcrypt.hashSync(password, 10);
+    users.push({
+      id: makeId('user'),
+      username,
+      passwordHash: hash,
+      role: 'admin',
+      createdAt: new Date().toISOString()
+    });
+    writeJson(USERS_PATH, { users });
+    console.log(`[bootstrap] Admin user created: ${username}`);
+  } catch (e) {
+    console.log('[bootstrap] Failed to create admin user:', e && e.message ? e.message : e);
+  }
 }
 
 function getUserById(userId) {
@@ -127,6 +155,7 @@ async function getMusicMetadata() {
 }
 
 ensureDirs();
+bootstrapAdminFromEnv();
 
 const app = express();
 
@@ -156,6 +185,21 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+// If you want the whole site private: redirect all non-API requests to /login until authenticated.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  if (req.path.startsWith('/uploads/')) return next();
+
+  // Public login page
+  if (req.method === 'GET' && (req.path === '/login' || req.path === '/login.html')) return next();
+
+  const loggedIn = !!(req.session && req.session.userId);
+  if (!loggedIn && req.method === 'GET') {
+    return res.redirect('/login');
+  }
+  return next();
+});
+
 // Protect uploaded files: only accessible when logged in.
 // IMPORTANT: This must be registered BEFORE express.static(ROOT), otherwise uploads would be public.
 app.use('/uploads', requireAuth, express.static(UPLOADS_DIR));
@@ -169,6 +213,10 @@ app.use(express.static(ROOT, {
 
 app.get('/', (_req, res) => {
   res.sendFile(path.join(ROOT, 'index.html'));
+});
+
+app.get('/login', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'login.html'));
 });
 
 const storage = multer.diskStorage({
@@ -206,7 +254,7 @@ const upload = multer({
       if (allowedImages.has(mimetype) || allowedImages.has(String(byExt).toLowerCase())) {
         return cb(null, true);
       }
-      return cb(new Error('Only cover images (PNG/JPG/WEBP/GIF) are allowed.'));
+      return cb(new Error('Nur Cover-Bilder sind erlaubt (PNG/JPG/WEBP/GIF).'));
     }
 
     const allowed = new Set([
@@ -219,18 +267,45 @@ const upload = multer({
       'audio/x-flac',
       'audio/mp4',
       'audio/aac',
-      'audio/x-m4a'
+      'audio/x-m4a',
+      // Some OS/browsers label M4A/MP4 audio as video/mp4
+      'video/mp4',
+      // WebM audio/video containers
+      'audio/webm',
+      'video/webm',
+      // Some uploads come through as generic binary
+      'application/octet-stream'
+    ]);
+
+    const allowedExts = new Set([
+      '.mp3',
+      '.wav',
+      '.ogg',
+      '.flac',
+      '.m4a',
+      '.aac',
+      '.mp4',
+      '.webm',
+      '.opus'
     ]);
 
     const mimetype = (file.mimetype || '').toLowerCase();
     const ext = path.extname(file.originalname || '').toLowerCase();
     const byExt = mime.lookup(ext) || '';
 
+    if (ext === '.url') {
+      return cb(new Error('Das ist eine .url Link-Datei (keine Audio-Datei). Bitte wähle eine echte Audio-Datei (z.B. MP3).'));
+    }
+
+    if (allowedExts.has(ext)) {
+      return cb(null, true);
+    }
+
     if (allowed.has(mimetype) || allowed.has(String(byExt).toLowerCase())) {
       return cb(null, true);
     }
 
-    cb(new Error('Only audio files are allowed.'));
+    cb(new Error('Nur Audio-Dateien sind erlaubt (MP3, WAV, OGG, FLAC, M4A, MP4, WEBM, OPUS).'));
   }
 });
 
