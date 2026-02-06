@@ -14,14 +14,49 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PROD = NODE_ENV === 'production';
 
 const ROOT = __dirname;
-// Optional persistent storage paths (useful on Render with a mounted disk)
-const STORAGE_ROOT = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : ROOT;
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(STORAGE_ROOT, 'data');
-const UPLOADS_DIR = process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(STORAGE_ROOT, 'uploads');
-const COVERS_DIR = path.join(UPLOADS_DIR, 'covers');
-const USERS_PATH = path.join(DATA_DIR, 'users.json');
-const TRACKS_PATH = path.join(DATA_DIR, 'tracks.json');
-const PLAYLISTS_PATH = path.join(DATA_DIR, 'playlists.json');
+// Optional persistent storage paths (useful on Render with a mounted disk).
+// IMPORTANT: If STORAGE_DIR points to an unwritable path (e.g. disk not mounted),
+// we fall back to the project directory so the service still boots.
+let STORAGE_ROOT;
+let DATA_DIR;
+let UPLOADS_DIR;
+let COVERS_DIR;
+let USERS_PATH;
+let TRACKS_PATH;
+let PLAYLISTS_PATH;
+
+function computeStoragePaths({ storageDir, dataDir, uploadsDir, rootDir }) {
+  const baseRoot = storageDir ? path.resolve(storageDir) : rootDir;
+  const data = dataDir ? path.resolve(dataDir) : path.join(baseRoot, 'data');
+  const uploads = uploadsDir ? path.resolve(uploadsDir) : path.join(baseRoot, 'uploads');
+  const covers = path.join(uploads, 'covers');
+  return {
+    storageRoot: baseRoot,
+    dataDir: data,
+    uploadsDir: uploads,
+    coversDir: covers,
+    usersPath: path.join(data, 'users.json'),
+    tracksPath: path.join(data, 'tracks.json'),
+    playlistsPath: path.join(data, 'playlists.json')
+  };
+}
+
+function applyStoragePaths(p) {
+  STORAGE_ROOT = p.storageRoot;
+  DATA_DIR = p.dataDir;
+  UPLOADS_DIR = p.uploadsDir;
+  COVERS_DIR = p.coversDir;
+  USERS_PATH = p.usersPath;
+  TRACKS_PATH = p.tracksPath;
+  PLAYLISTS_PATH = p.playlistsPath;
+}
+
+applyStoragePaths(computeStoragePaths({
+  storageDir: process.env.STORAGE_DIR,
+  dataDir: process.env.DATA_DIR,
+  uploadsDir: process.env.UPLOADS_DIR,
+  rootDir: ROOT
+}));
 
 function makeId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -154,7 +189,16 @@ async function getMusicMetadata() {
   return musicMetadataModule;
 }
 
-ensureDirs();
+try {
+  ensureDirs();
+} catch (e) {
+  const msg = e && e.message ? e.message : String(e);
+  console.log(`[storage] Failed to init storage at "${STORAGE_ROOT}": ${msg}`);
+  console.log('[storage] Falling back to project directory storage.');
+  applyStoragePaths(computeStoragePaths({ rootDir: ROOT }));
+  ensureDirs();
+}
+
 bootstrapAdminFromEnv();
 
 const app = express();
