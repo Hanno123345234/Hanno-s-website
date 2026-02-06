@@ -17,8 +17,10 @@
                 <nav class="top-nav" aria-label="Hauptnavigation">
                     <a class="nav-link" href="#home">Home</a>
                     <a class="nav-link" href="#about">Über mich</a>
+                    <a class="nav-link" href="#projects">Projekte</a>
                     <a class="nav-link" href="#hobbies">Hobbys</a>
                     <a class="nav-link nav-link-primary" href="#studio">Music Studio</a>
+                    <a class="nav-link" href="#contact">Kontakt</a>
                 </nav>
             </div>
         </header>
@@ -42,6 +44,37 @@
                     <div class="hero-media" aria-hidden="true">
                         <div class="hero-image" role="img" aria-label="Studio Hintergrund"></div>
                     </div>
+                </div>
+            </section>
+
+            <section class="projects" id="projects">
+                <div class="section-head">
+                    <h3>Projekte</h3>
+                    <p class="section-sub">Ein paar Dinge, die ich gebaut habe (oder gerade baue).</p>
+                </div>
+
+                <div class="projects-grid">
+                    <article class="project-card">
+                        <div class="project-thumb" role="img" aria-label="Music Studio"></div>
+                        <div class="project-body">
+                            <h4>Music Studio</h4>
+                            <p class="muted">Privates Login, Uploads, Playlist & Queue.</p>
+                            <div class="project-actions">
+                                <a class="button button-primary" href="#studio">Öffnen</a>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="project-card">
+                        <div class="project-thumb project-thumb-alt" role="img" aria-label="Portfolio"></div>
+                        <div class="project-body">
+                            <h4>Portfolio Website</h4>
+                            <p class="muted">Design, Content, Mobile-Optimierung.</p>
+                            <div class="project-actions">
+                                <a class="button button-ghost" href="#home">Zum Start</a>
+                            </div>
+                        </div>
+                    </article>
                 </div>
             </section>
            
@@ -79,6 +112,43 @@
                 </div>
 
                 <div class="studio-grid">
+                    <div class="card player-card">
+                        <div class="card-head">
+                            <h4>Player & Queue</h4>
+                            <p class="muted">Klick auf einen Track → in Queue. Next/Prev, Shuffle, Repeat.</p>
+                        </div>
+
+                        <div id="playerLocked" class="empty-state">
+                            <p>Bitte einloggen, um Player & Uploads zu nutzen.</p>
+                        </div>
+
+                        <div id="playerUnlocked" class="hidden">
+                            <div class="player-now">
+                                <div class="now-cover" id="nowCover" aria-hidden="true"></div>
+                                <div class="now-meta">
+                                    <div class="now-title" id="nowTitle">–</div>
+                                    <div class="now-sub muted" id="nowSub">–</div>
+                                </div>
+                            </div>
+
+                            <audio id="mainPlayer" controls preload="metadata"></audio>
+
+                            <canvas id="visualizer" class="visualizer" width="720" height="90" aria-label="Audio Visualizer"></canvas>
+
+                            <div class="player-controls" role="group" aria-label="Player Controls">
+                                <button id="prevBtn" class="button button-ghost" type="button">Prev</button>
+                                <button id="nextBtn" class="button button-primary" type="button">Next</button>
+                                <button id="shuffleBtn" class="button button-ghost" type="button" aria-pressed="false">Shuffle</button>
+                                <button id="repeatBtn" class="button button-ghost" type="button" aria-pressed="false">Repeat: Off</button>
+                                <button id="clearQueueBtn" class="button button-ghost" type="button">Queue leeren</button>
+                            </div>
+
+                            <div class="queue" id="queueList" aria-label="Queue"></div>
+                        </div>
+
+                        <div id="playerMessage" class="message hidden" role="status" aria-live="polite"></div>
+                    </div>
+
                     <div class="card auth-card">
                         <div class="card-head">
                             <h4>Login</h4>
@@ -109,6 +179,22 @@
                                 </div>
                                 <button id="logoutBtn" class="button button-ghost" type="button">Logout</button>
                             </div>
+
+                            <details class="details" id="passwordDetails">
+                                <summary>Passwort ändern</summary>
+                                <form id="passwordForm" class="form">
+                                    <label class="field">
+                                        <span>Aktuelles Passwort</span>
+                                        <input id="currentPassword" type="password" autocomplete="current-password" required>
+                                    </label>
+                                    <label class="field">
+                                        <span>Neues Passwort</span>
+                                        <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required>
+                                    </label>
+                                    <button class="button button-primary" type="submit">Ändern</button>
+                                    <div id="passwordMessage" class="message hidden" role="status" aria-live="polite"></div>
+                                </form>
+                            </details>
                         </div>
 
                         <div id="authMessage" class="message hidden" role="status" aria-live="polite"></div>
@@ -130,9 +216,26 @@
                                 <input id="trackDescription" type="text" placeholder="Mood, BPM, Notizen (optional)">
                             </label>
                             <label class="field">
-                                <span>Datei</span>
-                                <input id="trackFile" type="file" accept="audio/*" required>
+                                <span>Tags</span>
+                                <input id="trackTags" type="text" placeholder="z.B. LoFi, 140BPM, Trap (kommagetrennt)">
                             </label>
+                            <label class="field">
+                                <span>Cover (optional)</span>
+                                <input id="trackCover" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+                            </label>
+                            <label class="field">
+                                <span>Datei</span>
+                                <input id="trackFile" type="file" accept="audio/*" multiple required>
+                            </label>
+
+                            <div id="dropZone" class="dropzone" tabindex="0" role="button" aria-label="Dateien hier ablegen">
+                                <div class="dropzone-title">Drag & Drop</div>
+                                <div class="dropzone-sub muted">Zieh eine oder mehrere Audio-Dateien hier rein.</div>
+                            </div>
+
+                            <div id="uploadProgress" class="progress hidden" aria-label="Upload Progress">
+                                <div class="progress-bar" id="uploadProgressBar"></div>
+                            </div>
                             <button class="button button-primary" type="submit">Upload</button>
                             <p class="hint">Deine Uploads erscheinen rechts in der Library.</p>
                         </form>
@@ -146,11 +249,83 @@
                             <p class="muted">Admin sieht alle Tracks und kann löschen.</p>
                         </div>
 
+                        <div class="library-toolbar" role="group" aria-label="Library Tools">
+                            <label class="field">
+                                <span>Suche</span>
+                                <input id="tracksSearch" type="text" placeholder="Titel, Tag, Beschreibung…">
+                            </label>
+                            <label class="field">
+                                <span>Sortierung</span>
+                                <select id="tracksSort" class="select">
+                                    <option value="new">Neueste zuerst</option>
+                                    <option value="old">Älteste zuerst</option>
+                                    <option value="title">Titel A–Z</option>
+                                    <option value="duration">Länge</option>
+                                </select>
+                            </label>
+                        </div>
+
                         <div id="tracksEmpty" class="empty-state">
                             <p>Noch keine Tracks. Lade deinen ersten Song hoch.</p>
                         </div>
 
                         <div id="tracksList" class="tracks"></div>
+                    </div>
+
+                    <div id="adminPanel" class="card admin-card hidden">
+                        <div class="card-head">
+                            <h4>Admin</h4>
+                            <p class="muted">Nutzer verwalten (minimal).</p>
+                        </div>
+
+                        <form id="createUserForm" class="form">
+                            <label class="field">
+                                <span>Username</span>
+                                <input id="newUserUsername" type="text" placeholder="username" minlength="3" required>
+                            </label>
+                            <label class="field">
+                                <span>Passwort</span>
+                                <input id="newUserPassword" type="password" placeholder="mind. 8 Zeichen" minlength="8" required>
+                            </label>
+                            <label class="field">
+                                <span>Rolle</span>
+                                <select id="newUserRole" class="select">
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </label>
+                            <button class="button button-primary" type="submit">User erstellen</button>
+                            <div id="adminMessage" class="message hidden" role="status" aria-live="polite"></div>
+                        </form>
+
+                        <div class="admin-users">
+                            <div class="muted" style="margin-top:12px;">Users</div>
+                            <div id="usersList" class="users-list"></div>
+                        </div>
+                    </div>
+
+                    <div id="playlistsPanel" class="card playlists-card hidden">
+                        <div class="card-head">
+                            <h4>Playlists</h4>
+                            <p class="muted">Erstellen, Tracks hinzufügen, abspielen.</p>
+                        </div>
+
+                        <form id="createPlaylistForm" class="form">
+                            <label class="field">
+                                <span>Name</span>
+                                <input id="newPlaylistName" type="text" placeholder="z.B. Gym Mix" minlength="2" required>
+                            </label>
+                            <button class="button button-primary" type="submit">Playlist erstellen</button>
+                            <div id="playlistsMessage" class="message hidden" role="status" aria-live="polite"></div>
+                        </form>
+
+                        <div class="playlists">
+                            <div class="muted" style="margin-top:12px;">Deine Playlists</div>
+                            <div id="playlistsList" class="playlists-list"></div>
+                            <div class="muted" style="margin-top:12px;">Aktive Playlist</div>
+                            <div id="playlistActive" class="playlist-active">–</div>
+                            <div id="playlistTracks" class="playlist-tracks"></div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -163,7 +338,7 @@
                         <h4>Handball</h4>
                         <p class="hobby-description">Als begeisterter Handballer trainiere ich regelmäßig und spiele im Team. Der Sport lehrt mich Teamwork, Disziplin und Durchhaltevermögen – Eigenschaften, die mir auch beim Programmieren helfen.</p>
                         <div class="handball-image">
-                            <img src="https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=400" alt="Handball">
+                            <img src="assets/handball.svg" alt="Handball" loading="lazy">
                         </div>
                         <div class="skills">
                             <span class="skill-tag">Teamwork</span>
@@ -187,6 +362,39 @@
                             <span class="skill-tag">Organisation</span>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section class="contact" id="contact">
+                <div class="section-head">
+                    <h3>Kontakt</h3>
+                    <p class="section-sub">Schreib mir gern (Links kannst du später anpassen).</p>
+                </div>
+
+                <div class="contact-grid">
+                    <a class="contact-card" href="#" aria-label="Discord Link">
+                        <div class="contact-icon" aria-hidden="true">💬</div>
+                        <div>
+                            <div class="contact-title">Discord</div>
+                            <div class="muted">@deinName</div>
+                        </div>
+                    </a>
+
+                    <a class="contact-card" href="mailto:example@example.com" aria-label="E-Mail senden">
+                        <div class="contact-icon" aria-hidden="true">✉️</div>
+                        <div>
+                            <div class="contact-title">E-Mail</div>
+                            <div class="muted">example@example.com</div>
+                        </div>
+                    </a>
+
+                    <a class="contact-card" href="#" aria-label="Instagram Link">
+                        <div class="contact-icon" aria-hidden="true">📸</div>
+                        <div>
+                            <div class="contact-title">Instagram</div>
+                            <div class="muted">@deinHandle</div>
+                        </div>
+                    </a>
                 </div>
             </section>
         </main>

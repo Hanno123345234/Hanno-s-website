@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-label="Handball Illustration">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff6b6b" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#667eea" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="600" rx="36" fill="url(#g)"/>
+  <g fill="rgba(255,255,255,0.95)">
+    <circle cx="560" cy="165" r="52"/>
+    <path d="M300 470c80-120 170-170 260-150 60 14 96 60 120 128 10 30-12 62-44 62H352c-40 0-72-32-52-40z"/>
+    <path d="M520 245c-90 40-160 110-210 210" stroke="rgba(255,255,255,0.85)" stroke-width="26" stroke-linecap="round" fill="none"/>
+    <path d="M560 210c10 60 10 120 0 180" stroke="rgba(255,255,255,0.75)" stroke-width="18" stroke-linecap="round" fill="none"/>
+  </g>
+  <g fill="none" stroke="rgba(17,24,39,0.25)" stroke-width="10">
+    <circle cx="700" cy="170" r="80"/>
+    <path d="M635 140c45 40 85 85 120 135"/>
+    <path d="M760 135c-45 40-85 85-120 135"/>
+  </g>
+</svg>

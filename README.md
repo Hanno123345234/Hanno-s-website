@@ -16,19 +16,32 @@ Wichtig: Nicht `index.html` doppelklicken, sonst funktioniert Login/Upload nicht
 ## Demo-Musik (für Tests)
 - `npm run seed-demo`
 
-## Domain wie www.hanno.de (kurz erklärt)
-Du brauchst Hosting für Node.js (weil Login/Upload ein Backend braucht). Beispiel-Optionen:
-- Render.com
-- Fly.io
-- Railway
-- Hetzner VPS (mit Nginx)
+## Online stellen (kurz)
+Wenn du Login/Uploads online nutzen willst, brauchst du **Node.js Hosting** (z.B. eigener VPS/Server oder ein Anbieter, der Node-Apps unterstützt).
 
-Danach:
-1. Domain kaufen (z.B. bei IONOS/Strato/Cloudflare Registrar).
-2. Im Hosting „Custom Domain“ hinzufügen.
-3. DNS setzen:
-   - `www` als **CNAME** auf die Ziel-URL vom Host (z.B. `xyz.onrender.com`).
-   - optional Root `hanno.de` als A/ALIAS (je nach Provider).
-4. HTTPS aktivieren (meist automatisch).
+Für Produktion: setze `SESSION_SECRET` als Environment Variable.
 
-Für Produktion: setze `SESSION_SECRET` als Environment Variable (siehe `.env.example`).
+## GitHub (Update hochladen)
+Wenn du Änderungen online bringen willst:
+1. Änderungen committen:
+   - `git add -A`
+   - `git commit -m "Update Music Studio"`
+2. Push:
+   - `git push`
+
+## Render Deployment (Website updaten)
+Am einfachsten über GitHub Deploy:
+1. Repo auf GitHub pushen (siehe oben)
+2. Auf Render:
+   - **New +** → **Web Service**
+   - Repo auswählen
+   - Build Command: `npm ci`
+   - Start Command: `npm start`
+   - Environment Variables setzen:
+     - `SESSION_SECRET` (irgendein langer zufälliger String)
+     - optional `NODE_ENV=production`
+
+Hinweis (wichtig):
+- `uploads/` ist auf Render ohne **Persistent Disk** nicht dauerhaft. Nach einem Redeploy können Uploads weg sein.
+- Gleiches gilt für `data/*.json` wenn du es nicht persistierst.
+- Für wirklich „dauerhaft“ brauchst du Persistent Storage (oder externen Storage wie S3).
