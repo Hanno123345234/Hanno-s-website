@@ -1,0 +1,17 @@
+{
+  "users": [
+    {
+      "id": "u_ml5cwbhx",
+      "username": "hanno",
+      "passwordHash": "$2a$10$Tg9Xv5Jz.JtqPXYQ6dWDSuZy2zb1HYolZ3qVMSZ0O.bywVXD37RNy",
+      "createdAt": "2026-02-02T16:00:33.333Z"
+    },
+    {
+      "id": "u_ml5d9w1y",
+      "username": "admin",
+      "passwordHash": "$2a$10$/h29tC/8dQNoXl6Do5wnW.s0jb4qwcKq8n.BRE7VuM8R3lJBK6O4y",
+      "role": "admin",
+      "createdAt": "2026-02-02T16:11:06.502Z"
+    }
+  ]
+}

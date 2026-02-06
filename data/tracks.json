@@ -1,0 +1,37 @@
+{
+  "tracks": [
+    {
+      "id": "t_ml5da2w9",
+      "title": "Demo Tone C (659Hz)",
+      "description": "Automatisch generierte Demo-Musik (WAV).",
+      "originalName": "1770048675369_demo_659hz.wav",
+      "storedName": "1770048675369_demo_659hz.wav",
+      "mimeType": "audio/wav",
+      "size": 194084,
+      "uploadedAt": "2026-02-02T16:11:15.371Z",
+      "uploadedBy": "u_ml5d9w1y"
+    },
+    {
+      "id": "t_ml5da2w4",
+      "title": "Demo Tone B (554Hz)",
+      "description": "Automatisch generierte Demo-Musik (WAV).",
+      "originalName": "1770048675364_demo_554hz.wav",
+      "storedName": "1770048675364_demo_554hz.wav",
+      "mimeType": "audio/wav",
+      "size": 194084,
+      "uploadedAt": "2026-02-02T16:11:15.367Z",
+      "uploadedBy": "u_ml5d9w1y"
+    },
+    {
+      "id": "t_ml5da2vw",
+      "title": "Demo Tone A (440Hz)",
+      "description": "Automatisch generierte Demo-Musik (WAV).",
+      "originalName": "1770048675356_demo_440hz.wav",
+      "storedName": "1770048675356_demo_440hz.wav",
+      "mimeType": "audio/wav",
+      "size": 194084,
+      "uploadedAt": "2026-02-02T16:11:15.362Z",
+      "uploadedBy": "u_ml5d9w1y"
+    }
+  ]
+}
