@@ -102,6 +102,10 @@ app.get('/api/health', (_req, res) => {
 // Serve your existing static site files
 app.use(express.static(ROOT));
 
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'index.html'));
+});
+
 const storage = multer.diskStorage({
   destination: function (_req, _file, cb) {
     cb(null, UPLOADS_DIR);

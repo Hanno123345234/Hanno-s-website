@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hanno's Website</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <div>
+                    <h1>Willkommen!</h1>
+                    <p class="subtitle">Portfolio • Music Studio • Uploads</p>
+                </div>
+                <nav class="top-nav" aria-label="Hauptnavigation">
+                    <a class="nav-link" href="#home">Home</a>
+                    <a class="nav-link" href="#about">Über mich</a>
+                    <a class="nav-link" href="#hobbies">Hobbys</a>
+                    <a class="nav-link nav-link-primary" href="#studio">Music Studio</a>
+                </nav>
+            </div>
+        </header>
+       
+        <main>
+            <div class="intro" id="home">
+                <h2>Hallo, ich bin <span class="name">Hanno</span></h2>
+                <p>Schön, dass du meine Website besuchst!</p>
+            </div>
+
+            <section class="hero">
+                <div class="hero-card">
+                    <div class="hero-text">
+                        <h2 class="hero-title">Meine Musik, meine Projekte.</h2>
+                        <p class="hero-lead">Logge dich ein und lade deine Tracks hoch. Alles bleibt privat und ist nur nach Login sichtbar.</p>
+                        <div class="hero-actions">
+                            <a class="button button-primary" href="#studio">Zum Studio</a>
+                            <a class="button button-ghost" href="#about">Mehr über mich</a>
+                        </div>
+                    </div>
+                    <div class="hero-media" aria-hidden="true">
+                        <div class="hero-image" role="img" aria-label="Studio Hintergrund"></div>
+                    </div>
+                </div>
+            </section>
+           
+            <section class="about" id="about">
+                <h3>Über mich</h3>
+                <div class="about-content">
+                    <div class="info-card">
+                        <span class="info-icon">🎂</span>
+                        <div class="info-text">
+                            <h4>Alter</h4>
+                            <p>14 Jahre jung und voller Energie</p>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-icon">💻</span>
+                        <div class="info-text">
+                            <h4>Berufsziel</h4>
+                            <p>Ich möchte professioneller Programmierer werden</p>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-icon">🚀</span>
+                        <div class="info-text">
+                            <h4>Leidenschaft</h4>
+                            <p>Technologie, Coding und Community Management</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="studio" id="studio">
+                <div class="section-head">
+                    <h3>Music Studio</h3>
+                    <p class="section-sub">Login, Upload und deine private Track-Library.</p>
+                </div>
+
+                <div class="studio-grid">
+                    <div class="card auth-card">
+                        <div class="card-head">
+                            <h4>Login</h4>
+                            <p class="muted">Nur du kannst hochladen.</p>
+                        </div>
+
+                        <div id="authLoggedOut">
+                            <form id="loginForm" class="form">
+                                <label class="field">
+                                    <span>Username</span>
+                                    <input id="loginUsername" type="text" autocomplete="username" placeholder="z.B. hanno" required>
+                                </label>
+                                <label class="field">
+                                    <span>Password</span>
+                                    <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required>
+                                </label>
+                                <button class="button button-primary" type="submit">Einloggen</button>
+                                <p class="hint">User erstellen: <span class="mono">npm run create-user -- hanno DeinPasswort</span></p>
+                            </form>
+                        </div>
+
+                        <div id="authLoggedIn" class="hidden">
+                            <div class="logged-in">
+                                <div>
+                                    <p class="muted">Eingeloggt als</p>
+                                    <p class="username"><span id="meUsername">–</span></p>
+                                    <p class="role-badge" id="meRole">USER</p>
+                                </div>
+                                <button id="logoutBtn" class="button button-ghost" type="button">Logout</button>
+                            </div>
+                        </div>
+
+                        <div id="authMessage" class="message hidden" role="status" aria-live="polite"></div>
+                    </div>
+
+                    <div class="card upload-card">
+                        <div class="card-head">
+                            <h4>Track hochladen</h4>
+                            <p class="muted">MP3, WAV, OGG, FLAC, M4A (max. 50MB)</p>
+                        </div>
+
+                        <form id="uploadForm" class="form" enctype="multipart/form-data">
+                            <label class="field">
+                                <span>Titel</span>
+                                <input id="trackTitle" type="text" placeholder="Track Titel (optional)">
+                            </label>
+                            <label class="field">
+                                <span>Beschreibung</span>
+                                <input id="trackDescription" type="text" placeholder="Mood, BPM, Notizen (optional)">
+                            </label>
+                            <label class="field">
+                                <span>Datei</span>
+                                <input id="trackFile" type="file" accept="audio/*" required>
+                            </label>
+                            <button class="button button-primary" type="submit">Upload</button>
+                            <p class="hint">Deine Uploads erscheinen rechts in der Library.</p>
+                        </form>
+
+                        <div id="uploadMessage" class="message hidden" role="status" aria-live="polite"></div>
+                    </div>
+
+                    <div class="card library-card">
+                        <div class="card-head">
+                            <h4>Deine Library</h4>
+                            <p class="muted">Admin sieht alle Tracks und kann löschen.</p>
+                        </div>
+
+                        <div id="tracksEmpty" class="empty-state">
+                            <p>Noch keine Tracks. Lade deinen ersten Song hoch.</p>
+                        </div>
+
+                        <div id="tracksList" class="tracks"></div>
+                    </div>
+                </div>
+            </section>
+           
+            <section class="hobbies" id="hobbies">
+                <h3>Meine Hobbys & Fähigkeiten</h3>
+                <div class="hobbies-grid">
+                    <div class="hobby-card handball-card">
+                        <div class="hobby-icon">🤾</div>
+                        <h4>Handball</h4>
+                        <p class="hobby-description">Als begeisterter Handballer trainiere ich regelmäßig und spiele im Team. Der Sport lehrt mich Teamwork, Disziplin und Durchhaltevermögen – Eigenschaften, die mir auch beim Programmieren helfen.</p>
+                        <div class="handball-image">
+                            <img src="https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?w=400" alt="Handball">
+                        </div>
+                        <div class="skills">
+                            <span class="skill-tag">Teamwork</span>
+                            <span class="skill-tag">Fitness</span>
+                            <span class="skill-tag">Strategie</span>
+                        </div>
+                    </div>
+                    <div class="hobby-card discord-card">
+                        <div class="hobby-icon">💬</div>
+                        <h4>Discord Management</h4>
+                        <p class="hobby-description">Als Discord Manager betreue ich Communities professionell. Ich kümmere mich um Server-Organisation, Mitgliederverwaltung, Bot-Integration und schaffe eine positive Community-Atmosphäre.</p>
+                        <div class="discord-features">
+                            <div class="feature">✓ Server Administration</div>
+                            <div class="feature">✓ Community Moderation</div>
+                            <div class="feature">✓ Bot Management</div>
+                            <div class="feature">✓ Event Organisation</div>
+                        </div>
+                        <div class="skills">
+                            <span class="skill-tag">Leadership</span>
+                            <span class="skill-tag">Kommunikation</span>
+                            <span class="skill-tag">Organisation</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+       
+        <footer>
+            <p>Made by Hanno</p>
+        </footer>
+    </div>
+   
+    <script src="index.js"></script>
+</body>
+</html>
