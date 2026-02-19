@@ -1,36 +1,35 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Among Us Modus</title>
+    <title>Among Us Mode</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app">
       <section id="amongHome" class="card active">
         <div class="top-tools">
-          <a id="amongBackToModes" href="/" class="mini-link">← Zur Auswahl</a>
+          <a id="amongBackToModes" href="/" class="mini-link">← Back to modes</a>
           <div class="lang-inline">
-            <label for="amongLangSelect">Sprache</label>
-            <select id="amongLangSelect" aria-label="Sprache auswählen">
-              <option value="de">Deutsch</option>
+            <label for="amongLangSelect">Language</label>
+            <select id="amongLangSelect" aria-label="Select language">
               <option value="en">English</option>
             </select>
           </div>
         </div>
-        <h1>Among Us Modus</h1>
-        <p class="subtitle">Erstelle einen Raum oder tritt bei</p>
+        <h1>Among Us Mode</h1>
+        <p class="subtitle">Create a room or join one</p>
 
-        <label for="amongNameInput">Dein Name</label>
-        <input id="amongNameInput" maxlength="24" placeholder="z. B. Hanno" />
+        <label for="amongNameInput">Your name</label>
+        <input id="amongNameInput" maxlength="24" placeholder="e.g. Hanno" />
 
-        <button id="amongCreateBtn" class="primary">Raum erstellen</button>
+        <button id="amongCreateBtn" class="primary">Create room</button>
 
         <div class="join-box">
-          <label for="amongCodeInput">Raumcode</label>
+          <label for="amongCodeInput">Room code</label>
           <input id="amongCodeInput" maxlength="5" placeholder="ABCDE" />
-          <button id="amongJoinBtn">Raum beitreten</button>
+          <button id="amongJoinBtn">Join room</button>
         </div>
 
         <p id="amongError" class="error"></p>
@@ -38,8 +37,8 @@
 
       <section id="amongRoom" class="card">
         <div class="room-header">
-          <button id="amongBackBtn" class="back-btn">← Zurück</button>
-          <h2>Raum <span id="amongRoomCode">-----</span></h2>
+          <button id="amongBackBtn" class="back-btn">← Back</button>
+          <h2>Room <span id="amongRoomCode">-----</span></h2>
         </div>
 
         <p id="amongState" class="subtitle">Lobby</p>
@@ -51,17 +50,17 @@
         </div>
 
         <div id="amongHostControls" class="stack hidden">
-          <button id="amongStartBtn" class="primary">Spiel starten</button>
+          <button id="amongStartBtn" class="primary">Start game</button>
         </div>
 
         <div id="amongActions" class="stack hidden">
-          <button id="amongTaskBtn">Aufgabe erledigt</button>
+          <button id="amongTaskBtn">Complete task</button>
           <button id="amongMeetingBtn">Emergency Meeting</button>
-          <button id="amongReportBtn">Body reporten</button>
+          <button id="amongReportBtn">Report body</button>
         </div>
 
         <div id="amongKillBox" class="hidden">
-          <h3>Imposter Aktionen</h3>
+          <h3>Imposter actions</h3>
           <div id="amongKillTargets" class="vote-buttons"></div>
         </div>
 
@@ -72,7 +71,7 @@
         </div>
 
         <div class="player-list-wrap">
-          <h3>Spieler</h3>
+          <h3>Players</h3>
           <ul id="amongPlayers" class="player-list"></ul>
         </div>
 
@@ -94,10 +93,7 @@
         }
 
         function getLang() {
-          const urlLang = new URLSearchParams(window.location.search).get("lang");
-          const stored = window.localStorage.getItem(key);
-          const value = urlLang || stored || "de";
-          return value === "en" ? "en" : "de";
+          return "en";
         }
 
         function applyLang(lang) {
@@ -111,7 +107,7 @@
         }
 
         select.addEventListener("change", () => {
-          applyLang(select.value);
+          applyLang("en");
         });
 
         applyLang(getLang());

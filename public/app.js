@@ -141,7 +141,7 @@ function loadProfile() {
 function saveProfile(name) {
   const next = sanitizeName(name);
   if (!next) {
-    showError("Bitte gültigen Namen eingeben.");
+    showError("Please enter a valid name.");
     return false;
   }
   profileName = next;
@@ -176,7 +176,7 @@ function renderRecentPlayers() {
   const list = loadRecentPlayers();
   recentPlayersEl.innerHTML = "";
   if (list.length === 0) {
-    recentPlayersEl.innerHTML = '<span class="subtitle">Noch keine letzten Spieler</span>';
+    recentPlayersEl.innerHTML = '<span class="subtitle">No recent players yet</span>';
     return;
   }
 
@@ -194,7 +194,7 @@ function renderRecentPlayers() {
 
 function applyProfileUi() {
   const hasProfile = !!profileName;
-  savedNameText.textContent = hasProfile ? `Angemeldet als: ${profileName}` : "Noch nicht angemeldet";
+  savedNameText.textContent = hasProfile ? `Signed in as: ${profileName}` : "Not signed in yet";
   menuActions.classList.toggle("hidden", !hasProfile);
   joinBox.classList.toggle("hidden", !hasProfile);
   if (hasProfile) profileNameInput.value = profileName;
@@ -256,10 +256,10 @@ function pulse(element, className) {
 
 function getStateLabel(state) {
   if (!room) return "";
-  if (state === "lobby") return room.settings.lobbyLocked ? "Lobby ist gesperrt" : "Lobby offen";
-  if (state === "round") return participantType === "spectator" ? "Runde läuft (Spectator)" : "Runde läuft";
-  if (state === "vote") return participantType === "spectator" ? "Vote läuft (Spectator)" : "Abstimmung läuft";
-  if (state === "ended") return "Runde beendet";
+  if (state === "lobby") return room.settings.lobbyLocked ? "Lobby is locked" : "Lobby open";
+  if (state === "round") return participantType === "spectator" ? "Round in progress (Spectator)" : "Round in progress";
+  if (state === "vote") return participantType === "spectator" ? "Voting in progress (Spectator)" : "Voting in progress";
+  if (state === "ended") return "Round finished";
   return "";
 }
 
@@ -271,12 +271,12 @@ function renderQrForHost() {
   qrCodeEl.innerHTML = "";
 
   const img = document.createElement("img");
-  img.alt = "QR Code Einladung";
+  img.alt = "Invite QR code";
   img.loading = "lazy";
   img.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(link)}`;
   img.addEventListener("error", () => {
-    qrCodeEl.textContent = "QR nicht verfügbar";
-    showInviteInfo("QR aktuell nicht verfügbar. Link kopieren funktioniert.");
+    qrCodeEl.textContent = "QR unavailable";
+    showInviteInfo("QR currently unavailable. Copy link still works.");
   });
   qrCodeEl.appendChild(img);
 }
@@ -292,11 +292,11 @@ function renderInviteRecent() {
     btn.addEventListener("click", async () => {
       try {
         const link = getInviteLink(room.code, room.pin || "");
-        const text = `Hey ${name}, join den Raum ${room.code} mit PIN ${room.pin}: ${link}`;
+        const text = `Hey ${name}, join room ${room.code} with PIN ${room.pin}: ${link}`;
         await copyText(text);
-        showInviteInfo(`Invite-Text für ${name} kopiert ✅`);
+        showInviteInfo(`Invite text for ${name} copied ✅`);
       } catch {
-        showInviteInfo("Kopieren fehlgeschlagen.");
+        showInviteInfo("Copy failed.");
       }
     });
     recentInviteList.appendChild(btn);
@@ -332,7 +332,7 @@ function renderPlayers() {
     const item = document.createElement("li");
     const name = document.createElement("span");
     name.className = "player-name";
-    name.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (Du)" : ""}${mutedSet.has(player.id) ? " 🔇" : ""}`;
+    name.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (You)" : ""}${mutedSet.has(player.id) ? " 🔇" : ""}`;
     item.appendChild(name);
 
     if (mutedSet.has(player.id)) item.classList.add("player-muted");
@@ -343,12 +343,12 @@ function renderPlayers() {
 
       const muteBtn = document.createElement("button");
       muteBtn.className = "mute-btn";
-      muteBtn.textContent = mutedSet.has(player.id) ? "Entstumm" : "Stumm";
+      muteBtn.textContent = mutedSet.has(player.id) ? "Unmute" : "Mute";
       muteBtn.addEventListener("click", () => socket.emit("toggle_mute_player", { targetId: player.id }));
 
       const kickBtn = document.createElement("button");
       kickBtn.className = "kick-btn";
-      kickBtn.textContent = "Kicken";
+      kickBtn.textContent = "Kick";
       kickBtn.addEventListener("click", () => socket.emit("kick_player", { targetId: player.id }));
 
       actions.appendChild(muteBtn);
@@ -361,7 +361,7 @@ function renderPlayers() {
 
   room.spectators.forEach((spec) => {
     const item = document.createElement("li");
-    item.textContent = `${spec.name}${spec.id === selfId ? " (Du)" : ""}`;
+    item.textContent = `${spec.name}${spec.id === selfId ? " (You)" : ""}`;
     spectatorList.appendChild(item);
   });
 }
@@ -372,7 +372,7 @@ function renderAuditAndStats() {
   auditList.innerHTML = "";
   (room.auditLog || []).slice().reverse().forEach((entry) => {
     const li = document.createElement("li");
-    const time = new Date(entry.at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    const time = new Date(entry.at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
     li.textContent = `[${time}] ${entry.message}`;
     auditList.appendChild(li);
   });
@@ -380,7 +380,7 @@ function renderAuditAndStats() {
   statsList.innerHTML = "";
   (room.playerStats || []).forEach((stat) => {
     const li = document.createElement("li");
-    li.textContent = `${stat.name}: Votes ${stat.votesCorrect}/${stat.votesGiven}, Verdächtigt ${stat.suspected}, W(G/I) ${stat.groupWins}/${stat.imposterWins}`;
+    li.textContent = `${stat.name}: Votes ${stat.votesCorrect}/${stat.votesGiven}, Suspected ${stat.suspected}, W(Group/Imp) ${stat.groupWins}/${stat.imposterWins}`;
     statsList.appendChild(li);
   });
 }
@@ -395,7 +395,7 @@ function renderHostControls() {
 
   if (isHost) {
     modeSelect.value = room.settings.contentFilter || "normal";
-    toggleLockBtn.textContent = room.settings.lobbyLocked ? "Lobby entsperren" : "Lobby sperren";
+    toggleLockBtn.textContent = room.settings.lobbyLocked ? "Unlock lobby" : "Lock lobby";
     abortRoundBtn.disabled = !(room.state === "round" || room.state === "vote");
     pinDisplay.textContent = room.pin || "----";
     renderQrForHost();
@@ -426,10 +426,10 @@ function renderState() {
   if (room.state === "vote") {
     voteBox.classList.remove("hidden");
     if (participantType === "spectator") {
-      voteInfo.textContent = "Du bist Spectator und kannst nicht abstimmen.";
+      voteInfo.textContent = "You are a spectator and cannot vote.";
       voteButtons.innerHTML = "";
     } else {
-      voteInfo.textContent = `${Object.keys(room.votes || {}).length}/${room.expectedVotes ?? room.players.length} Stimmen abgegeben${isMuted ? " • Du bist stummgeschaltet" : ""}`;
+      voteInfo.textContent = `${Object.keys(room.votes || {}).length}/${room.expectedVotes ?? room.players.length} votes submitted${isMuted ? " • You are muted" : ""}`;
       renderVoteOptions();
     }
   } else {
@@ -493,11 +493,11 @@ saveProfileBtn.addEventListener("click", () => {
 
 createBtn.addEventListener("click", () => {
   if (!socket || !socket.connected) {
-    showError("Keine Serververbindung.");
+    showError("No server connection.");
     return;
   }
   if (!profileName) {
-    showError("Bitte zuerst anmelden.");
+    showError("Please sign in first.");
     return;
   }
 
@@ -507,18 +507,18 @@ createBtn.addEventListener("click", () => {
 
 joinBtn.addEventListener("click", () => {
   if (!socket || !socket.connected) {
-    showError("Keine Serververbindung.");
+    showError("No server connection.");
     return;
   }
   if (!profileName) {
-    showError("Bitte zuerst anmelden.");
+    showError("Please sign in first.");
     return;
   }
 
   const code = sanitizeCode(codeInput.value);
   const pin = sanitizePin(pinInput.value);
   if (!code || pin.length !== 4) {
-    showError("Raumcode + 4-stellige PIN eingeben.");
+    showError("Enter room code + 4-digit PIN.");
     return;
   }
 
@@ -565,9 +565,9 @@ copyCodeBtn.addEventListener("click", async () => {
   if (!room) return;
   try {
     await copyText(room.code);
-    showInviteInfo("Raumcode kopiert ✅");
+    showInviteInfo("Room code copied ✅");
   } catch {
-    showInviteInfo("Kopieren fehlgeschlagen.");
+    showInviteInfo("Copy failed.");
   }
 });
 
@@ -575,9 +575,9 @@ copyLinkBtn.addEventListener("click", async () => {
   if (!room || !room.pin) return;
   try {
     await copyText(getInviteLink(room.code, room.pin));
-    showInviteInfo("Einladungslink kopiert ✅");
+    showInviteInfo("Invite link copied ✅");
   } catch {
-    showInviteInfo("Kopieren fehlgeschlagen.");
+    showInviteInfo("Copy failed.");
   }
 });
 
@@ -616,7 +616,7 @@ renameBtn.addEventListener("click", () => {
   if (!socket || !room) return;
   const nextName = sanitizeName(renameInput.value);
   if (!nextName) {
-    showError("Bitte gültigen Namen eingeben.");
+    showError("Please enter a valid name.");
     return;
   }
   socket.emit("update_name", { name: nextName });
@@ -663,24 +663,24 @@ loadProfile();
 renderRecentPlayers();
 
 if (!socket) {
-  setConnectionState(false, "Socket nicht geladen");
-  showError("Socket.IO nicht gefunden.");
+  setConnectionState(false, "Socket not loaded");
+  showError("Socket.IO not found.");
 } else {
-  setConnectionState(false, "Verbinde…");
+  setConnectionState(false, "Connecting…");
 
   socket.on("connect", () => {
-    setConnectionState(true, "Verbunden");
+    setConnectionState(true, "Connected");
     showError("");
     attemptAutoRejoin();
   });
 
   socket.on("disconnect", () => {
-    setConnectionState(false, "Getrennt");
+    setConnectionState(false, "Disconnected");
   });
 
   socket.on("connect_error", () => {
-    setConnectionState(false, "Server nicht erreichbar");
-    showError("Server nicht erreichbar.");
+    setConnectionState(false, "Server unreachable");
+    showError("Server unreachable.");
   });
 
   socket.on("joined", ({ room: joinedRoom, selfId: myId, participantType: nextType }) => {
@@ -714,8 +714,8 @@ if (!socket) {
     hasVoted = false;
     assignmentBox.classList.remove("hidden");
     resultBox.classList.add("hidden");
-    modeBadge.textContent = data.mode === "wahrheit" ? "Wahrheit" : "Pflicht";
-    roleBadge.textContent = data.role === "imposter" ? "Rolle: Imposter" : "Rolle: Normal";
+    modeBadge.textContent = data.mode === "wahrheit" ? "Truth" : "Dare";
+    roleBadge.textContent = data.role === "imposter" ? "Role: Imposter" : "Role: Normal";
     promptText.textContent = data.prompt;
     pulse(assignmentBox, "pulse");
   });
@@ -723,7 +723,7 @@ if (!socket) {
   socket.on("spectator_assignment", ({ message }) => {
     assignmentBox.classList.remove("hidden");
     modeBadge.textContent = "Spectator";
-    roleBadge.textContent = "Rolle: Zuschauer";
+    roleBadge.textContent = "Role: Spectator";
     promptText.textContent = message;
   });
 
@@ -743,7 +743,7 @@ if (!socket) {
     assignmentBox.classList.add("hidden");
     voteBox.classList.add("hidden");
     resultBox.classList.add("hidden");
-    showError(message || "Runde abgebrochen.");
+    showError(message || "Round aborted.");
   });
 
   socket.on("round_result", (result) => {
@@ -751,15 +751,15 @@ if (!socket) {
     resultBox.classList.remove("hidden");
 
     const winnerText = result.winner === "gruppe"
-      ? "✅ Gruppe gewinnt – Imposter enttarnt"
-      : "😈 Imposter gewinnt – nicht enttarnt";
+      ? "✅ Group wins – imposter exposed"
+      : "😈 Imposter wins – not exposed";
 
-    const tieText = result.tie ? "Es gab ein Unentschieden." : "";
-    const hostHint = room && room.hostId === selfId ? "" : "Warte auf den Host für die nächste Runde.";
+    const tieText = result.tie ? "It was a tie." : "";
+    const hostHint = room && room.hostId === selfId ? "" : "Wait for the host to start the next round.";
 
     resultBox.innerHTML = `
       <h3>${winnerText}</h3>
-      <p>Imposter war: <strong>${result.imposterName}</strong></p>
+      <p>Imposter was: <strong>${result.imposterName}</strong></p>
       <p>${tieText}</p>
       <p>${hostHint}</p>
     `;
@@ -771,12 +771,12 @@ if (!socket) {
 
   socket.on("muted_status", ({ muted }) => {
     isMuted = !!muted;
-    showError(muted ? "Du bist stummgeschaltet." : "Du bist nicht mehr stummgeschaltet.");
+    showError(muted ? "You are muted." : "You are no longer muted.");
   });
 
   socket.on("cooldown", ({ action, retryMs }) => {
     const seconds = Math.max(1, Math.ceil((retryMs || 0) / 1000));
-    showError(`Cooldown (${action}): bitte ${seconds}s warten.`);
+    showError(`Cooldown (${action}): wait ${seconds}s.`);
   });
 
   socket.on("name_updated", ({ name }) => {
@@ -784,7 +784,7 @@ if (!socket) {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
     applyProfileUi();
     renameInput.value = profileName;
-    showError("Name geändert ✅");
+    showError("Name updated ✅");
   });
 
   socket.on("left_room", () => {
@@ -792,12 +792,12 @@ if (!socket) {
   });
 
   socket.on("kicked", ({ message }) => {
-    showError(message || "Du wurdest gekickt.");
+    showError(message || "You were kicked.");
     resetToHome();
   });
 
   socket.on("room_closed", ({ message }) => {
-    showError(message || "Lobby wurde geschlossen.");
+    showError(message || "Lobby was closed.");
     resetToHome();
   });
 

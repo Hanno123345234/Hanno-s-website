@@ -75,7 +75,7 @@ function renderKillTargets() {
 
   room.players.filter((player) => player.id !== selfId && player.alive).forEach((player) => {
     const btn = document.createElement("button");
-    btn.textContent = `Eliminieren: ${player.name}`;
+    btn.textContent = `Eliminate: ${player.name}`;
     btn.className = "kick-btn";
     btn.addEventListener("click", () => {
       socket.emit("among_kill", { targetId: player.id });
@@ -117,7 +117,7 @@ function renderPlayers() {
 
   room.players.forEach((player) => {
     const li = document.createElement("li");
-    li.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (Du)" : ""}${player.alive ? "" : " ☠️"} • Tasks ${player.tasksDone}/${player.tasksTotal}`;
+    li.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (You)" : ""}${player.alive ? "" : " ☠️"} • Tasks ${player.tasksDone}/${player.tasksTotal}`;
     playersEl.appendChild(li);
   });
 }
@@ -141,8 +141,8 @@ function render() {
   const isHost = room.hostId === selfId;
 
   roomCodeEl.textContent = room.code;
-  stateEl.textContent = `Status: ${room.state}`;
-  meetingEl.textContent = room.meeting ? "Aktiv" : "-";
+  stateEl.textContent = `State: ${room.state}`;
+  meetingEl.textContent = room.meeting ? "Active" : "-";
   bodyEl.textContent = room.deadBody?.name || "-";
 
   hostControls.classList.toggle("hidden", !isHost || room.state !== "lobby");
@@ -154,7 +154,7 @@ function render() {
   meetingBtn.disabled = room.state !== "playing" || !alive;
   reportBtn.disabled = room.state !== "playing" || !alive || !room.deadBody;
 
-  voteInfo.textContent = room.meeting ? `${room.meeting.votesCount} Stimmen abgegeben` : "";
+  voteInfo.textContent = room.meeting ? `${room.meeting.votesCount} votes submitted` : "";
 
   renderPlayers();
   renderLogs();
@@ -166,7 +166,7 @@ createBtn.addEventListener("click", () => {
   if (!socket) return;
   const name = sanitizeName(nameInput.value);
   if (!name) {
-    showError("Bitte Namen eingeben.");
+    showError("Please enter a name.");
     return;
   }
 
@@ -179,7 +179,7 @@ joinBtn.addEventListener("click", () => {
   const name = sanitizeName(nameInput.value);
   const code = sanitizeCode(codeInput.value);
   if (!name || !code) {
-    showError("Name + Code eingeben.");
+    showError("Enter name + code.");
     return;
   }
 
@@ -244,7 +244,7 @@ if (socket) {
     role = payload.role;
     tasks = payload.tasks || [];
     roleEl.classList.remove("hidden");
-    roleEl.textContent = `Rolle: ${role} • Aufgaben: ${tasks.join(", ")}`;
+    roleEl.textContent = `Role: ${role} • Tasks: ${tasks.join(", ")}`;
   });
 
   socket.on("among_game_started", () => {
@@ -254,19 +254,19 @@ if (socket) {
 
   socket.on("among_meeting_started", ({ reason, reporterName }) => {
     voted = false;
-    showError(`Meeting (${reason}) von ${reporterName}`);
+    showError(`Meeting (${reason}) called by ${reporterName}`);
   });
 
   socket.on("among_meeting_result", ({ ejected, tie }) => {
     if (tie || !ejected) {
-      showError("Meeting Ergebnis: Niemand wurde rausgewählt.");
+      showError("Meeting result: Nobody was ejected.");
     } else {
-      showError(`Meeting Ergebnis: ${ejected.name} (${ejected.role}) wurde rausgewählt.`);
+      showError(`Meeting result: ${ejected.name} (${ejected.role}) was ejected.`);
     }
   });
 
   socket.on("among_game_over", ({ winner }) => {
-    showError(winner === "crew" ? "Crew gewinnt!" : "Imposter gewinnt!");
+    showError(winner === "crew" ? "Crew wins!" : "Imposter wins!");
   });
 
   socket.on("among_error", (message) => {
@@ -278,7 +278,7 @@ if (socket) {
   });
 
   socket.on("among_closed", ({ message }) => {
-    showError(message || "Lobby geschlossen");
+    showError(message || "Lobby closed");
     resetRoom();
   });
 }

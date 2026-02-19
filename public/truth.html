@@ -1,68 +1,67 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Imposter – Wahrheit oder Pflicht</title>
+    <title>Imposter – Truth or Dare</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app">
       <section id="home" class="card active">
         <div class="top-tools">
-          <a id="truthBackToModes" href="/" class="mini-link">← Zur Auswahl</a>
+          <a id="truthBackToModes" href="/" class="mini-link">← Back to modes</a>
           <div class="lang-inline">
-            <label for="truthLangSelect">Sprache</label>
-            <select id="truthLangSelect" aria-label="Sprache auswählen">
-              <option value="de">Deutsch</option>
+            <label for="truthLangSelect">Language</label>
+            <select id="truthLangSelect" aria-label="Select language">
               <option value="en">English</option>
             </select>
           </div>
         </div>
 
-        <p id="connectionBadge" class="connection connection-offline">● Verbinde…</p>
-        <h1>Imposter – Wahrheit oder Pflicht</h1>
-        <p class="subtitle">Raum erstellen oder mit Code beitreten</p>
+        <p id="connectionBadge" class="connection connection-offline">● Connecting…</p>
+        <h1>Imposter – Truth or Dare</h1>
+        <p class="subtitle">Create a room or join with code</p>
 
         <div class="account-box">
           <h3>Account</h3>
-          <p id="savedNameText" class="subtitle">Noch nicht angemeldet</p>
-          <label for="profileNameInput">Dein Name (dauerhaft gespeichert)</label>
-          <input id="profileNameInput" maxlength="24" placeholder="z. B. Hanno" />
-          <button id="saveProfileBtn" class="primary">Anmelden / Name speichern</button>
+          <p id="savedNameText" class="subtitle">Not signed in yet</p>
+          <label for="profileNameInput">Your name (saved)</label>
+          <input id="profileNameInput" maxlength="24" placeholder="e.g. Hanno" />
+          <button id="saveProfileBtn" class="primary">Sign in / Save name</button>
         </div>
 
         <div id="menuActions" class="stack hidden">
-          <button id="createBtn" class="primary">Raum erstellen</button>
+          <button id="createBtn" class="primary">Create room</button>
         </div>
 
         <div id="joinBox" class="join-box hidden">
-          <label for="codeInput">Raumcode</label>
+          <label for="codeInput">Room code</label>
           <input id="codeInput" maxlength="5" placeholder="ABCDE" />
-          <label for="pinInput">PIN (4-stellig)</label>
+          <label for="pinInput">PIN (4 digits)</label>
           <input id="pinInput" maxlength="4" placeholder="1234" />
           <label class="check-row" for="spectatorToggle">
             <input id="spectatorToggle" type="checkbox" />
-            <span>Als Spectator beitreten</span>
+            <span>Join as spectator</span>
           </label>
-          <button id="joinBtn">Raum beitreten</button>
+          <button id="joinBtn">Join room</button>
         </div>
 
         <div class="recent-box">
-          <h3>Letzte Spieler</h3>
+          <h3>Recent players</h3>
           <div id="recentPlayers" class="recent-list"></div>
         </div>
 
         <details class="rules-box">
-          <summary>Spielregeln anzeigen</summary>
+          <summary>Show rules</summary>
           <ol>
-            <li>Host erstellt eine Lobby, alle joinen per Code.</li>
-            <li>Für den Beitritt brauchst du Raumcode + 4-stellige PIN.</li>
-            <li>Jeder bekommt geheim Wahrheit oder Pflicht.</li>
-            <li>Eine Person ist Imposter und bekommt eine Fake-Aufgabe.</li>
-            <li>Alle führen ihre Aufgabe aus und versuchen normal zu wirken.</li>
-            <li>Dann abstimmen: Wer ist Imposter?</li>
-            <li>Richtig gewählt: Gruppe gewinnt. Sonst gewinnt der Imposter.</li>
+            <li>The host creates a lobby and everyone joins with a code.</li>
+            <li>Joining requires room code + 4-digit PIN.</li>
+            <li>Each player secretly gets Truth or Dare.</li>
+            <li>One player is the imposter and gets a fake task.</li>
+            <li>Everyone performs their task and tries to look normal.</li>
+            <li>Then vote: who is the imposter?</li>
+            <li>If correct, the group wins. Otherwise the imposter wins.</li>
           </ol>
         </details>
 
@@ -71,41 +70,41 @@
 
       <section id="room" class="card">
         <div class="room-header">
-          <button id="backBtn" class="back-btn">← Zurück</button>
-          <h2>Raum <span id="roomCode">-----</span></h2>
+          <button id="backBtn" class="back-btn">← Back</button>
+          <h2>Room <span id="roomCode">-----</span></h2>
         </div>
         <div class="state-bar">
-          <p id="stateText" class="subtitle">Warte in der Lobby…</p>
+          <p id="stateText" class="subtitle">Waiting in lobby…</p>
           <p id="phaseTimer" class="timer hidden">00:00</p>
         </div>
         <p id="roomNotice" class="room-notice hidden"></p>
 
         <div class="score-board">
-          <span class="score-chip">Gruppe: <strong id="scoreGroup">0</strong></span>
+          <span class="score-chip">Group: <strong id="scoreGroup">0</strong></span>
           <span class="score-chip">Imposter: <strong id="scoreImposter">0</strong></span>
-          <span id="modeBadgeRoom" class="score-chip">Modus: spicy</span>
+          <span id="modeBadgeRoom" class="score-chip">Mode: spicy</span>
         </div>
 
         <div id="inviteBox" class="invite-box hidden">
-          <h3>Einladen</h3>
-          <p class="subtitle">Teile den Code oder Link mit deinen Freunden</p>
+          <h3>Invite</h3>
+          <p class="subtitle">Share code or link with friends</p>
           <div class="invite-actions">
-            <button id="copyCodeBtn">Code kopieren</button>
-            <button id="copyLinkBtn">Einladungslink kopieren</button>
+            <button id="copyCodeBtn">Copy code</button>
+            <button id="copyLinkBtn">Copy invite link</button>
           </div>
           <p class="subtitle">PIN: <strong id="pinDisplay">----</strong></p>
           <div id="qrWrap" class="qr-wrap">
             <div id="qrCode"></div>
           </div>
           <div>
-            <h4>Schnell re-invite</h4>
+            <h4>Quick re-invite</h4>
             <div id="recentInviteList" class="recent-list"></div>
           </div>
           <p id="inviteInfo" class="subtitle"></p>
         </div>
 
         <div id="adminBox" class="admin-box hidden">
-          <h3>Host-Controls</h3>
+          <h3>Host controls</h3>
           <label for="modeSelect">Content-Filter</label>
           <select id="modeSelect">
             <option value="family">Family</option>
@@ -113,30 +112,30 @@
             <option value="spicy">Spicy</option>
           </select>
           <div class="prompt-editor">
-            <input id="customTruthInput" maxlength="180" placeholder="Eigene Wahrheit hinzufügen" />
-            <button id="addTruthBtn">Wahrheit adden</button>
-            <input id="customDareInput" maxlength="180" placeholder="Eigene Pflicht hinzufügen" />
-            <button id="addDareBtn">Pflicht adden</button>
+            <input id="customTruthInput" maxlength="180" placeholder="Add custom truth" />
+            <button id="addTruthBtn">Add truth</button>
+            <input id="customDareInput" maxlength="180" placeholder="Add custom dare" />
+            <button id="addDareBtn">Add dare</button>
           </div>
           <div class="invite-actions">
-            <button id="toggleLockBtn">Lobby sperren</button>
-            <button id="abortRoundBtn">Runde abbrechen</button>
+            <button id="toggleLockBtn">Lock lobby</button>
+            <button id="abortRoundBtn">Abort round</button>
           </div>
           <div class="audit-box">
             <h4>Audit-Log</h4>
             <ul id="auditList"></ul>
           </div>
           <div class="stats-box">
-            <h4>Runden-Stats</h4>
+            <h4>Round stats</h4>
             <ul id="statsList"></ul>
           </div>
         </div>
 
         <div class="player-list-wrap">
-          <h3>Spieler</h3>
+          <h3>Players</h3>
           <div class="rename-row">
-            <input id="renameInput" maxlength="24" placeholder="Neuer Name (optional)" />
-            <button id="renameBtn">Name ändern</button>
+            <input id="renameInput" maxlength="24" placeholder="New name (optional)" />
+            <button id="renameBtn">Change name</button>
           </div>
           <ul id="playerList" class="player-list"></ul>
         </div>
@@ -147,26 +146,26 @@
         </div>
 
         <div id="hostControls" class="stack hidden">
-          <button id="startRoundBtn" class="primary">Runde starten</button>
-          <button id="startVoteBtn">Abstimmung starten</button>
-          <button id="newRoundBtn">Neue Runde</button>
+          <button id="startRoundBtn" class="primary">Start round</button>
+          <button id="startVoteBtn">Start voting</button>
+          <button id="newRoundBtn">New round</button>
         </div>
 
         <div id="assignmentBox" class="assignment hidden">
-          <h3>Deine geheime Aufgabe</h3>
+          <h3>Your secret task</h3>
           <p id="modeBadge" class="badge"></p>
           <p id="roleBadge" class="badge role"></p>
           <p id="promptText" class="prompt"></p>
         </div>
 
         <div id="voteBox" class="hidden">
-          <h3>Abstimmung: Wer ist der Imposter?</h3>
+          <h3>Vote: Who is the imposter?</h3>
           <div id="voteButtons" class="vote-buttons"></div>
           <p id="voteInfo" class="subtitle"></p>
         </div>
 
         <div id="resultBox" class="hidden result"></div>
-        <button id="resultNewRoundBtn" class="primary hidden">Neue Runde starten</button>
+        <button id="resultNewRoundBtn" class="primary hidden">Start new round</button>
       </section>
     </main>
 
@@ -181,10 +180,7 @@
         }
 
         function getLang() {
-          const urlLang = new URLSearchParams(window.location.search).get("lang");
-          const stored = window.localStorage.getItem(key);
-          const value = urlLang || stored || "de";
-          return value === "en" ? "en" : "de";
+          return "en";
         }
 
         function applyLang(lang) {
@@ -198,7 +194,7 @@
         }
 
         select.addEventListener("change", () => {
-          applyLang(select.value);
+          applyLang("en");
         });
 
         applyLang(getLang());
