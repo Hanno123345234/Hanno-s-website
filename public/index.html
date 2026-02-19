@@ -9,13 +9,80 @@
   <body>
     <main class="app">
       <section class="card active">
-        <h1>Spiel wählen</h1>
-        <p class="subtitle">Wähle deinen Modus</p>
+        <h1 id="titleText">Spiel wählen</h1>
+        <p id="subtitleText" class="subtitle">Wähle deinen Modus</p>
+
+        <div class="lang-row">
+          <label for="langSelect" id="langLabel">Sprache</label>
+          <select id="langSelect" aria-label="Sprache auswählen">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
         <div class="stack">
-          <a class="mode-link" href="/truth.html">Wahrheit oder Pflicht</a>
-          <a class="mode-link" href="/amongus.html">Among Us Modus</a>
+          <a id="truthLink" class="mode-link" href="/truth.html">Wahrheit oder Pflicht</a>
+          <a id="amongLink" class="mode-link" href="/amongus.html">Among Us Modus</a>
         </div>
       </section>
     </main>
+
+    <script>
+      const LANGUAGE_KEY = "app_lang_v1";
+      const translations = {
+        de: {
+          title: "Spiel wählen",
+          subtitle: "Wähle deinen Modus",
+          label: "Sprache",
+          truth: "Wahrheit oder Pflicht",
+          among: "Among Us Modus"
+        },
+        en: {
+          title: "Choose Game",
+          subtitle: "Pick your mode",
+          label: "Language",
+          truth: "Truth or Dare",
+          among: "Among Us Mode"
+        }
+      };
+
+      const titleText = document.getElementById("titleText");
+      const subtitleText = document.getElementById("subtitleText");
+      const langLabel = document.getElementById("langLabel");
+      const langSelect = document.getElementById("langSelect");
+      const truthLink = document.getElementById("truthLink");
+      const amongLink = document.getElementById("amongLink");
+
+      function getInitialLang() {
+        const urlLang = new URLSearchParams(window.location.search).get("lang");
+        const storedLang = window.localStorage.getItem(LANGUAGE_KEY);
+        const candidate = urlLang || storedLang || "de";
+        return Object.hasOwn(translations, candidate) ? candidate : "de";
+      }
+
+      function updateModeLinks(lang) {
+        truthLink.href = `/truth.html?lang=${encodeURIComponent(lang)}`;
+        amongLink.href = `/amongus.html?lang=${encodeURIComponent(lang)}`;
+      }
+
+      function applyLanguage(lang) {
+        const t = translations[lang] || translations.de;
+        titleText.textContent = t.title;
+        subtitleText.textContent = t.subtitle;
+        langLabel.textContent = t.label;
+        truthLink.textContent = t.truth;
+        amongLink.textContent = t.among;
+        document.documentElement.lang = lang;
+        langSelect.value = lang;
+        window.localStorage.setItem(LANGUAGE_KEY, lang);
+        updateModeLinks(lang);
+      }
+
+      langSelect.addEventListener("change", () => {
+        applyLanguage(langSelect.value);
+      });
+
+      applyLanguage(getInitialLang());
+    </script>
   </body>
 </html>

@@ -188,6 +188,28 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.lang-row {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 2px;
+}
+
+.lang-row label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.lang-row select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(13, 18, 37, 0.85);
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 1rem;
+}
+
 .join-box {
   margin-top: 18px;
   display: grid;
