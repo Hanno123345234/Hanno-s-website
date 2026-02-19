@@ -1,27 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Game Selection</title>
+    <title>Spielauswahl</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app">
       <section class="card active">
-        <h1 id="titleText">Choose Game</h1>
-        <p id="subtitleText" class="subtitle">Pick your mode</p>
+        <p class="subtitle">Gemacht von Hanno</p>
+        <h1 id="titleText">Spiel wählen</h1>
+        <p id="subtitleText" class="subtitle">Wähle deinen Modus</p>
 
         <div class="lang-row">
-          <label for="langSelect" id="langLabel">Language</label>
-          <select id="langSelect" aria-label="Select language">
-            <option value="en">English</option>
+          <label for="langSelect" id="langLabel">Sprache</label>
+          <select id="langSelect" aria-label="Sprache auswählen">
+            <option value="de">Deutsch</option>
           </select>
         </div>
 
         <div class="stack">
-          <a id="truthLink" class="mode-link" href="/truth.html">Truth or Dare</a>
-          <a id="amongLink" class="mode-link" href="/amongus.html">Among Us Mode</a>
+          <a id="truthLink" class="mode-link" href="/truth.html">Wahrheit oder Pflicht</a>
+          <a id="amongLink" class="mode-link" href="/amongus.html">Among Us Modus</a>
         </div>
       </section>
     </main>
@@ -29,12 +30,12 @@
     <script>
       const LANGUAGE_KEY = "app_lang_v1";
       const translations = {
-        en: {
-          title: "Choose Game",
-          subtitle: "Pick your mode",
-          label: "Language",
-          truth: "Truth or Dare",
-          among: "Among Us Mode"
+        de: {
+          title: "Spiel wählen",
+          subtitle: "Wähle deinen Modus",
+          label: "Sprache",
+          truth: "Wahrheit oder Pflicht",
+          among: "Among Us Modus"
         }
       };
 
@@ -46,7 +47,7 @@
       const amongLink = document.getElementById("amongLink");
 
       function getInitialLang() {
-        return "en";
+        return "de";
       }
 
       function updateModeLinks(lang) {
@@ -55,7 +56,7 @@
       }
 
       function applyLanguage(lang) {
-        const t = translations.en;
+        const t = translations.de;
         titleText.textContent = t.title;
         subtitleText.textContent = t.subtitle;
         langLabel.textContent = t.label;
@@ -68,7 +69,7 @@
       }
 
       langSelect.addEventListener("change", () => {
-        applyLanguage("en");
+        applyLanguage("de");
       });
 
       applyLanguage(getInitialLang());

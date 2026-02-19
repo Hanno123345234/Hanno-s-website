@@ -51,6 +51,20 @@ function sanitizeCode(value) {
   return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
 }
 
+function getStateLabel(state) {
+  if (state === "lobby") return "Lobby";
+  if (state === "playing") return "Spiel läuft";
+  if (state === "meeting") return "Meeting läuft";
+  if (state === "ended") return "Spiel beendet";
+  return state;
+}
+
+function getRoleLabel(roleValue) {
+  if (roleValue === "crewmate") return "Crewmate";
+  if (roleValue === "imposter") return "Imposter";
+  return roleValue;
+}
+
 function setView(inRoom) {
   homeView.classList.toggle("active", !inRoom);
   roomView.classList.toggle("active", inRoom);
@@ -75,7 +89,7 @@ function renderKillTargets() {
 
   room.players.filter((player) => player.id !== selfId && player.alive).forEach((player) => {
     const btn = document.createElement("button");
-    btn.textContent = `Eliminate: ${player.name}`;
+    btn.textContent = `Ausschalten: ${player.name}`;
     btn.className = "kick-btn";
     btn.addEventListener("click", () => {
       socket.emit("among_kill", { targetId: player.id });
@@ -101,7 +115,7 @@ function renderVoteTargets() {
   });
 
   const skipBtn = document.createElement("button");
-  skipBtn.textContent = "Skip";
+  skipBtn.textContent = "Überspringen";
   skipBtn.disabled = voted;
   skipBtn.addEventListener("click", () => {
     socket.emit("among_vote", { targetId: "skip" });
@@ -117,7 +131,7 @@ function renderPlayers() {
 
   room.players.forEach((player) => {
     const li = document.createElement("li");
-    li.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (You)" : ""}${player.alive ? "" : " ☠️"} • Tasks ${player.tasksDone}/${player.tasksTotal}`;
+    li.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (Du)" : ""}${player.alive ? "" : " ☠️"} • Aufgaben ${player.tasksDone}/${player.tasksTotal}`;
     playersEl.appendChild(li);
   });
 }
@@ -141,8 +155,8 @@ function render() {
   const isHost = room.hostId === selfId;
 
   roomCodeEl.textContent = room.code;
-  stateEl.textContent = `State: ${room.state}`;
-  meetingEl.textContent = room.meeting ? "Active" : "-";
+  stateEl.textContent = `Status: ${getStateLabel(room.state)}`;
+  meetingEl.textContent = room.meeting ? "Aktiv" : "-";
   bodyEl.textContent = room.deadBody?.name || "-";
 
   hostControls.classList.toggle("hidden", !isHost || room.state !== "lobby");
@@ -154,7 +168,7 @@ function render() {
   meetingBtn.disabled = room.state !== "playing" || !alive;
   reportBtn.disabled = room.state !== "playing" || !alive || !room.deadBody;
 
-  voteInfo.textContent = room.meeting ? `${room.meeting.votesCount} votes submitted` : "";
+  voteInfo.textContent = room.meeting ? `${room.meeting.votesCount} Stimmen abgegeben` : "";
 
   renderPlayers();
   renderLogs();
@@ -166,7 +180,7 @@ createBtn.addEventListener("click", () => {
   if (!socket) return;
   const name = sanitizeName(nameInput.value);
   if (!name) {
-    showError("Please enter a name.");
+    showError("Bitte Namen eingeben.");
     return;
   }
 
@@ -179,7 +193,7 @@ joinBtn.addEventListener("click", () => {
   const name = sanitizeName(nameInput.value);
   const code = sanitizeCode(codeInput.value);
   if (!name || !code) {
-    showError("Enter name + code.");
+    showError("Name + Code eingeben.");
     return;
   }
 
@@ -244,7 +258,7 @@ if (socket) {
     role = payload.role;
     tasks = payload.tasks || [];
     roleEl.classList.remove("hidden");
-    roleEl.textContent = `Role: ${role} • Tasks: ${tasks.join(", ")}`;
+    roleEl.textContent = `Rolle: ${getRoleLabel(role)} • Aufgaben: ${tasks.join(", ")}`;
   });
 
   socket.on("among_game_started", () => {
@@ -254,19 +268,20 @@ if (socket) {
 
   socket.on("among_meeting_started", ({ reason, reporterName }) => {
     voted = false;
-    showError(`Meeting (${reason}) called by ${reporterName}`);
+    const reasonLabel = reason === "report" ? "Leiche gemeldet" : "Notfall";
+    showError(`Meeting (${reasonLabel}) wurde von ${reporterName} gestartet`);
   });
 
   socket.on("among_meeting_result", ({ ejected, tie }) => {
     if (tie || !ejected) {
-      showError("Meeting result: Nobody was ejected.");
+      showError("Meeting-Ergebnis: Niemand wurde rausgewählt.");
     } else {
-      showError(`Meeting result: ${ejected.name} (${ejected.role}) was ejected.`);
+      showError(`Meeting-Ergebnis: ${ejected.name} (${getRoleLabel(ejected.role)}) wurde rausgewählt.`);
     }
   });
 
   socket.on("among_game_over", ({ winner }) => {
-    showError(winner === "crew" ? "Crew wins!" : "Imposter wins!");
+    showError(winner === "crew" ? "Crew gewinnt!" : "Imposter gewinnt!");
   });
 
   socket.on("among_error", (message) => {
@@ -278,7 +293,7 @@ if (socket) {
   });
 
   socket.on("among_closed", ({ message }) => {
-    showError(message || "Lobby closed");
+    showError(message || "Lobby geschlossen");
     resetRoom();
   });
 }

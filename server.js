@@ -270,8 +270,8 @@ function closeRoomBecauseHostLeft(roomCode) {
 
   clearPhaseTimer(room);
   [...room.players, ...room.spectators].forEach((entry) => {
-    io.to(entry.id).emit("room_closed", {
-      message: "The host left the lobby. The lobby was closed."
+      io.to(entry.id).emit("room_closed", {
+        message: "Der Host hat die Lobby verlassen. Die Lobby wurde geschlossen."
     });
 
     const targetSocket = io.sockets.sockets.get(entry.id);
@@ -345,12 +345,12 @@ function finishVoting(room, byTimer = false) {
     }
   });
 
-  addAudit(room, `Round finished: ${winner === "gruppe" ? "Group" : "Imposter"} wins.`);
+  addAudit(room, `Runde beendet: ${winner === "gruppe" ? "Gruppe" : "Imposter"} gewinnt.`);
 
   io.to(room.code).emit("round_result", {
     winner,
     imposterId,
-    imposterName: imposter ? imposter.name : "Unknown",
+    imposterName: imposter ? imposter.name : "Unbekannt",
     voteCounts,
     votedOutId: topId,
     tie,
@@ -367,7 +367,7 @@ function startVotePhase(room, byTimer = false) {
   room.votes = {};
   room.phaseEndsAt = Date.now() + room.settings.voteSeconds * 1000;
 
-  addAudit(room, byTimer ? "Vote phase auto-started." : "Vote phase started by host.");
+  addAudit(room, byTimer ? "Abstimmungsphase automatisch gestartet." : "Abstimmungsphase vom Host gestartet.");
 
   io.to(room.code).emit("vote_started", {
     byTimer,
@@ -425,11 +425,11 @@ function assignRound(room) {
 
   room.spectators.forEach((spectator) => {
     io.to(spectator.id).emit("spectator_assignment", {
-      message: "You are spectating and do not receive a secret task."
+      message: "Du bist Zuschauer und erhältst keine geheime Aufgabe."
     });
   });
 
-  addAudit(room, `New round started (${mode}, filter: ${room.settings.contentFilter}).`);
+  addAudit(room, `Neue Runde gestartet (${mode}, Filter: ${room.settings.contentFilter}).`);
 
   room.phaseTimer = setTimeout(() => {
     const liveRoom = rooms.get(room.code);
@@ -451,10 +451,10 @@ function abortRound(room) {
   room.votes = {};
   room.currentRound = null;
 
-  addAudit(room, "Round aborted by host.");
+  addAudit(room, "Runde vom Host abgebrochen.");
 
   io.to(room.code).emit("round_aborted", {
-    message: "The host aborted the round."
+    message: "Der Host hat die Runde abgebrochen."
   });
 
   broadcastRoom(room.code);
@@ -518,7 +518,7 @@ function removeParticipantFromRoom(socket, reason = "leave") {
       role: "player",
       assignment: leavingAssignment
     };
-    addAudit(room, `${leavingName} lost connection (rejoin possible for 90s).`);
+    addAudit(room, `${leavingName} hat die Verbindung verloren (Rejoin für 90s möglich).`);
   }
 
   if (room.players.length === 0) {
@@ -539,18 +539,18 @@ function removeParticipantFromRoom(socket, reason = "leave") {
 function getHostRoom(socket) {
   const roomCode = socket.data.roomCode;
   if (!roomCode) {
-    socket.emit("error_message", "You are not in a room.");
+    socket.emit("error_message", "Du bist in keinem Raum.");
     return null;
   }
 
   const room = rooms.get(roomCode);
   if (!room) {
-    socket.emit("error_message", "Room not found.");
+    socket.emit("error_message", "Raum nicht gefunden.");
     return null;
   }
 
   if (room.hostId !== socket.id) {
-    socket.emit("error_message", "Only the host can do that.");
+    socket.emit("error_message", "Das kann nur der Host.");
     return null;
   }
 
@@ -567,13 +567,13 @@ function attachPlayer(room, socket, name, asRejoin = false) {
     room.recentPlayers = room.recentPlayers.slice(0, 12);
   }
 
-  addAudit(room, asRejoin ? `${name} reconnected.` : `${name} joined.`);
+  addAudit(room, asRejoin ? `${name} ist wieder verbunden.` : `${name} ist beigetreten.`);
 }
 
 function attachSpectator(room, socket, name, asRejoin = false) {
   room.spectators.push({ id: socket.id, name });
   socket.data.participantType = "spectator";
-  addAudit(room, asRejoin ? `Spectator ${name} reconnected.` : `Spectator ${name} joined.`);
+  addAudit(room, asRejoin ? `Zuschauer ${name} ist wieder verbunden.` : `Zuschauer ${name} ist beigetreten.`);
 }
 
 function createAmongCode() {
@@ -658,7 +658,7 @@ function amongCheckWin(room) {
     room.deadBody = null;
     if (room.meeting?.timer) clearTimeout(room.meeting.timer);
     room.meeting = null;
-    amongLog(room, room.winner === "crew" ? "Crew wins the round." : "Imposter wins the round.");
+    amongLog(room, room.winner === "crew" ? "Crew gewinnt die Runde." : "Imposter gewinnt die Runde.");
     io.to(room.code).emit("among_game_over", { winner: room.winner });
     amongBroadcast(room.code);
     return true;
@@ -696,10 +696,10 @@ function amongResolveMeeting(room) {
     if (targetPlayer && targetPlayer.alive) {
       targetPlayer.alive = false;
       ejected = { id: targetPlayer.id, name: targetPlayer.name, role: targetPlayer.role };
-      amongLog(room, `${targetPlayer.name} was voted off the ship.`);
+      amongLog(room, `${targetPlayer.name} wurde rausgewählt.`);
     }
   } else {
-    amongLog(room, "Meeting ended with no ejection.");
+    amongLog(room, "Meeting endete ohne Rauswahl.");
   }
 
   room.state = "playing";
@@ -764,14 +764,14 @@ function amongRemoveSocket(socket, reason = "leave") {
   }
 
   if (room.hostId === socket.id) {
-    io.to(room.code).emit("among_closed", { message: "Host left the lobby." });
+    io.to(room.code).emit("among_closed", { message: "Host hat die Lobby verlassen." });
     if (room.meeting?.timer) clearTimeout(room.meeting.timer);
     amongRooms.delete(roomCode);
     return;
   }
 
   if (reason === "disconnect") {
-    amongLog(room, "A player lost connection.");
+    amongLog(room, "Ein Spieler hat die Verbindung verloren.");
   }
 
   amongCheckWin(room);
@@ -781,13 +781,13 @@ function amongRemoveSocket(socket, reason = "leave") {
 io.on("connection", (socket) => {
   socket.on("among_create_room", ({ name }) => {
     if (isRateLimited(socket, "among_create_room", 900, "among_create_room")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
     const trimmedName = validName(name);
     if (!trimmedName) {
-      socket.emit("among_error", "Please enter a name.");
+      socket.emit("among_error", "Bitte einen Namen eingeben.");
       return;
     }
 
@@ -812,7 +812,7 @@ io.on("connection", (socket) => {
       winner: null
     };
 
-    amongLog(room, `${trimmedName} created the Among lobby.`);
+    amongLog(room, `${trimmedName} hat die Among-Lobby erstellt.`);
     amongRooms.set(code, room);
     socket.join(code);
     socket.data.amongRoomCode = code;
@@ -823,36 +823,36 @@ io.on("connection", (socket) => {
 
   socket.on("among_join_room", ({ name, code }) => {
     if (isRateLimited(socket, "among_join_room", 700, "among_join_room")) {
-      socket.emit("among_error", "Please wait a moment.");
+      socket.emit("among_error", "Bitte kurz warten.");
       return;
     }
 
     const trimmedName = validName(name);
     const normalizedCode = String(code || "").trim().toUpperCase();
     if (!trimmedName || !normalizedCode) {
-      socket.emit("among_error", "Name and room code are required.");
+      socket.emit("among_error", "Name und Raumcode sind erforderlich.");
       return;
     }
 
     const room = amongRooms.get(normalizedCode);
     if (!room) {
-      socket.emit("among_error", "Room not found.");
+      socket.emit("among_error", "Raum nicht gefunden.");
       return;
     }
 
     if (room.state !== "lobby") {
-      socket.emit("among_error", "Game is already running.");
+      socket.emit("among_error", "Spiel läuft bereits.");
       return;
     }
 
     if (room.players.length >= 12) {
-      socket.emit("among_error", "Room is full.");
+      socket.emit("among_error", "Raum ist voll.");
       return;
     }
 
     const duplicate = room.players.some((player) => player.name.toLowerCase() === trimmedName.toLowerCase());
     if (duplicate) {
-      socket.emit("among_error", "Name is already taken.");
+      socket.emit("among_error", "Name ist bereits vergeben.");
       return;
     }
 
@@ -869,7 +869,7 @@ io.on("connection", (socket) => {
     socket.join(normalizedCode);
     socket.data.amongRoomCode = normalizedCode;
 
-    amongLog(room, `${trimmedName} joined.`);
+    amongLog(room, `${trimmedName} ist beigetreten.`);
     socket.emit("among_joined", { code: normalizedCode, selfId: socket.id });
     amongBroadcast(normalizedCode);
   });
@@ -879,12 +879,12 @@ io.on("connection", (socket) => {
     const room = amongRooms.get(roomCode);
     if (!room) return;
     if (room.hostId !== socket.id) {
-      socket.emit("among_error", "Only the host can start.");
+      socket.emit("among_error", "Nur der Host kann starten.");
       return;
     }
 
     if (room.players.length < 4) {
-      socket.emit("among_error", "At least 4 players are required.");
+      socket.emit("among_error", "Mindestens 4 Spieler sind erforderlich.");
       return;
     }
 
@@ -910,11 +910,11 @@ io.on("connection", (socket) => {
         const shuffled = [...tasks].sort(() => Math.random() - 0.5).slice(0, 3);
         io.to(player.id).emit("among_role", { role: "crewmate", tasks: shuffled });
       } else {
-        io.to(player.id).emit("among_role", { role: "imposter", tasks: ["Sabotage", "Fake alibi", "Eliminate"] });
+        io.to(player.id).emit("among_role", { role: "imposter", tasks: ["Sabotage", "Falsches Alibi", "Ausschalten"] });
       }
     });
 
-    amongLog(room, "Game started.");
+    amongLog(room, "Spiel gestartet.");
     io.to(room.code).emit("among_game_started");
     amongBroadcast(room.code);
   });
@@ -929,7 +929,7 @@ io.on("connection", (socket) => {
     if (player.tasksDone >= player.tasksTotal) return;
 
     player.tasksDone += 1;
-    amongLog(room, `${player.name} completed a task.`);
+    amongLog(room, `${player.name} hat eine Aufgabe erledigt.`);
     amongCheckWin(room);
     amongBroadcast(roomCode);
   });
@@ -946,7 +946,7 @@ io.on("connection", (socket) => {
     if (!target.alive || target.id === killer.id) return;
 
     if (Date.now() < killer.killCooldownUntil) {
-      socket.emit("among_error", "Kill cooldown active.");
+      socket.emit("among_error", "Kill-Cooldown aktiv.");
       return;
     }
 
@@ -957,7 +957,7 @@ io.on("connection", (socket) => {
       name: target.name
     };
 
-    amongLog(room, `${target.name} was eliminated.`);
+    amongLog(room, `${target.name} wurde ausgeschaltet.`);
     io.to(room.code).emit("among_body_found", { name: target.name });
     if (!amongCheckWin(room)) amongBroadcast(roomCode);
   });
@@ -981,7 +981,7 @@ io.on("connection", (socket) => {
     const caller = room.players.find((entry) => entry.id === socket.id);
     if (!caller || !caller.alive) return;
     if (caller.emergencyLeft <= 0) {
-      socket.emit("among_error", "No emergency meetings left.");
+      socket.emit("among_error", "Keine Notfall-Meetings mehr übrig.");
       return;
     }
 
@@ -997,14 +997,14 @@ io.on("connection", (socket) => {
     const voter = room.players.find((entry) => entry.id === socket.id);
     if (!voter || !voter.alive) return;
     if (room.meeting.votes[socket.id]) {
-      socket.emit("among_error", "You already voted.");
+      socket.emit("among_error", "Du hast bereits abgestimmt.");
       return;
     }
 
     const normalizedTarget = String(targetId || "skip");
     const validTarget = normalizedTarget === "skip" || room.players.some((entry) => entry.id === normalizedTarget && entry.alive);
     if (!validTarget) {
-      socket.emit("among_error", "Invalid vote.");
+      socket.emit("among_error", "Ungültige Stimme.");
       return;
     }
 
@@ -1027,13 +1027,13 @@ io.on("connection", (socket) => {
 
   socket.on("create_room", ({ name }) => {
     if (isRateLimited(socket, "create_room", 900, "create_room")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
     const trimmedName = validName(name);
     if (!trimmedName) {
-      socket.emit("error_message", "Please enter a name.");
+      socket.emit("error_message", "Bitte einen Namen eingeben.");
       return;
     }
 
@@ -1082,7 +1082,7 @@ io.on("connection", (socket) => {
 
     updateStatName(room, trimmedName);
     room.recentPlayers.push(trimmedName);
-    addAudit(room, `${trimmedName} created the lobby.`);
+    addAudit(room, `${trimmedName} hat die Lobby erstellt.`);
 
     rooms.set(code, room);
     socket.join(code);
@@ -1095,7 +1095,7 @@ io.on("connection", (socket) => {
 
   socket.on("join_room", ({ name, code, pin, spectator = false, rejoin = false }) => {
     if (isRateLimited(socket, "join_room", 800, "join_room")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1105,18 +1105,18 @@ io.on("connection", (socket) => {
     const joinAsSpectator = !!spectator;
 
     if (!trimmedName || !normalizedCode) {
-      socket.emit("error_message", "Name and room code are required.");
+      socket.emit("error_message", "Name und Raumcode sind erforderlich.");
       return;
     }
 
     const room = rooms.get(normalizedCode);
     if (!room) {
-      socket.emit("error_message", "Room not found.");
+      socket.emit("error_message", "Raum nicht gefunden.");
       return;
     }
 
     if (room.settings.requirePin && room.pin !== normalizedPin) {
-      socket.emit("error_message", "Wrong PIN.");
+      socket.emit("error_message", "Falsche PIN.");
       return;
     }
 
@@ -1124,18 +1124,18 @@ io.on("connection", (socket) => {
     const validReconnect = token && token.expiresAt > Date.now() && rejoin;
 
     if (room.settings.lobbyLocked && !validReconnect) {
-      socket.emit("error_message", "Lobby is locked.");
+      socket.emit("error_message", "Lobby ist gesperrt.");
       return;
     }
 
     if (!joinAsSpectator && room.players.length >= 12) {
-      socket.emit("error_message", "Room is full.");
+      socket.emit("error_message", "Raum ist voll.");
       return;
     }
 
     if (room.state === "round" || room.state === "vote") {
       if (!joinAsSpectator && !validReconnect) {
-        socket.emit("error_message", "Round in progress. Join as spectator.");
+        socket.emit("error_message", "Runde läuft. Bitte als Zuschauer beitreten.");
         return;
       }
     }
@@ -1144,7 +1144,7 @@ io.on("connection", (socket) => {
     const duplicateInSpectators = room.spectators.some((spec) => spec.name.toLowerCase() === trimmedName.toLowerCase());
 
     if ((duplicateInPlayers || duplicateInSpectators) && !validReconnect) {
-      socket.emit("error_message", "Name is already taken.");
+      socket.emit("error_message", "Name ist bereits vergeben.");
       return;
     }
 
@@ -1168,7 +1168,7 @@ io.on("connection", (socket) => {
       socket.emit("joined", { room: getRoomView(room, socket.id), selfId: socket.id, participantType: "player" });
       if (room.state === "round") {
         io.to(socket.id).emit("spectator_assignment", {
-          message: "You joined during an active round and are spectator until the next round."
+          message: "Du bist während einer aktiven Runde beigetreten und bist bis zur nächsten Runde Zuschauer."
         });
         room.players = room.players.filter((player) => player.id !== socket.id);
         attachSpectator(room, socket, trimmedName, false);
@@ -1180,20 +1180,20 @@ io.on("connection", (socket) => {
 
   socket.on("update_name", ({ name }) => {
     if (isRateLimited(socket, "update_name", 500, "update_name")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
     const roomCode = socket.data.roomCode;
     const room = rooms.get(roomCode);
     if (!room) {
-      socket.emit("error_message", "Room not found.");
+      socket.emit("error_message", "Raum nicht gefunden.");
       return;
     }
 
     const nextName = validName(name);
     if (!nextName) {
-      socket.emit("error_message", "Invalid name.");
+      socket.emit("error_message", "Ungültiger Name.");
       return;
     }
 
@@ -1201,7 +1201,7 @@ io.on("connection", (socket) => {
       (entry) => entry.id !== socket.id && entry.name.toLowerCase() === nextName.toLowerCase()
     );
     if (duplicate) {
-      socket.emit("error_message", "Name is already taken.");
+      socket.emit("error_message", "Name ist bereits vergeben.");
       return;
     }
 
@@ -1210,7 +1210,7 @@ io.on("connection", (socket) => {
     const oldName = oldPlayer ? oldPlayer.name : oldSpectator ? oldSpectator.name : null;
 
     if (!oldName) {
-      socket.emit("error_message", "Player not found.");
+      socket.emit("error_message", "Spieler nicht gefunden.");
       return;
     }
 
@@ -1222,38 +1222,38 @@ io.on("connection", (socket) => {
 
     updateStatName(room, nextName);
 
-    addAudit(room, `${oldName} is now ${nextName}.`);
+    addAudit(room, `${oldName} heißt jetzt ${nextName}.`);
     socket.emit("name_updated", { name: nextName });
     broadcastRoom(roomCode);
   });
 
   socket.on("set_content_filter", ({ filter }) => {
     if (isRateLimited(socket, "set_content_filter", 350, "set_content_filter")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
     const room = getHostRoom(socket);
     if (!room) return;
     if (room.state !== "lobby") {
-      socket.emit("error_message", "Filter can only be changed in lobby.");
+      socket.emit("error_message", "Filter kann nur in der Lobby geändert werden.");
       return;
     }
 
     const normalizedFilter = String(filter || "").toLowerCase();
     if (!CONTENT_FILTERS.includes(normalizedFilter)) {
-      socket.emit("error_message", "Invalid filter.");
+      socket.emit("error_message", "Ungültiger Filter.");
       return;
     }
 
     room.settings.contentFilter = normalizedFilter;
-    addAudit(room, `Content filter set to ${normalizedFilter}.`);
+    addAudit(room, `Inhaltsfilter auf ${normalizedFilter} gesetzt.`);
     broadcastRoom(room.code);
   });
 
   socket.on("add_custom_prompt", ({ kind, text }) => {
     if (isRateLimited(socket, "add_custom_prompt", 350, "add_custom_prompt")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1263,18 +1263,18 @@ io.on("connection", (socket) => {
     const normalizedKind = String(kind || "").toLowerCase();
     const normalizedText = String(text || "").trim().slice(0, 180);
     if (!["wahrheit", "pflicht"].includes(normalizedKind) || !normalizedText) {
-      socket.emit("error_message", "Invalid question/task.");
+      socket.emit("error_message", "Ungültige Frage/Aufgabe.");
       return;
     }
 
     room.customPrompts[normalizedKind].push(normalizedText);
-    addAudit(room, `Custom ${normalizedKind} prompt added.`);
+    addAudit(room, `Eigene ${normalizedKind}-Aufgabe hinzugefügt.`);
     broadcastRoom(room.code);
   });
 
   socket.on("toggle_lobby_lock", () => {
     if (isRateLimited(socket, "toggle_lobby_lock", 350, "toggle_lobby_lock")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1282,13 +1282,13 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     room.settings.lobbyLocked = !room.settings.lobbyLocked;
-    addAudit(room, room.settings.lobbyLocked ? "Lobby locked." : "Lobby unlocked.");
+    addAudit(room, room.settings.lobbyLocked ? "Lobby gesperrt." : "Lobby entsperrt.");
     broadcastRoom(room.code);
   });
 
   socket.on("toggle_mute_player", ({ targetId }) => {
     if (isRateLimited(socket, "toggle_mute_player", 350, "toggle_mute_player")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1297,25 +1297,25 @@ io.on("connection", (socket) => {
 
     const normalizedTargetId = String(targetId || "");
     if (!normalizedTargetId || normalizedTargetId === socket.id) {
-      socket.emit("error_message", "Invalid player.");
+      socket.emit("error_message", "Ungültiger Spieler.");
       return;
     }
 
     const target = room.players.find((player) => player.id === normalizedTargetId);
     if (!target) {
-      socket.emit("error_message", "Player not found.");
+      socket.emit("error_message", "Spieler nicht gefunden.");
       return;
     }
 
     if (room.mutedPlayerIds.has(normalizedTargetId)) {
       room.mutedPlayerIds.delete(normalizedTargetId);
       io.to(normalizedTargetId).emit("muted_status", { muted: false });
-      addAudit(room, `${target.name} was unmuted.`);
+      addAudit(room, `${target.name} wurde entstummt.`);
     } else {
       room.mutedPlayerIds.add(normalizedTargetId);
       delete room.votes[normalizedTargetId];
       io.to(normalizedTargetId).emit("muted_status", { muted: true });
-      addAudit(room, `${target.name} was muted.`);
+      addAudit(room, `${target.name} wurde stummgeschaltet.`);
     }
 
     tryAutoFinishVote(room);
@@ -1324,7 +1324,7 @@ io.on("connection", (socket) => {
 
   socket.on("kick_player", ({ targetId }) => {
     if (isRateLimited(socket, "kick_player", 450, "kick_player")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1333,7 +1333,7 @@ io.on("connection", (socket) => {
 
     const normalizedTargetId = String(targetId || "");
     if (!normalizedTargetId || normalizedTargetId === socket.id) {
-      socket.emit("error_message", "Invalid player.");
+      socket.emit("error_message", "Ungültiger Spieler.");
       return;
     }
 
@@ -1349,7 +1349,7 @@ io.on("connection", (socket) => {
     targetSocket.leave(room.code);
     removeParticipantFromRoom(targetSocket, "kick");
     io.to(normalizedTargetId).emit("kicked", {
-      message: "You were removed from the room by the host."
+      message: "Du wurdest vom Host aus dem Raum entfernt."
     });
     addAudit(room, `${targetPlayer.name} was kicked.`);
     broadcastRoom(room.code);
@@ -1357,7 +1357,7 @@ io.on("connection", (socket) => {
 
   socket.on("start_round", () => {
     if (isRateLimited(socket, "start_round", 600, "start_round")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1365,7 +1365,7 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.state !== "lobby" && room.state !== "ended") {
-      socket.emit("error_message", "Round cannot be started right now.");
+      socket.emit("error_message", "Runde kann gerade nicht gestartet werden.");
       return;
     }
 
@@ -1379,7 +1379,7 @@ io.on("connection", (socket) => {
 
   socket.on("start_vote", () => {
     if (isRateLimited(socket, "start_vote", 600, "start_vote")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1387,7 +1387,7 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.state !== "round") {
-      socket.emit("error_message", "Voting cannot be started right now.");
+      socket.emit("error_message", "Abstimmung kann gerade nicht gestartet werden.");
       return;
     }
 
@@ -1410,19 +1410,19 @@ io.on("connection", (socket) => {
     }
 
     if (room.mutedPlayerIds.has(socket.id)) {
-      socket.emit("error_message", "You are muted and cannot vote.");
+      socket.emit("error_message", "Du bist stummgeschaltet und kannst nicht abstimmen.");
       return;
     }
 
     if (room.votes[socket.id]) {
-      socket.emit("error_message", "You already voted.");
+      socket.emit("error_message", "Du hast bereits abgestimmt.");
       return;
     }
 
     const normalizedTargetId = String(targetId || "");
     const validTarget = room.players.some((player) => player.id === normalizedTargetId);
     if (!validTarget || normalizedTargetId === socket.id) {
-      socket.emit("error_message", "Invalid vote.");
+      socket.emit("error_message", "Ungültige Stimme.");
       return;
     }
 
@@ -1434,7 +1434,7 @@ io.on("connection", (socket) => {
 
   socket.on("new_round", () => {
     if (isRateLimited(socket, "new_round", 600, "new_round")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1442,7 +1442,7 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.state !== "ended") {
-      socket.emit("error_message", "New round only after round end.");
+      socket.emit("error_message", "Neue Runde erst nach Rundenende.");
       return;
     }
 
@@ -1451,7 +1451,7 @@ io.on("connection", (socket) => {
 
   socket.on("abort_round", () => {
     if (isRateLimited(socket, "abort_round", 600, "abort_round")) {
-      socket.emit("error_message", "Please wait a moment.");
+      socket.emit("error_message", "Bitte kurz warten.");
       return;
     }
 
@@ -1459,7 +1459,7 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.state !== "round" && room.state !== "vote") {
-      socket.emit("error_message", "No round is currently running.");
+      socket.emit("error_message", "Es läuft aktuell keine Runde.");
       return;
     }
 
