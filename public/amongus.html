@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Among Us Modus</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section id="amongHome" class="card active">
+        <a href="/" class="mode-link">← Zur Auswahl</a>
+        <h1>Among Us Modus</h1>
+        <p class="subtitle">Erstelle einen Raum oder tritt bei</p>
+
+        <label for="amongNameInput">Dein Name</label>
+        <input id="amongNameInput" maxlength="24" placeholder="z. B. Hanno" />
+
+        <button id="amongCreateBtn" class="primary">Raum erstellen</button>
+
+        <div class="join-box">
+          <label for="amongCodeInput">Raumcode</label>
+          <input id="amongCodeInput" maxlength="5" placeholder="ABCDE" />
+          <button id="amongJoinBtn">Raum beitreten</button>
+        </div>
+
+        <p id="amongError" class="error"></p>
+      </section>
+
+      <section id="amongRoom" class="card">
+        <div class="room-header">
+          <button id="amongBackBtn" class="back-btn">← Zurück</button>
+          <h2>Raum <span id="amongRoomCode">-----</span></h2>
+        </div>
+
+        <p id="amongState" class="subtitle">Lobby</p>
+        <p id="amongRole" class="room-notice hidden"></p>
+
+        <div class="score-board">
+          <span class="score-chip">Meeting: <strong id="amongMeeting">-</strong></span>
+          <span class="score-chip">Body: <strong id="amongBody">-</strong></span>
+        </div>
+
+        <div id="amongHostControls" class="stack hidden">
+          <button id="amongStartBtn" class="primary">Spiel starten</button>
+        </div>
+
+        <div id="amongActions" class="stack hidden">
+          <button id="amongTaskBtn">Aufgabe erledigt</button>
+          <button id="amongMeetingBtn">Emergency Meeting</button>
+          <button id="amongReportBtn">Body reporten</button>
+        </div>
+
+        <div id="amongKillBox" class="hidden">
+          <h3>Imposter Aktionen</h3>
+          <div id="amongKillTargets" class="vote-buttons"></div>
+        </div>
+
+        <div id="amongVoteBox" class="hidden">
+          <h3>Meeting Vote</h3>
+          <p id="amongVoteInfo" class="subtitle"></p>
+          <div id="amongVoteTargets" class="vote-buttons"></div>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Spieler</h3>
+          <ul id="amongPlayers" class="player-list"></ul>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Logs</h3>
+          <ul id="amongLogs" class="player-list"></ul>
+        </div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="amongus.js"></script>
+  </body>
+  </html>

@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static("public"));
 
 const rooms = new Map();
+const amongRooms = new Map();
 const CONTENT_FILTERS = ["family", "normal", "spicy"];
 const FILTER_PROMPT_MAP = {
   family: "soft",
@@ -566,7 +567,455 @@ function attachSpectator(room, socket, name, asRejoin = false) {
   addAudit(room, asRejoin ? `Zuschauer ${name} ist wieder verbunden.` : `Zuschauer ${name} ist beigetreten.`);
 }
 
+function createAmongCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let index = 0; index < 5; index += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return amongRooms.has(code) ? createAmongCode() : code;
+}
+
+function amongTaskPool() {
+  return [
+    "Reaktor-Panel kalibrieren",
+    "Sicherheitslog sortieren",
+    "Datenchip entschlüsseln",
+    "Navigationskurs fixen",
+    "Energieverteiler synchronisieren",
+    "Kommunikation neu ausrichten"
+  ];
+}
+
+function amongBroadcast(roomCode) {
+  const room = amongRooms.get(roomCode);
+  if (!room) return;
+
+  io.to(roomCode).emit("among_room_update", {
+    code: room.code,
+    state: room.state,
+    hostId: room.hostId,
+    players: room.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      alive: player.alive,
+      tasksDone: player.tasksDone,
+      tasksTotal: player.tasksTotal,
+      emergencyLeft: player.emergencyLeft
+    })),
+    meeting: room.meeting ? {
+      active: true,
+      reason: room.meeting.reason,
+      reporterName: room.meeting.reporterName,
+      votesCount: Object.keys(room.meeting.votes).length,
+      endsAt: room.meeting.endsAt
+    } : null,
+    deadBody: room.deadBody,
+    winner: room.winner,
+    logs: room.logs.slice(-20)
+  });
+}
+
+function amongLog(room, message) {
+  room.logs.push({ message, at: nowIso() });
+  if (room.logs.length > 80) room.logs.shift();
+}
+
+function amongAlive(room) {
+  return room.players.filter((player) => player.alive);
+}
+
+function amongCheckWin(room) {
+  if (room.winner) return true;
+
+  const alive = amongAlive(room);
+  const aliveImposters = alive.filter((player) => player.role === "imposter").length;
+  const aliveCrew = alive.filter((player) => player.role === "crewmate").length;
+
+  if (aliveImposters <= 0) {
+    room.winner = "crew";
+  } else if (aliveImposters >= aliveCrew) {
+    room.winner = "imposter";
+  } else {
+    const crew = room.players.filter((player) => player.role === "crewmate");
+    const allTasksDone = crew.length > 0 && crew.every((player) => player.tasksDone >= player.tasksTotal);
+    if (allTasksDone) {
+      room.winner = "crew";
+    }
+  }
+
+  if (room.winner) {
+    room.state = "ended";
+    room.deadBody = null;
+    if (room.meeting?.timer) clearTimeout(room.meeting.timer);
+    room.meeting = null;
+    amongLog(room, room.winner === "crew" ? "Crew gewinnt die Runde." : "Imposter gewinnt die Runde.");
+    io.to(room.code).emit("among_game_over", { winner: room.winner });
+    amongBroadcast(room.code);
+    return true;
+  }
+
+  return false;
+}
+
+function amongResolveMeeting(room) {
+  if (!room.meeting) return;
+  if (room.meeting.timer) clearTimeout(room.meeting.timer);
+
+  const tally = {};
+  Object.values(room.meeting.votes).forEach((target) => {
+    tally[target] = (tally[target] || 0) + 1;
+  });
+
+  let topTarget = null;
+  let topCount = 0;
+  let tie = false;
+
+  Object.entries(tally).forEach(([target, count]) => {
+    if (count > topCount) {
+      topCount = count;
+      topTarget = target;
+      tie = false;
+    } else if (count === topCount) {
+      tie = true;
+    }
+  });
+
+  let ejected = null;
+  if (!tie && topTarget && topTarget !== "skip") {
+    const targetPlayer = room.players.find((player) => player.id === topTarget);
+    if (targetPlayer && targetPlayer.alive) {
+      targetPlayer.alive = false;
+      ejected = { id: targetPlayer.id, name: targetPlayer.name, role: targetPlayer.role };
+      amongLog(room, `${targetPlayer.name} wurde aus dem Schiff gewählt.`);
+    }
+  } else {
+    amongLog(room, "Meeting endet ohne Eject.");
+  }
+
+  room.state = "playing";
+  room.deadBody = null;
+  room.meeting = null;
+
+  io.to(room.code).emit("among_meeting_result", {
+    ejected,
+    tie,
+    tally
+  });
+
+  if (!amongCheckWin(room)) {
+    amongBroadcast(room.code);
+  }
+}
+
+function amongStartMeeting(room, reason, reporterName) {
+  if (room.meeting || room.state !== "playing") return;
+
+  room.state = "meeting";
+  room.meeting = {
+    reason,
+    reporterName,
+    votes: {},
+    endsAt: Date.now() + 45000,
+    timer: null
+  };
+
+  room.meeting.timer = setTimeout(() => {
+    const liveRoom = amongRooms.get(room.code);
+    if (!liveRoom || !liveRoom.meeting) return;
+    amongResolveMeeting(liveRoom);
+  }, 45000);
+
+  amongLog(room, `Meeting gestartet (${reason}) von ${reporterName}.`);
+  io.to(room.code).emit("among_meeting_started", {
+    reason,
+    reporterName,
+    endsAt: room.meeting.endsAt
+  });
+  amongBroadcast(room.code);
+}
+
+function amongRemoveSocket(socket, reason = "leave") {
+  const roomCode = socket.data.amongRoomCode;
+  if (!roomCode) return;
+
+  const room = amongRooms.get(roomCode);
+  socket.data.amongRoomCode = undefined;
+  if (!room) return;
+
+  room.players = room.players.filter((player) => player.id !== socket.id);
+  if (room.meeting?.votes?.[socket.id]) {
+    delete room.meeting.votes[socket.id];
+  }
+
+  if (room.players.length === 0) {
+    if (room.meeting?.timer) clearTimeout(room.meeting.timer);
+    amongRooms.delete(roomCode);
+    return;
+  }
+
+  if (room.hostId === socket.id) {
+    io.to(room.code).emit("among_closed", { message: "Host hat die Lobby verlassen." });
+    if (room.meeting?.timer) clearTimeout(room.meeting.timer);
+    amongRooms.delete(roomCode);
+    return;
+  }
+
+  if (reason === "disconnect") {
+    amongLog(room, "Ein Spieler hat die Verbindung verloren.");
+  }
+
+  amongCheckWin(room);
+  amongBroadcast(room.code);
+}
+
 io.on("connection", (socket) => {
+  socket.on("among_create_room", ({ name }) => {
+    if (isRateLimited(socket, "among_create_room", 900, "among_create_room")) {
+      socket.emit("error_message", "Bitte kurz warten.");
+      return;
+    }
+
+    const trimmedName = validName(name);
+    if (!trimmedName) {
+      socket.emit("among_error", "Bitte einen Namen eingeben.");
+      return;
+    }
+
+    const code = createAmongCode();
+    const room = {
+      code,
+      hostId: socket.id,
+      state: "lobby",
+      players: [{
+        id: socket.id,
+        name: trimmedName,
+        role: null,
+        alive: true,
+        tasksDone: 0,
+        tasksTotal: 3,
+        emergencyLeft: 1,
+        killCooldownUntil: 0
+      }],
+      logs: [],
+      deadBody: null,
+      meeting: null,
+      winner: null
+    };
+
+    amongLog(room, `${trimmedName} hat die Among-Lobby erstellt.`);
+    amongRooms.set(code, room);
+    socket.join(code);
+    socket.data.amongRoomCode = code;
+
+    socket.emit("among_joined", { code, selfId: socket.id });
+    amongBroadcast(code);
+  });
+
+  socket.on("among_join_room", ({ name, code }) => {
+    if (isRateLimited(socket, "among_join_room", 700, "among_join_room")) {
+      socket.emit("among_error", "Bitte kurz warten.");
+      return;
+    }
+
+    const trimmedName = validName(name);
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    if (!trimmedName || !normalizedCode) {
+      socket.emit("among_error", "Name und Raumcode erforderlich.");
+      return;
+    }
+
+    const room = amongRooms.get(normalizedCode);
+    if (!room) {
+      socket.emit("among_error", "Raum nicht gefunden.");
+      return;
+    }
+
+    if (room.state !== "lobby") {
+      socket.emit("among_error", "Spiel läuft bereits.");
+      return;
+    }
+
+    if (room.players.length >= 12) {
+      socket.emit("among_error", "Raum ist voll.");
+      return;
+    }
+
+    const duplicate = room.players.some((player) => player.name.toLowerCase() === trimmedName.toLowerCase());
+    if (duplicate) {
+      socket.emit("among_error", "Name bereits vergeben.");
+      return;
+    }
+
+    room.players.push({
+      id: socket.id,
+      name: trimmedName,
+      role: null,
+      alive: true,
+      tasksDone: 0,
+      tasksTotal: 3,
+      emergencyLeft: 1,
+      killCooldownUntil: 0
+    });
+    socket.join(normalizedCode);
+    socket.data.amongRoomCode = normalizedCode;
+
+    amongLog(room, `${trimmedName} ist beigetreten.`);
+    socket.emit("among_joined", { code: normalizedCode, selfId: socket.id });
+    amongBroadcast(normalizedCode);
+  });
+
+  socket.on("among_start_game", () => {
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room) return;
+    if (room.hostId !== socket.id) {
+      socket.emit("among_error", "Nur Host darf starten.");
+      return;
+    }
+
+    if (room.players.length < 4) {
+      socket.emit("among_error", "Mindestens 4 Spieler benötigt.");
+      return;
+    }
+
+    room.state = "playing";
+    room.winner = null;
+    room.deadBody = null;
+    room.players.forEach((player) => {
+      player.alive = true;
+      player.tasksDone = 0;
+      player.tasksTotal = 3;
+      player.emergencyLeft = 1;
+      player.killCooldownUntil = 0;
+      player.role = "crewmate";
+    });
+
+    const imposterIndex = Math.floor(Math.random() * room.players.length);
+    room.players[imposterIndex].role = "imposter";
+    room.players[imposterIndex].killCooldownUntil = Date.now() + 10000;
+
+    const tasks = amongTaskPool();
+    room.players.forEach((player) => {
+      if (player.role === "crewmate") {
+        const shuffled = [...tasks].sort(() => Math.random() - 0.5).slice(0, 3);
+        io.to(player.id).emit("among_role", { role: "crewmate", tasks: shuffled });
+      } else {
+        io.to(player.id).emit("among_role", { role: "imposter", tasks: ["Sabotage", "Täuschen", "Eliminieren"] });
+      }
+    });
+
+    amongLog(room, "Spiel gestartet.");
+    io.to(room.code).emit("among_game_started");
+    amongBroadcast(room.code);
+  });
+
+  socket.on("among_complete_task", () => {
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room || room.state !== "playing") return;
+
+    const player = room.players.find((entry) => entry.id === socket.id);
+    if (!player || !player.alive || player.role !== "crewmate") return;
+    if (player.tasksDone >= player.tasksTotal) return;
+
+    player.tasksDone += 1;
+    amongLog(room, `${player.name} hat eine Aufgabe erledigt.`);
+    amongCheckWin(room);
+    amongBroadcast(roomCode);
+  });
+
+  socket.on("among_kill", ({ targetId }) => {
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room || room.state !== "playing") return;
+
+    const killer = room.players.find((entry) => entry.id === socket.id);
+    const target = room.players.find((entry) => entry.id === String(targetId || ""));
+    if (!killer || !target) return;
+    if (!killer.alive || killer.role !== "imposter") return;
+    if (!target.alive || target.id === killer.id) return;
+
+    if (Date.now() < killer.killCooldownUntil) {
+      socket.emit("among_error", "Kill-Cooldown aktiv.");
+      return;
+    }
+
+    target.alive = false;
+    killer.killCooldownUntil = Date.now() + 20000;
+    room.deadBody = {
+      id: target.id,
+      name: target.name
+    };
+
+    amongLog(room, `${target.name} wurde eliminiert.`);
+    io.to(room.code).emit("among_body_found", { name: target.name });
+    if (!amongCheckWin(room)) amongBroadcast(roomCode);
+  });
+
+  socket.on("among_report_body", () => {
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room || room.state !== "playing" || !room.deadBody) return;
+
+    const reporter = room.players.find((entry) => entry.id === socket.id);
+    if (!reporter || !reporter.alive) return;
+
+    amongStartMeeting(room, "body", reporter.name);
+  });
+
+  socket.on("among_call_meeting", () => {
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room || room.state !== "playing") return;
+
+    const caller = room.players.find((entry) => entry.id === socket.id);
+    if (!caller || !caller.alive) return;
+    if (caller.emergencyLeft <= 0) {
+      socket.emit("among_error", "Kein Emergency-Meeting mehr verfügbar.");
+      return;
+    }
+
+    caller.emergencyLeft -= 1;
+    amongStartMeeting(room, "emergency", caller.name);
+  });
+
+  socket.on("among_vote", ({ targetId }) => {
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room || room.state !== "meeting" || !room.meeting) return;
+
+    const voter = room.players.find((entry) => entry.id === socket.id);
+    if (!voter || !voter.alive) return;
+    if (room.meeting.votes[socket.id]) {
+      socket.emit("among_error", "Du hast bereits gevotet.");
+      return;
+    }
+
+    const normalizedTarget = String(targetId || "skip");
+    const validTarget = normalizedTarget === "skip" || room.players.some((entry) => entry.id === normalizedTarget && entry.alive);
+    if (!validTarget) {
+      socket.emit("among_error", "Ungültige Stimme.");
+      return;
+    }
+
+    room.meeting.votes[socket.id] = normalizedTarget;
+    amongBroadcast(roomCode);
+
+    const aliveCount = amongAlive(room).length;
+    if (Object.keys(room.meeting.votes).length >= aliveCount) {
+      amongResolveMeeting(room);
+    }
+  });
+
+  socket.on("among_leave_room", () => {
+    const roomCode = socket.data.amongRoomCode;
+    if (!roomCode) return;
+    socket.leave(roomCode);
+    amongRemoveSocket(socket, "leave");
+    socket.emit("among_left");
+  });
+
   socket.on("create_room", ({ name }) => {
     if (isRateLimited(socket, "create_room", 900, "create_room")) {
       socket.emit("error_message", "Bitte kurz warten.");
@@ -1023,6 +1472,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    amongRemoveSocket(socket, "disconnect");
     removeParticipantFromRoom(socket, "disconnect");
   });
 });

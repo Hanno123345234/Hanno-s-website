@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Imposter – Wahrheit oder Pflicht</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section id="home" class="card active">
+        <p id="connectionBadge" class="connection connection-offline">● Verbinde…</p>
+        <h1>Imposter – Wahrheit oder Pflicht</h1>
+        <p class="subtitle">Raum erstellen oder mit Code beitreten</p>
+
+        <div class="account-box">
+          <h3>Account</h3>
+          <p id="savedNameText" class="subtitle">Noch nicht angemeldet</p>
+          <label for="profileNameInput">Dein Name (dauerhaft gespeichert)</label>
+          <input id="profileNameInput" maxlength="24" placeholder="z. B. Hanno" />
+          <button id="saveProfileBtn" class="primary">Anmelden / Name speichern</button>
+        </div>
+
+        <div id="menuActions" class="stack hidden">
+          <button id="createBtn" class="primary">Raum erstellen</button>
+        </div>
+
+        <div id="joinBox" class="join-box hidden">
+          <label for="codeInput">Raumcode</label>
+          <input id="codeInput" maxlength="5" placeholder="ABCDE" />
+          <label for="pinInput">PIN (4-stellig)</label>
+          <input id="pinInput" maxlength="4" placeholder="1234" />
+          <label class="check-row" for="spectatorToggle">
+            <input id="spectatorToggle" type="checkbox" />
+            <span>Als Spectator beitreten</span>
+          </label>
+          <button id="joinBtn">Raum beitreten</button>
+        </div>
+
+        <div class="recent-box">
+          <h3>Letzte Spieler</h3>
+          <div id="recentPlayers" class="recent-list"></div>
+        </div>
+
+        <details class="rules-box">
+          <summary>Spielregeln anzeigen</summary>
+          <ol>
+            <li>Host erstellt eine Lobby, alle joinen per Code.</li>
+            <li>Für den Beitritt brauchst du Raumcode + 4-stellige PIN.</li>
+            <li>Jeder bekommt geheim Wahrheit oder Pflicht.</li>
+            <li>Eine Person ist Imposter und bekommt eine Fake-Aufgabe.</li>
+            <li>Alle führen ihre Aufgabe aus und versuchen normal zu wirken.</li>
+            <li>Dann abstimmen: Wer ist Imposter?</li>
+            <li>Richtig gewählt: Gruppe gewinnt. Sonst gewinnt der Imposter.</li>
+          </ol>
+        </details>
+
+        <p id="errorBox" class="error"></p>
+      </section>
+
+      <section id="room" class="card">
+        <div class="room-header">
+          <button id="backBtn" class="back-btn">← Zurück</button>
+          <h2>Raum <span id="roomCode">-----</span></h2>
+        </div>
+        <div class="state-bar">
+          <p id="stateText" class="subtitle">Warte in der Lobby…</p>
+          <p id="phaseTimer" class="timer hidden">00:00</p>
+        </div>
+        <p id="roomNotice" class="room-notice hidden"></p>
+
+        <div class="score-board">
+          <span class="score-chip">Gruppe: <strong id="scoreGroup">0</strong></span>
+          <span class="score-chip">Imposter: <strong id="scoreImposter">0</strong></span>
+          <span id="modeBadgeRoom" class="score-chip">Modus: spicy</span>
+        </div>
+
+        <div id="inviteBox" class="invite-box hidden">
+          <h3>Einladen</h3>
+          <p class="subtitle">Teile den Code oder Link mit deinen Freunden</p>
+          <div class="invite-actions">
+            <button id="copyCodeBtn">Code kopieren</button>
+            <button id="copyLinkBtn">Einladungslink kopieren</button>
+          </div>
+          <p class="subtitle">PIN: <strong id="pinDisplay">----</strong></p>
+          <div id="qrWrap" class="qr-wrap">
+            <div id="qrCode"></div>
+          </div>
+          <div>
+            <h4>Schnell re-invite</h4>
+            <div id="recentInviteList" class="recent-list"></div>
+          </div>
+          <p id="inviteInfo" class="subtitle"></p>
+        </div>
+
+        <div id="adminBox" class="admin-box hidden">
+          <h3>Host-Controls</h3>
+          <label for="modeSelect">Content-Filter</label>
+          <select id="modeSelect">
+            <option value="family">Family</option>
+            <option value="normal">Normal</option>
+            <option value="spicy">Spicy</option>
+          </select>
+          <div class="prompt-editor">
+            <input id="customTruthInput" maxlength="180" placeholder="Eigene Wahrheit hinzufügen" />
+            <button id="addTruthBtn">Wahrheit adden</button>
+            <input id="customDareInput" maxlength="180" placeholder="Eigene Pflicht hinzufügen" />
+            <button id="addDareBtn">Pflicht adden</button>
+          </div>
+          <div class="invite-actions">
+            <button id="toggleLockBtn">Lobby sperren</button>
+            <button id="abortRoundBtn">Runde abbrechen</button>
+          </div>
+          <div class="audit-box">
+            <h4>Audit-Log</h4>
+            <ul id="auditList"></ul>
+          </div>
+          <div class="stats-box">
+            <h4>Runden-Stats</h4>
+            <ul id="statsList"></ul>
+          </div>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Spieler</h3>
+          <div class="rename-row">
+            <input id="renameInput" maxlength="24" placeholder="Neuer Name (optional)" />
+            <button id="renameBtn">Name ändern</button>
+          </div>
+          <ul id="playerList" class="player-list"></ul>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Spectators</h3>
+          <ul id="spectatorList" class="player-list"></ul>
+        </div>
+
+        <div id="hostControls" class="stack hidden">
+          <button id="startRoundBtn" class="primary">Runde starten</button>
+          <button id="startVoteBtn">Abstimmung starten</button>
+          <button id="newRoundBtn">Neue Runde</button>
+        </div>
+
+        <div id="assignmentBox" class="assignment hidden">
+          <h3>Deine geheime Aufgabe</h3>
+          <p id="modeBadge" class="badge"></p>
+          <p id="roleBadge" class="badge role"></p>
+          <p id="promptText" class="prompt"></p>
+        </div>
+
+        <div id="voteBox" class="hidden">
+          <h3>Abstimmung: Wer ist der Imposter?</h3>
+          <div id="voteButtons" class="vote-buttons"></div>
+          <p id="voteInfo" class="subtitle"></p>
+        </div>
+
+        <div id="resultBox" class="hidden result"></div>
+        <button id="resultNewRoundBtn" class="primary hidden">Neue Runde starten</button>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+  </html>
