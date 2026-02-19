@@ -12,6 +12,7 @@ const connectionBadge = document.getElementById("connectionBadge");
 const roomCodeEl = document.getElementById("roomCode");
 const stateText = document.getElementById("stateText");
 const phaseTimer = document.getElementById("phaseTimer");
+const roomNotice = document.getElementById("roomNotice");
 const scoreGroup = document.getElementById("scoreGroup");
 const scoreImposter = document.getElementById("scoreImposter");
 const modeBadgeRoom = document.getElementById("modeBadgeRoom");
@@ -52,9 +53,12 @@ let hasVoted = false;
 let timerInterval = null;
 let currentQrValue = "";
 let isMuted = false;
+let lastLobbyLocked = null;
 
 function showError(message = "") {
   errorBox.textContent = message;
+  roomNotice.textContent = message;
+  roomNotice.classList.toggle("hidden", !message);
 }
 
 function showInviteInfo(message = "") {
@@ -148,6 +152,7 @@ function resetToHome() {
   selfId = null;
   hasVoted = false;
   isMuted = false;
+  lastLobbyLocked = null;
   currentQrValue = "";
   playerList.innerHTML = "";
   voteButtons.innerHTML = "";
@@ -159,6 +164,8 @@ function resetToHome() {
   inviteBox.classList.add("hidden");
   adminBox.classList.add("hidden");
   showInviteInfo("");
+  roomNotice.textContent = "";
+  roomNotice.classList.add("hidden");
   resultNewRoundBtn.classList.add("hidden");
   qrCodeEl.innerHTML = "";
   resetTimer();
@@ -172,13 +179,15 @@ function renderQrForHost() {
   currentQrValue = inviteLink;
   qrCodeEl.innerHTML = "";
 
-  if (typeof window.QRCode !== "function") return;
-  new window.QRCode(qrCodeEl, {
-    text: inviteLink,
-    width: 130,
-    height: 130,
-    correctLevel: window.QRCode.CorrectLevel.M
+  const qrImage = document.createElement("img");
+  qrImage.alt = "QR Code Einladung";
+  qrImage.loading = "lazy";
+  qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(inviteLink)}`;
+  qrImage.addEventListener("error", () => {
+    qrCodeEl.textContent = "QR aktuell nicht verfügbar";
+    showInviteInfo("QR konnte nicht geladen werden. Link kopieren funktioniert weiterhin.");
   });
+  qrCodeEl.appendChild(qrImage);
 }
 
 function renderVoteOptions() {
@@ -380,7 +389,12 @@ modeSelect.addEventListener("change", () => {
 
 toggleLockBtn.addEventListener("click", () => {
   if (!socket) return;
+  toggleLockBtn.disabled = true;
+  showInviteInfo("Lobby-Status wird aktualisiert...");
   socket.emit("toggle_lobby_lock");
+  window.setTimeout(() => {
+    toggleLockBtn.disabled = false;
+  }, 450);
 });
 
 abortRoundBtn.addEventListener("click", () => {
@@ -454,6 +468,7 @@ if (!socket) {
 
   socket.on("joined", ({ room: joinedRoom, selfId: myId }) => {
     room = joinedRoom;
+    lastLobbyLocked = !!joinedRoom?.settings?.lobbyLocked;
     selfId = myId;
     hasVoted = false;
     assignmentBox.classList.add("hidden");
@@ -465,6 +480,11 @@ if (!socket) {
   });
 
   socket.on("room_update", (updatedRoom) => {
+    const nextLobbyLocked = !!updatedRoom?.settings?.lobbyLocked;
+    if (lastLobbyLocked !== null && lastLobbyLocked !== nextLobbyLocked) {
+      showInviteInfo(nextLobbyLocked ? "Lobby ist jetzt gesperrt 🔒" : "Lobby ist offen 🔓");
+    }
+    lastLobbyLocked = nextLobbyLocked;
     room = updatedRoom;
     renderState();
   });
