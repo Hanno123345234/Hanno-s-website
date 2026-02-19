@@ -28,13 +28,25 @@
         <div id="joinBox" class="join-box hidden">
           <label for="codeInput">Raumcode</label>
           <input id="codeInput" maxlength="5" placeholder="ABCDE" />
+          <label for="pinInput">PIN (4-stellig)</label>
+          <input id="pinInput" maxlength="4" placeholder="1234" />
+          <label class="check-row" for="spectatorToggle">
+            <input id="spectatorToggle" type="checkbox" />
+            <span>Als Spectator beitreten</span>
+          </label>
           <button id="joinBtn">Raum beitreten</button>
+        </div>
+
+        <div class="recent-box">
+          <h3>Letzte Spieler</h3>
+          <div id="recentPlayers" class="recent-list"></div>
         </div>
 
         <details class="rules-box">
           <summary>Spielregeln anzeigen</summary>
           <ol>
             <li>Host erstellt eine Lobby, alle joinen per Code.</li>
+            <li>Für den Beitritt brauchst du Raumcode + 4-stellige PIN.</li>
             <li>Jeder bekommt geheim Wahrheit oder Pflicht.</li>
             <li>Eine Person ist Imposter und bekommt eine Fake-Aufgabe.</li>
             <li>Alle führen ihre Aufgabe aus und versuchen normal zu wirken.</li>
@@ -70,23 +82,42 @@
             <button id="copyCodeBtn">Code kopieren</button>
             <button id="copyLinkBtn">Einladungslink kopieren</button>
           </div>
+          <p class="subtitle">PIN: <strong id="pinDisplay">----</strong></p>
           <div id="qrWrap" class="qr-wrap">
             <div id="qrCode"></div>
+          </div>
+          <div>
+            <h4>Schnell re-invite</h4>
+            <div id="recentInviteList" class="recent-list"></div>
           </div>
           <p id="inviteInfo" class="subtitle"></p>
         </div>
 
         <div id="adminBox" class="admin-box hidden">
           <h3>Host-Controls</h3>
-          <label for="modeSelect">Spielmodus</label>
+          <label for="modeSelect">Content-Filter</label>
           <select id="modeSelect">
-            <option value="soft">Soft</option>
+            <option value="family">Family</option>
+            <option value="normal">Normal</option>
             <option value="spicy">Spicy</option>
-            <option value="chaos">Chaos</option>
           </select>
+          <div class="prompt-editor">
+            <input id="customTruthInput" maxlength="180" placeholder="Eigene Wahrheit hinzufügen" />
+            <button id="addTruthBtn">Wahrheit adden</button>
+            <input id="customDareInput" maxlength="180" placeholder="Eigene Pflicht hinzufügen" />
+            <button id="addDareBtn">Pflicht adden</button>
+          </div>
           <div class="invite-actions">
             <button id="toggleLockBtn">Lobby sperren</button>
             <button id="abortRoundBtn">Runde abbrechen</button>
+          </div>
+          <div class="audit-box">
+            <h4>Audit-Log</h4>
+            <ul id="auditList"></ul>
+          </div>
+          <div class="stats-box">
+            <h4>Runden-Stats</h4>
+            <ul id="statsList"></ul>
           </div>
         </div>
 
@@ -97,6 +128,11 @@
             <button id="renameBtn">Name ändern</button>
           </div>
           <ul id="playerList" class="player-list"></ul>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Spectators</h3>
+          <ul id="spectatorList" class="player-list"></ul>
         </div>
 
         <div id="hostControls" class="stack hidden">

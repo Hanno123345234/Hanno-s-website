@@ -1,13 +1,22 @@
 const socket = typeof window.io === "function" ? window.io() : null;
 
+const PROFILE_STORAGE_KEY = "imposter_profile_name_v2";
+const ROOM_SESSION_KEY = "imposter_room_session_v2";
+const RECENT_PLAYERS_KEY = "imposter_recent_players_v2";
+
 const homeView = document.getElementById("home");
 const roomView = document.getElementById("room");
+
 const profileNameInput = document.getElementById("profileNameInput");
 const saveProfileBtn = document.getElementById("saveProfileBtn");
 const savedNameText = document.getElementById("savedNameText");
 const menuActions = document.getElementById("menuActions");
 const joinBox = document.getElementById("joinBox");
 const codeInput = document.getElementById("codeInput");
+const pinInput = document.getElementById("pinInput");
+const spectatorToggle = document.getElementById("spectatorToggle");
+const recentPlayersEl = document.getElementById("recentPlayers");
+
 const createBtn = document.getElementById("createBtn");
 const joinBtn = document.getElementById("joinBtn");
 const errorBox = document.getElementById("errorBox");
@@ -22,8 +31,10 @@ const scoreImposter = document.getElementById("scoreImposter");
 const modeBadgeRoom = document.getElementById("modeBadgeRoom");
 
 const playerList = document.getElementById("playerList");
+const spectatorList = document.getElementById("spectatorList");
 const renameInput = document.getElementById("renameInput");
 const renameBtn = document.getElementById("renameBtn");
+
 const hostControls = document.getElementById("hostControls");
 const startRoundBtn = document.getElementById("startRoundBtn");
 const startVoteBtn = document.getElementById("startVoteBtn");
@@ -33,13 +44,21 @@ const backBtn = document.getElementById("backBtn");
 const inviteBox = document.getElementById("inviteBox");
 const copyCodeBtn = document.getElementById("copyCodeBtn");
 const copyLinkBtn = document.getElementById("copyLinkBtn");
+const pinDisplay = document.getElementById("pinDisplay");
+const recentInviteList = document.getElementById("recentInviteList");
 const inviteInfo = document.getElementById("inviteInfo");
 const qrCodeEl = document.getElementById("qrCode");
 
 const adminBox = document.getElementById("adminBox");
 const modeSelect = document.getElementById("modeSelect");
+const customTruthInput = document.getElementById("customTruthInput");
+const customDareInput = document.getElementById("customDareInput");
+const addTruthBtn = document.getElementById("addTruthBtn");
+const addDareBtn = document.getElementById("addDareBtn");
 const toggleLockBtn = document.getElementById("toggleLockBtn");
 const abortRoundBtn = document.getElementById("abortRoundBtn");
+const auditList = document.getElementById("auditList");
+const statsList = document.getElementById("statsList");
 
 const assignmentBox = document.getElementById("assignmentBox");
 const modeBadge = document.getElementById("modeBadge");
@@ -53,15 +72,27 @@ const voteInfo = document.getElementById("voteInfo");
 const resultBox = document.getElementById("resultBox");
 const resultNewRoundBtn = document.getElementById("resultNewRoundBtn");
 
+let profileName = "";
 let selfId = null;
 let room = null;
+let participantType = "player";
 let hasVoted = false;
+let isMuted = false;
 let timerInterval = null;
 let currentQrValue = "";
-let isMuted = false;
-let lastLobbyLocked = null;
-let profileName = "";
-const PROFILE_STORAGE_KEY = "imposter_profile_name_v1";
+let tryingAutoRejoin = false;
+
+function sanitizeName(value) {
+  return String(value || "").trim().slice(0, 24);
+}
+
+function sanitizeCode(value) {
+  return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+}
+
+function sanitizePin(value) {
+  return String(value || "").trim().replace(/[^0-9]/g, "").slice(0, 4);
+}
 
 function showError(message = "") {
   errorBox.textContent = message;
@@ -81,8 +112,84 @@ function setConnectionState(connected, text) {
   joinBtn.disabled = !connected;
 }
 
-function sanitizeAnyName(value) {
-  return String(value || "").trim().slice(0, 24);
+function setView(inRoom) {
+  homeView.classList.toggle("active", !inRoom);
+  roomView.classList.toggle("active", inRoom);
+}
+
+function saveSession(session) {
+  window.localStorage.setItem(ROOM_SESSION_KEY, JSON.stringify(session));
+}
+
+function loadSession() {
+  try {
+    return JSON.parse(window.localStorage.getItem(ROOM_SESSION_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  window.localStorage.removeItem(ROOM_SESSION_KEY);
+}
+
+function loadProfile() {
+  profileName = sanitizeName(window.localStorage.getItem(PROFILE_STORAGE_KEY) || "");
+  applyProfileUi();
+}
+
+function saveProfile(name) {
+  const next = sanitizeName(name);
+  if (!next) {
+    showError("Bitte gültigen Namen eingeben.");
+    return false;
+  }
+  profileName = next;
+  window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
+  applyProfileUi();
+  showError("");
+  return true;
+}
+
+function loadRecentPlayers() {
+  try {
+    return JSON.parse(window.localStorage.getItem(RECENT_PLAYERS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentPlayers(list) {
+  window.localStorage.setItem(RECENT_PLAYERS_KEY, JSON.stringify(list.slice(0, 20)));
+}
+
+function addRecentPlayer(name) {
+  const normalized = sanitizeName(name);
+  if (!normalized || normalized.toLowerCase() === profileName.toLowerCase()) return;
+  const list = loadRecentPlayers().filter((entry) => entry.toLowerCase() !== normalized.toLowerCase());
+  list.unshift(normalized);
+  saveRecentPlayers(list);
+  renderRecentPlayers();
+}
+
+function renderRecentPlayers() {
+  const list = loadRecentPlayers();
+  recentPlayersEl.innerHTML = "";
+  if (list.length === 0) {
+    recentPlayersEl.innerHTML = '<span class="subtitle">Noch keine letzten Spieler</span>';
+    return;
+  }
+
+  list.slice(0, 8).forEach((name) => {
+    const button = document.createElement("button");
+    button.textContent = name;
+    button.className = "mini-btn";
+    button.addEventListener("click", () => {
+      profileNameInput.value = name;
+      saveProfileBtn.click();
+    });
+    recentPlayersEl.appendChild(button);
+  });
 }
 
 function applyProfileUi() {
@@ -90,32 +197,27 @@ function applyProfileUi() {
   savedNameText.textContent = hasProfile ? `Angemeldet als: ${profileName}` : "Noch nicht angemeldet";
   menuActions.classList.toggle("hidden", !hasProfile);
   joinBox.classList.toggle("hidden", !hasProfile);
-  if (hasProfile) {
-    profileNameInput.value = profileName;
+  if (hasProfile) profileNameInput.value = profileName;
+}
+
+function getInviteLink(code, pin) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("code", code);
+  url.searchParams.set("pin", pin);
+  return url.toString();
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
   }
-}
-
-function loadProfile() {
-  profileName = sanitizeAnyName(window.localStorage.getItem(PROFILE_STORAGE_KEY) || "");
-  applyProfileUi();
-}
-
-function saveProfile(nextName) {
-  profileName = sanitizeAnyName(nextName);
-  if (!profileName) {
-    showError("Bitte einen gültigen Namen eingeben.");
-    return false;
-  }
-
-  window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
-  applyProfileUi();
-  showError("");
-  return true;
-}
-
-function setView(inRoom) {
-  homeView.classList.toggle("active", !inRoom);
-  roomView.classList.toggle("active", inRoom);
+  const helper = document.createElement("textarea");
+  helper.value = value;
+  document.body.appendChild(helper);
+  helper.select();
+  document.execCommand("copy");
+  document.body.removeChild(helper);
 }
 
 function resetTimer() {
@@ -135,14 +237,9 @@ function renderCountdown(endsAt) {
   function refresh() {
     const leftMs = Math.max(0, endsAt - Date.now());
     const totalSeconds = Math.ceil(leftMs / 1000);
-    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-    const seconds = String(totalSeconds % 60).padStart(2, "0");
-    phaseTimer.textContent = `${minutes}:${seconds}`;
+    phaseTimer.textContent = `${String(Math.floor(totalSeconds / 60)).padStart(2, "0")}:${String(totalSeconds % 60).padStart(2, "0")}`;
     phaseTimer.classList.toggle("warn", totalSeconds <= 10);
-
-    if (totalSeconds <= 0) {
-      resetTimer();
-    }
+    if (totalSeconds <= 0) resetTimer();
   }
 
   phaseTimer.classList.remove("hidden");
@@ -154,122 +251,91 @@ function pulse(element, className) {
   element.classList.remove(className);
   void element.offsetWidth;
   element.classList.add(className);
-  window.setTimeout(() => element.classList.remove(className), 460);
+  window.setTimeout(() => element.classList.remove(className), 420);
 }
 
 function getStateLabel(state) {
-  if (state === "lobby") {
-    return room?.settings?.lobbyLocked ? "Lobby ist gesperrt" : "Lobby offen für neue Spieler";
-  }
-  if (state === "round") return "Runde läuft – Aufgabe ausführen";
-  if (state === "vote") return "Abstimmung läuft";
+  if (!room) return "";
+  if (state === "lobby") return room.settings.lobbyLocked ? "Lobby ist gesperrt" : "Lobby offen";
+  if (state === "round") return participantType === "spectator" ? "Runde läuft (Spectator)" : "Runde läuft";
+  if (state === "vote") return participantType === "spectator" ? "Vote läuft (Spectator)" : "Abstimmung läuft";
   if (state === "ended") return "Runde beendet";
   return "";
 }
 
-function getInviteLink(code) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("code", code);
-  return url.toString();
-}
-
-async function copyText(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const helper = document.createElement("textarea");
-  helper.value = text;
-  document.body.appendChild(helper);
-  helper.select();
-  document.execCommand("copy");
-  document.body.removeChild(helper);
-}
-
-function resetToHome() {
-  room = null;
-  selfId = null;
-  hasVoted = false;
-  isMuted = false;
-  lastLobbyLocked = null;
-  currentQrValue = "";
-  playerList.innerHTML = "";
-  voteButtons.innerHTML = "";
-  voteInfo.textContent = "";
-  resultBox.classList.add("hidden");
-  resultBox.innerHTML = "";
-  assignmentBox.classList.add("hidden");
-  voteBox.classList.add("hidden");
-  inviteBox.classList.add("hidden");
-  adminBox.classList.add("hidden");
-  showInviteInfo("");
-  roomNotice.textContent = "";
-  roomNotice.classList.add("hidden");
-  resultNewRoundBtn.classList.add("hidden");
-  qrCodeEl.innerHTML = "";
-  resetTimer();
-  setView(false);
-}
-
 function renderQrForHost() {
-  if (!room) return;
-  const inviteLink = getInviteLink(room.code);
-  if (currentQrValue === inviteLink) return;
-  currentQrValue = inviteLink;
+  if (!room || !room.pin) return;
+  const link = getInviteLink(room.code, room.pin);
+  if (currentQrValue === link) return;
+  currentQrValue = link;
   qrCodeEl.innerHTML = "";
 
-  const qrImage = document.createElement("img");
-  qrImage.alt = "QR Code Einladung";
-  qrImage.loading = "lazy";
-  qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(inviteLink)}`;
-  qrImage.addEventListener("error", () => {
-    qrCodeEl.textContent = "QR aktuell nicht verfügbar";
-    showInviteInfo("QR konnte nicht geladen werden. Link kopieren funktioniert weiterhin.");
+  const img = document.createElement("img");
+  img.alt = "QR Code Einladung";
+  img.loading = "lazy";
+  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(link)}`;
+  img.addEventListener("error", () => {
+    qrCodeEl.textContent = "QR nicht verfügbar";
+    showInviteInfo("QR aktuell nicht verfügbar. Link kopieren funktioniert.");
   });
-  qrCodeEl.appendChild(qrImage);
+  qrCodeEl.appendChild(img);
+}
+
+function renderInviteRecent() {
+  recentInviteList.innerHTML = "";
+  if (!room || !room.recentPlayers?.length) return;
+
+  room.recentPlayers.slice(0, 6).forEach((name) => {
+    const btn = document.createElement("button");
+    btn.className = "mini-btn";
+    btn.textContent = name;
+    btn.addEventListener("click", async () => {
+      try {
+        const link = getInviteLink(room.code, room.pin || "");
+        const text = `Hey ${name}, join den Raum ${room.code} mit PIN ${room.pin}: ${link}`;
+        await copyText(text);
+        showInviteInfo(`Invite-Text für ${name} kopiert ✅`);
+      } catch {
+        showInviteInfo("Kopieren fehlgeschlagen.");
+      }
+    });
+    recentInviteList.appendChild(btn);
+  });
 }
 
 function renderVoteOptions() {
   voteButtons.innerHTML = "";
-  if (!room) return;
+  if (!room || participantType !== "player") return;
 
-  room.players
-    .filter((player) => player.id !== selfId)
-    .forEach((player) => {
-      const button = document.createElement("button");
-      button.textContent = player.name;
-      button.disabled = hasVoted || isMuted;
-      button.addEventListener("click", () => {
-        socket.emit("submit_vote", { targetId: player.id });
-        hasVoted = true;
-        renderVoteOptions();
-      });
-      voteButtons.appendChild(button);
+  room.players.filter((player) => player.id !== selfId).forEach((player) => {
+    const btn = document.createElement("button");
+    btn.textContent = player.name;
+    btn.disabled = hasVoted || isMuted;
+    btn.addEventListener("click", () => {
+      socket.emit("submit_vote", { targetId: player.id });
+      hasVoted = true;
+      renderVoteOptions();
     });
+    voteButtons.appendChild(btn);
+  });
 }
 
 function renderPlayers() {
   playerList.innerHTML = "";
+  spectatorList.innerHTML = "";
   if (!room) return;
 
   const isHost = room.hostId === selfId;
-  const mutedIds = new Set(room.mutedPlayerIds || []);
+  const mutedSet = new Set(room.mutedPlayerIds || []);
 
   room.players.forEach((player) => {
     const item = document.createElement("li");
-    if (mutedIds.has(player.id)) {
-      item.classList.add("player-muted");
-    }
+    const name = document.createElement("span");
+    name.className = "player-name";
+    name.textContent = `${player.name}${player.id === room.hostId ? " 👑" : ""}${player.id === selfId ? " (Du)" : ""}${mutedSet.has(player.id) ? " 🔇" : ""}`;
+    item.appendChild(name);
 
-    const hostTag = player.id === room.hostId ? " 👑" : "";
-    const selfTag = player.id === selfId ? " (Du)" : "";
-    const mutedTag = mutedIds.has(player.id) ? " 🔇" : "";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "player-name";
-    nameSpan.textContent = `${player.name}${hostTag}${selfTag}${mutedTag}`;
-    item.appendChild(nameSpan);
+    if (mutedSet.has(player.id)) item.classList.add("player-muted");
 
     if (isHost && player.id !== selfId) {
       const actions = document.createElement("div");
@@ -277,17 +343,13 @@ function renderPlayers() {
 
       const muteBtn = document.createElement("button");
       muteBtn.className = "mute-btn";
-      muteBtn.textContent = mutedIds.has(player.id) ? "Entstumm" : "Stumm";
-      muteBtn.addEventListener("click", () => {
-        socket.emit("toggle_mute_player", { targetId: player.id });
-      });
+      muteBtn.textContent = mutedSet.has(player.id) ? "Entstumm" : "Stumm";
+      muteBtn.addEventListener("click", () => socket.emit("toggle_mute_player", { targetId: player.id }));
 
       const kickBtn = document.createElement("button");
       kickBtn.className = "kick-btn";
       kickBtn.textContent = "Kicken";
-      kickBtn.addEventListener("click", () => {
-        socket.emit("kick_player", { targetId: player.id });
-      });
+      kickBtn.addEventListener("click", () => socket.emit("kick_player", { targetId: player.id }));
 
       actions.appendChild(muteBtn);
       actions.appendChild(kickBtn);
@@ -296,27 +358,54 @@ function renderPlayers() {
 
     playerList.appendChild(item);
   });
+
+  room.spectators.forEach((spec) => {
+    const item = document.createElement("li");
+    item.textContent = `${spec.name}${spec.id === selfId ? " (Du)" : ""}`;
+    spectatorList.appendChild(item);
+  });
+}
+
+function renderAuditAndStats() {
+  if (!room) return;
+
+  auditList.innerHTML = "";
+  (room.auditLog || []).slice().reverse().forEach((entry) => {
+    const li = document.createElement("li");
+    const time = new Date(entry.at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    li.textContent = `[${time}] ${entry.message}`;
+    auditList.appendChild(li);
+  });
+
+  statsList.innerHTML = "";
+  (room.playerStats || []).forEach((stat) => {
+    const li = document.createElement("li");
+    li.textContent = `${stat.name}: Votes ${stat.votesCorrect}/${stat.votesGiven}, Verdächtigt ${stat.suspected}, W(G/I) ${stat.groupWins}/${stat.imposterWins}`;
+    statsList.appendChild(li);
+  });
 }
 
 function renderHostControls() {
   if (!room) return;
-
   const isHost = room.hostId === selfId;
+
   hostControls.classList.toggle("hidden", !isHost);
   inviteBox.classList.toggle("hidden", !isHost);
   adminBox.classList.toggle("hidden", !isHost);
 
   if (isHost) {
-    modeSelect.value = room.settings.gameMode;
+    modeSelect.value = room.settings.contentFilter || "normal";
     toggleLockBtn.textContent = room.settings.lobbyLocked ? "Lobby entsperren" : "Lobby sperren";
     abortRoundBtn.disabled = !(room.state === "round" || room.state === "vote");
+    pinDisplay.textContent = room.pin || "----";
     renderQrForHost();
+    renderInviteRecent();
+    renderAuditAndStats();
   }
 
-  startRoundBtn.style.display = room.state === "lobby" ? "block" : "none";
+  startRoundBtn.style.display = room.state === "lobby" || room.state === "ended" ? "block" : "none";
   startVoteBtn.style.display = room.state === "round" ? "block" : "none";
   newRoundBtn.style.display = room.state === "ended" ? "block" : "none";
-
   resultNewRoundBtn.classList.toggle("hidden", !(isHost && room.state === "ended"));
 }
 
@@ -327,25 +416,75 @@ function renderState() {
   stateText.textContent = getStateLabel(room.state);
   scoreGroup.textContent = room.scores?.gruppe ?? 0;
   scoreImposter.textContent = room.scores?.imposter ?? 0;
-  modeBadgeRoom.textContent = `Modus: ${room.settings?.gameMode || "spicy"}`;
-  isMuted = (room.mutedPlayerIds || []).includes(selfId);
+  modeBadgeRoom.textContent = `Filter: ${room.settings?.contentFilter || "normal"}`;
 
+  isMuted = (room.mutedPlayerIds || []).includes(selfId);
   renderPlayers();
   renderHostControls();
   renderCountdown(room.phaseEndsAt || null);
 
   if (room.state === "vote") {
     voteBox.classList.remove("hidden");
-    voteInfo.textContent = `${Object.keys(room.votes || {}).length}/${room.expectedVotes ?? room.players.length} Stimmen abgegeben${isMuted ? " • Du bist stummgeschaltet" : ""}`;
-    renderVoteOptions();
+    if (participantType === "spectator") {
+      voteInfo.textContent = "Du bist Spectator und kannst nicht abstimmen.";
+      voteButtons.innerHTML = "";
+    } else {
+      voteInfo.textContent = `${Object.keys(room.votes || {}).length}/${room.expectedVotes ?? room.players.length} Stimmen abgegeben${isMuted ? " • Du bist stummgeschaltet" : ""}`;
+      renderVoteOptions();
+    }
   } else {
     voteBox.classList.add("hidden");
     voteInfo.textContent = "";
   }
 }
 
-function sanitizeName() {
-  return sanitizeAnyName(profileName);
+function resetToHome() {
+  room = null;
+  selfId = null;
+  participantType = "player";
+  hasVoted = false;
+  isMuted = false;
+  currentQrValue = "";
+
+  playerList.innerHTML = "";
+  spectatorList.innerHTML = "";
+  voteButtons.innerHTML = "";
+  voteInfo.textContent = "";
+  resultBox.classList.add("hidden");
+  resultBox.innerHTML = "";
+  assignmentBox.classList.add("hidden");
+  voteBox.classList.add("hidden");
+  inviteBox.classList.add("hidden");
+  adminBox.classList.add("hidden");
+  resultNewRoundBtn.classList.add("hidden");
+  roomNotice.textContent = "";
+  roomNotice.classList.add("hidden");
+  showInviteInfo("");
+  pinDisplay.textContent = "----";
+  qrCodeEl.innerHTML = "";
+  auditList.innerHTML = "";
+  statsList.innerHTML = "";
+  resetTimer();
+  setView(false);
+  clearSession();
+}
+
+function attemptAutoRejoin() {
+  if (!socket || !socket.connected || room || tryingAutoRejoin || !profileName) return;
+  const session = loadSession();
+  if (!session?.code || !session?.pin) return;
+
+  tryingAutoRejoin = true;
+  socket.emit("join_room", {
+    name: profileName,
+    code: session.code,
+    pin: session.pin,
+    spectator: !!session.spectator,
+    rejoin: true
+  });
+  window.setTimeout(() => {
+    tryingAutoRejoin = false;
+  }, 1500);
 }
 
 saveProfileBtn.addEventListener("click", () => {
@@ -354,35 +493,43 @@ saveProfileBtn.addEventListener("click", () => {
 
 createBtn.addEventListener("click", () => {
   if (!socket || !socket.connected) {
-    showError("Keine Serververbindung. Starte den Server mit npm start.");
+    showError("Keine Serververbindung.");
     return;
   }
-
-  const name = sanitizeName();
-  if (!name) {
-    showError("Bitte melde dich zuerst mit deinem Namen an.");
+  if (!profileName) {
+    showError("Bitte zuerst anmelden.");
     return;
   }
 
   showError("");
-  socket.emit("create_room", { name });
+  socket.emit("create_room", { name: profileName });
 });
 
 joinBtn.addEventListener("click", () => {
   if (!socket || !socket.connected) {
-    showError("Keine Serververbindung. Starte den Server mit npm start.");
+    showError("Keine Serververbindung.");
+    return;
+  }
+  if (!profileName) {
+    showError("Bitte zuerst anmelden.");
     return;
   }
 
-  const name = sanitizeName();
-  const code = String(codeInput.value || "").trim().toUpperCase();
-  if (!name || !code) {
-    showError("Bitte anmelden und Raumcode eingeben.");
+  const code = sanitizeCode(codeInput.value);
+  const pin = sanitizePin(pinInput.value);
+  if (!code || pin.length !== 4) {
+    showError("Raumcode + 4-stellige PIN eingeben.");
     return;
   }
 
   showError("");
-  socket.emit("join_room", { name, code });
+  socket.emit("join_room", {
+    name: profileName,
+    code,
+    pin,
+    spectator: spectatorToggle.checked,
+    rejoin: false
+  });
 });
 
 profileNameInput.addEventListener("keydown", (event) => {
@@ -393,13 +540,21 @@ profileNameInput.addEventListener("keydown", (event) => {
 });
 
 codeInput.addEventListener("input", () => {
-  codeInput.value = String(codeInput.value || "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 5);
+  codeInput.value = sanitizeCode(codeInput.value);
+});
+
+pinInput.addEventListener("input", () => {
+  pinInput.value = sanitizePin(pinInput.value);
 });
 
 codeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    joinBtn.click();
+  }
+});
+
+pinInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     joinBtn.click();
@@ -417,9 +572,9 @@ copyCodeBtn.addEventListener("click", async () => {
 });
 
 copyLinkBtn.addEventListener("click", async () => {
-  if (!room) return;
+  if (!room || !room.pin) return;
   try {
-    await copyText(getInviteLink(room.code));
+    await copyText(getInviteLink(room.code, room.pin));
     showInviteInfo("Einladungslink kopiert ✅");
   } catch {
     showInviteInfo("Kopieren fehlgeschlagen.");
@@ -428,17 +583,28 @@ copyLinkBtn.addEventListener("click", async () => {
 
 modeSelect.addEventListener("change", () => {
   if (!socket) return;
-  socket.emit("set_game_mode", { mode: modeSelect.value });
+  socket.emit("set_content_filter", { filter: modeSelect.value });
+});
+
+addTruthBtn.addEventListener("click", () => {
+  if (!socket) return;
+  const text = String(customTruthInput.value || "").trim();
+  if (!text) return;
+  socket.emit("add_custom_prompt", { kind: "wahrheit", text });
+  customTruthInput.value = "";
+});
+
+addDareBtn.addEventListener("click", () => {
+  if (!socket) return;
+  const text = String(customDareInput.value || "").trim();
+  if (!text) return;
+  socket.emit("add_custom_prompt", { kind: "pflicht", text });
+  customDareInput.value = "";
 });
 
 toggleLockBtn.addEventListener("click", () => {
   if (!socket) return;
-  toggleLockBtn.disabled = true;
-  showInviteInfo("Lobby-Status wird aktualisiert...");
   socket.emit("toggle_lobby_lock");
-  window.setTimeout(() => {
-    toggleLockBtn.disabled = false;
-  }, 450);
 });
 
 abortRoundBtn.addEventListener("click", () => {
@@ -448,9 +614,9 @@ abortRoundBtn.addEventListener("click", () => {
 
 renameBtn.addEventListener("click", () => {
   if (!socket || !room) return;
-  const nextName = sanitizeAnyName(renameInput.value);
+  const nextName = sanitizeName(renameInput.value);
   if (!nextName) {
-    showError("Bitte einen gültigen neuen Namen eingeben.");
+    showError("Bitte gültigen Namen eingeben.");
     return;
   }
   socket.emit("update_name", { name: nextName });
@@ -471,18 +637,11 @@ startVoteBtn.addEventListener("click", () => {
 newRoundBtn.addEventListener("click", () => {
   if (!socket) return;
   socket.emit("new_round");
-  hasVoted = false;
-  assignmentBox.classList.add("hidden");
-  resultBox.classList.add("hidden");
 });
 
 resultNewRoundBtn.addEventListener("click", () => {
   if (!socket) return;
   socket.emit("new_round");
-  hasVoted = false;
-  assignmentBox.classList.add("hidden");
-  resultBox.classList.add("hidden");
-  resultNewRoundBtn.classList.add("hidden");
 });
 
 backBtn.addEventListener("click", () => {
@@ -495,22 +654,24 @@ backBtn.addEventListener("click", () => {
   resetToHome();
 });
 
-const initialCode = new URLSearchParams(window.location.search).get("code");
-if (initialCode) {
-  codeInput.value = String(initialCode).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
-}
+const initialCode = sanitizeCode(new URLSearchParams(window.location.search).get("code"));
+const initialPin = sanitizePin(new URLSearchParams(window.location.search).get("pin"));
+if (initialCode) codeInput.value = initialCode;
+if (initialPin) pinInput.value = initialPin;
 
 loadProfile();
+renderRecentPlayers();
 
 if (!socket) {
   setConnectionState(false, "Socket nicht geladen");
-  showError("Socket.IO nicht gefunden. Öffne die App über den Node-Server, nicht als Datei.");
+  showError("Socket.IO nicht gefunden.");
 } else {
   setConnectionState(false, "Verbinde…");
 
   socket.on("connect", () => {
     setConnectionState(true, "Verbunden");
     showError("");
+    attemptAutoRejoin();
   });
 
   socket.on("disconnect", () => {
@@ -519,41 +680,51 @@ if (!socket) {
 
   socket.on("connect_error", () => {
     setConnectionState(false, "Server nicht erreichbar");
-    showError("Server nicht erreichbar. Bitte npm start ausführen.");
+    showError("Server nicht erreichbar.");
   });
 
-  socket.on("joined", ({ room: joinedRoom, selfId: myId }) => {
+  socket.on("joined", ({ room: joinedRoom, selfId: myId, participantType: nextType }) => {
     room = joinedRoom;
-    lastLobbyLocked = !!joinedRoom?.settings?.lobbyLocked;
     selfId = myId;
+    participantType = nextType || "player";
     hasVoted = false;
+    tryingAutoRejoin = false;
+
     assignmentBox.classList.add("hidden");
     resultBox.classList.add("hidden");
     resultNewRoundBtn.classList.add("hidden");
-    showInviteInfo("");
+
     renameInput.value = profileName;
     setView(true);
     renderState();
+
+    const pin = room.pin || sanitizePin(pinInput.value);
+    saveSession({ code: room.code, pin, spectator: participantType === "spectator" });
   });
 
   socket.on("room_update", (updatedRoom) => {
-    const nextLobbyLocked = !!updatedRoom?.settings?.lobbyLocked;
-    if (lastLobbyLocked !== null && lastLobbyLocked !== nextLobbyLocked) {
-      showInviteInfo(nextLobbyLocked ? "Lobby ist jetzt gesperrt 🔒" : "Lobby ist offen 🔓");
-    }
-    lastLobbyLocked = nextLobbyLocked;
     room = updatedRoom;
     renderState();
+
+    (room.players || []).forEach((player) => addRecentPlayer(player.name));
+    (room.spectators || []).forEach((spec) => addRecentPlayer(spec.name));
   });
 
   socket.on("assignment", (data) => {
     hasVoted = false;
-    resultBox.classList.add("hidden");
     assignmentBox.classList.remove("hidden");
+    resultBox.classList.add("hidden");
     modeBadge.textContent = data.mode === "wahrheit" ? "Wahrheit" : "Pflicht";
     roleBadge.textContent = data.role === "imposter" ? "Rolle: Imposter" : "Rolle: Normal";
     promptText.textContent = data.prompt;
     pulse(assignmentBox, "pulse");
+  });
+
+  socket.on("spectator_assignment", ({ message }) => {
+    assignmentBox.classList.remove("hidden");
+    modeBadge.textContent = "Spectator";
+    roleBadge.textContent = "Rolle: Zuschauer";
+    promptText.textContent = message;
   });
 
   socket.on("round_started", ({ endsAt }) => {
@@ -563,8 +734,6 @@ if (!socket) {
 
   socket.on("vote_started", ({ endsAt }) => {
     hasVoted = false;
-    resultBox.classList.add("hidden");
-    resultNewRoundBtn.classList.add("hidden");
     renderCountdown(endsAt);
     renderState();
     pulse(voteBox, "pulse");
@@ -585,10 +754,8 @@ if (!socket) {
       ? "✅ Gruppe gewinnt – Imposter enttarnt"
       : "😈 Imposter gewinnt – nicht enttarnt";
 
-    const tieText = result.tie ? "Es gab ein Unentschieden bei den Stimmen." : "";
-    const hostHint = room && room.hostId === selfId
-      ? ""
-      : "Warte auf den Host für die nächste Runde.";
+    const tieText = result.tie ? "Es gab ein Unentschieden." : "";
+    const hostHint = room && room.hostId === selfId ? "" : "Warte auf den Host für die nächste Runde.";
 
     resultBox.innerHTML = `
       <h3>${winnerText}</h3>
@@ -597,17 +764,27 @@ if (!socket) {
       <p>${hostHint}</p>
     `;
 
-    if (room) {
-      room.scores = result.scores;
-    }
-
+    if (room) room.scores = result.scores;
     renderState();
     pulse(resultBox, "pop");
   });
 
   socket.on("muted_status", ({ muted }) => {
     isMuted = !!muted;
-    showError(muted ? "Du wurdest vom Host stummgeschaltet." : "Du bist nicht mehr stummgeschaltet.");
+    showError(muted ? "Du bist stummgeschaltet." : "Du bist nicht mehr stummgeschaltet.");
+  });
+
+  socket.on("cooldown", ({ action, retryMs }) => {
+    const seconds = Math.max(1, Math.ceil((retryMs || 0) / 1000));
+    showError(`Cooldown (${action}): bitte ${seconds}s warten.`);
+  });
+
+  socket.on("name_updated", ({ name }) => {
+    profileName = sanitizeName(name);
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
+    applyProfileUi();
+    renameInput.value = profileName;
+    showError("Name geändert ✅");
   });
 
   socket.on("left_room", () => {
@@ -615,21 +792,13 @@ if (!socket) {
   });
 
   socket.on("kicked", ({ message }) => {
-    showError(message || "Du wurdest vom Host entfernt.");
+    showError(message || "Du wurdest gekickt.");
     resetToHome();
   });
 
   socket.on("room_closed", ({ message }) => {
-    showError(message || "Die Lobby wurde geschlossen.");
+    showError(message || "Lobby wurde geschlossen.");
     resetToHome();
-  });
-
-  socket.on("name_updated", ({ name }) => {
-    profileName = sanitizeAnyName(name);
-    window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
-    applyProfileUi();
-    renameInput.value = profileName;
-    showError("Name erfolgreich geändert ✅");
   });
 
   socket.on("error_message", (message) => {

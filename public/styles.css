@@ -133,24 +133,24 @@ select {
 }
 
 button {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(135deg, #4f6dff, #8e5dff);
   color: var(--text);
   padding: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 18px rgba(79, 109, 255, 0.28);
 }
 
 button.primary {
-  background: linear-gradient(135deg, #6f8dff, #5b74ef);
+  background: linear-gradient(135deg, #3e7bff, #22a6ff);
   border-color: transparent;
-  box-shadow: 0 6px 18px rgba(93, 123, 255, 0.35);
+  box-shadow: 0 6px 18px rgba(44, 139, 255, 0.35);
 }
 
 button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 20px rgba(18, 31, 81, 0.45);
 }
 
 button:active {
@@ -175,8 +175,22 @@ button:disabled {
   padding-top: 6px;
 }
 
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.check-row input {
+  width: auto;
+  min-height: auto;
+}
+
 .account-box,
-.rules-box {
+.rules-box,
+.recent-box {
   margin-top: 12px;
   padding: 12px;
   border-radius: 14px;
@@ -193,6 +207,21 @@ button:disabled {
   margin: 10px 0 0;
   padding-left: 18px;
   color: var(--muted);
+}
+
+.recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mini-btn {
+  width: auto;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  background: linear-gradient(135deg, #3647d6, #5f45eb);
 }
 
 .error {
@@ -332,8 +361,9 @@ button:disabled {
   min-height: 36px;
   padding: 6px 10px;
   border-radius: 10px;
-  background: rgba(255, 91, 124, 0.2);
-  border-color: rgba(255, 91, 124, 0.4);
+  background: linear-gradient(135deg, #ff4e78, #ff315f);
+  border-color: rgba(255, 91, 124, 0.72);
+  box-shadow: 0 6px 16px rgba(255, 63, 109, 0.35);
   flex-shrink: 0;
 }
 
@@ -342,9 +372,42 @@ button:disabled {
   min-height: 36px;
   padding: 6px 10px;
   border-radius: 10px;
-  background: rgba(255, 196, 72, 0.18);
-  border-color: rgba(255, 196, 72, 0.5);
+  background: linear-gradient(135deg, #ffb347, #ffcc33);
+  border-color: rgba(255, 208, 74, 0.7);
+  color: #2a2100;
+  box-shadow: 0 6px 16px rgba(255, 193, 69, 0.3);
   flex-shrink: 0;
+}
+
+#toggleLockBtn {
+  background: linear-gradient(135deg, #ff3d57, #d81534);
+  border-color: rgba(255, 93, 124, 0.8);
+  box-shadow: 0 8px 18px rgba(216, 21, 52, 0.38);
+}
+
+#abortRoundBtn {
+  background: linear-gradient(135deg, #ff7a45, #ff5a1f);
+  border-color: rgba(255, 129, 78, 0.8);
+  box-shadow: 0 8px 18px rgba(255, 99, 43, 0.34);
+}
+
+#copyCodeBtn {
+  background: linear-gradient(135deg, #00b8d9, #00a3c4);
+}
+
+#copyLinkBtn {
+  background: linear-gradient(135deg, #00c48c, #00a873);
+}
+
+#joinBtn,
+#renameBtn,
+#newRoundBtn,
+#resultNewRoundBtn {
+  background: linear-gradient(135deg, #7a5cff, #5f45eb);
+}
+
+#startVoteBtn {
+  background: linear-gradient(135deg, #ff9b2f, #ff7f1a);
 }
 
 .player-muted {
@@ -437,4 +500,33 @@ button:disabled {
 .rename-row button {
   width: auto;
   min-width: 120px;
+}
+
+.prompt-editor {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.audit-box,
+.stats-box {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 10px;
+}
+
+.audit-box h4,
+.stats-box h4 {
+  margin: 0 0 8px;
+}
+
+.audit-box ul,
+.stats-box ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
