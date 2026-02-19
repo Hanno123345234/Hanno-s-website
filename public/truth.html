@@ -9,6 +9,17 @@
   <body>
     <main class="app">
       <section id="home" class="card active">
+        <div class="top-tools">
+          <a id="truthBackToModes" href="/" class="mini-link">← Zur Auswahl</a>
+          <div class="lang-inline">
+            <label for="truthLangSelect">Sprache</label>
+            <select id="truthLangSelect" aria-label="Sprache auswählen">
+              <option value="de">Deutsch</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+
         <p id="connectionBadge" class="connection connection-offline">● Verbinde…</p>
         <h1>Imposter – Wahrheit oder Pflicht</h1>
         <p class="subtitle">Raum erstellen oder mit Code beitreten</p>
@@ -160,6 +171,39 @@
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script>
+      (function setupTruthLanguageMenu() {
+        const key = "app_lang_v1";
+        const select = document.getElementById("truthLangSelect");
+        const backLink = document.getElementById("truthBackToModes");
+        if (!select || !backLink) {
+          return;
+        }
+
+        function getLang() {
+          const urlLang = new URLSearchParams(window.location.search).get("lang");
+          const stored = window.localStorage.getItem(key);
+          const value = urlLang || stored || "de";
+          return value === "en" ? "en" : "de";
+        }
+
+        function applyLang(lang) {
+          window.localStorage.setItem(key, lang);
+          document.documentElement.lang = lang;
+          select.value = lang;
+          backLink.href = `/?lang=${encodeURIComponent(lang)}`;
+          const url = new URL(window.location.href);
+          url.searchParams.set("lang", lang);
+          window.history.replaceState(null, "", url.toString());
+        }
+
+        select.addEventListener("change", () => {
+          applyLang(select.value);
+        });
+
+        applyLang(getLang());
+      })();
+    </script>
     <script src="app.js"></script>
   </body>
   </html>

@@ -9,7 +9,16 @@
   <body>
     <main class="app">
       <section id="amongHome" class="card active">
-        <a href="/" class="mode-link">← Zur Auswahl</a>
+        <div class="top-tools">
+          <a id="amongBackToModes" href="/" class="mini-link">← Zur Auswahl</a>
+          <div class="lang-inline">
+            <label for="amongLangSelect">Sprache</label>
+            <select id="amongLangSelect" aria-label="Sprache auswählen">
+              <option value="de">Deutsch</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
         <h1>Among Us Modus</h1>
         <p class="subtitle">Erstelle einen Raum oder tritt bei</p>
 
@@ -75,6 +84,39 @@
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script>
+      (function setupAmongLanguageMenu() {
+        const key = "app_lang_v1";
+        const select = document.getElementById("amongLangSelect");
+        const backLink = document.getElementById("amongBackToModes");
+        if (!select || !backLink) {
+          return;
+        }
+
+        function getLang() {
+          const urlLang = new URLSearchParams(window.location.search).get("lang");
+          const stored = window.localStorage.getItem(key);
+          const value = urlLang || stored || "de";
+          return value === "en" ? "en" : "de";
+        }
+
+        function applyLang(lang) {
+          window.localStorage.setItem(key, lang);
+          document.documentElement.lang = lang;
+          select.value = lang;
+          backLink.href = `/?lang=${encodeURIComponent(lang)}`;
+          const url = new URL(window.location.href);
+          url.searchParams.set("lang", lang);
+          window.history.replaceState(null, "", url.toString());
+        }
+
+        select.addEventListener("change", () => {
+          applyLang(select.value);
+        });
+
+        applyLang(getLang());
+      })();
+    </script>
     <script src="amongus.js"></script>
   </body>
   </html>
