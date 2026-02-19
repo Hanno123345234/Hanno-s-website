@@ -94,6 +94,13 @@ function sanitizePin(value) {
   return String(value || "").trim().replace(/[^0-9]/g, "").slice(0, 4);
 }
 
+function getFilterLabel(filterValue) {
+  if (filterValue === "family") return "Familie";
+  if (filterValue === "normal") return "Normal";
+  if (filterValue === "spicy") return "Scharf";
+  return filterValue || "Normal";
+}
+
 function showError(message = "") {
   errorBox.textContent = message;
   roomNotice.textContent = message;
@@ -380,7 +387,7 @@ function renderAuditAndStats() {
   statsList.innerHTML = "";
   (room.playerStats || []).forEach((stat) => {
     const li = document.createElement("li");
-    li.textContent = `${stat.name}: Stimmen ${stat.votesCorrect}/${stat.votesGiven}, Verdächtigt ${stat.suspected}, S(Gruppe/Imp) ${stat.groupWins}/${stat.imposterWins}`;
+    li.textContent = `${stat.name}: Stimmen ${stat.votesCorrect}/${stat.votesGiven}, Verdächtigt ${stat.suspected}, S(Gruppe/Hochst) ${stat.groupWins}/${stat.imposterWins}`;
     statsList.appendChild(li);
   });
 }
@@ -416,7 +423,7 @@ function renderState() {
   stateText.textContent = getStateLabel(room.state);
   scoreGroup.textContent = room.scores?.gruppe ?? 0;
   scoreImposter.textContent = room.scores?.imposter ?? 0;
-  modeBadgeRoom.textContent = `Filter: ${room.settings?.contentFilter || "normal"}`;
+  modeBadgeRoom.textContent = `Filter: ${getFilterLabel(room.settings?.contentFilter)}`;
 
   isMuted = (room.mutedPlayerIds || []).includes(selfId);
   renderPlayers();
@@ -715,7 +722,7 @@ if (!socket) {
     assignmentBox.classList.remove("hidden");
     resultBox.classList.add("hidden");
     modeBadge.textContent = data.mode === "wahrheit" ? "Wahrheit" : "Pflicht";
-    roleBadge.textContent = data.role === "imposter" ? "Rolle: Imposter" : "Rolle: Normal";
+    roleBadge.textContent = data.role === "imposter" ? "Rolle: Hochstapler" : "Rolle: Normal";
     promptText.textContent = data.prompt;
     pulse(assignmentBox, "pulse");
   });
@@ -751,15 +758,15 @@ if (!socket) {
     resultBox.classList.remove("hidden");
 
     const winnerText = result.winner === "gruppe"
-      ? "✅ Gruppe gewinnt – Imposter enttarnt"
-      : "😈 Imposter gewinnt – nicht enttarnt";
+      ? "✅ Gruppe gewinnt – Hochstapler enttarnt"
+      : "😈 Hochstapler gewinnt – nicht enttarnt";
 
     const tieText = result.tie ? "Es war ein Unentschieden." : "";
     const hostHint = room && room.hostId === selfId ? "" : "Warte, bis der Host die nächste Runde startet.";
 
     resultBox.innerHTML = `
       <h3>${winnerText}</h3>
-      <p>Imposter war: <strong>${result.imposterName}</strong></p>
+      <p>Hochstapler war: <strong>${result.imposterName}</strong></p>
       <p>${tieText}</p>
       <p>${hostHint}</p>
     `;

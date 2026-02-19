@@ -31,92 +31,92 @@ const FILTER_PROMPT_MAP = {
 const PROMPT_SETS = {
   soft: {
     wahrheit: [
-      "What is your best habit?",
-      "What was your funniest moment at school?",
-      "Which app do you use the most?",
-      "What small thing instantly makes you happy?",
-      "Who would you most likely go on a road trip with?",
-      "Which series could you rewatch forever?"
+      "Was ist deine beste Gewohnheit?",
+      "Was war dein lustigster Moment in der Schule?",
+      "Welche App benutzt du am meisten?",
+      "Welche Kleinigkeit macht dich sofort glücklich?",
+      "Mit wem würdest du am ehesten einen Roadtrip machen?",
+      "Welche Serie könntest du immer wieder schauen?"
     ],
     pflicht: [
-      "Imitate a news anchor for 10 seconds.",
-      "Speak like a robot for 15 seconds.",
-      "Give 3 honest compliments to the group.",
-      "Do 5 squats and count out loud.",
-      "Act like an animal for 8 seconds.",
-      "Invent a slogan for bottled water."
+      "Imitiere 10 Sekunden lang einen Nachrichtensprecher.",
+      "Sprich 15 Sekunden wie ein Roboter.",
+      "Gib der Gruppe 3 ehrliche Komplimente.",
+      "Mach 5 Kniebeugen und zähle laut.",
+      "Tu 8 Sekunden lang so, als wärst du ein Tier.",
+      "Erfinde einen Werbespruch für Mineralwasser."
     ],
     fakeWahrheit: [
-      "What is your favorite food?",
-      "Which season do you like most?",
-      "Name your favorite drink.",
-      "Which color do you like most?"
+      "Was ist dein Lieblingsessen?",
+      "Welche Jahreszeit magst du am liebsten?",
+      "Nenne dein Lieblingsgetränk.",
+      "Welche Farbe magst du am meisten?"
     ],
     fakePflicht: [
-      "Name three fruits.",
-      "Count slowly to 10.",
-      "Name three countries in Europe.",
-      "Clap your hands twice."
+      "Nenne drei Früchte.",
+      "Zähle langsam bis 10.",
+      "Nenne drei Länder in Europa.",
+      "Klatsche zweimal in die Hände."
     ]
   },
   spicy: {
     wahrheit: [
-      "Who in this round has the best vibe and why?",
-      "What was your most embarrassing chat moment?",
-      "Who was your last small crush?",
-      "Which red flag do you sometimes ignore anyway?",
-      "What was your worst flirting fail?",
-      "When were you last truly jealous?"
+      "Wer hat in dieser Runde die beste Ausstrahlung und warum?",
+      "Was war dein peinlichster Chat-Moment?",
+      "Wer war dein letzter kleiner Crush?",
+      "Welche Red Flag ignorierst du manchmal trotzdem?",
+      "Was war dein schlimmster Flirt-Fail?",
+      "Wann warst du zuletzt richtig eifersüchtig?"
     ],
     pflicht: [
-      "Do your best flirty camera look for 15 seconds.",
-      "Do a 10-second catwalk through the room.",
-      "Talk like a dating coach for 20 seconds.",
-      "Say \"I am totally inconspicuous\" in 5 emotions.",
-      "Invent a cringe pickup line and present it seriously.",
-      "Make an 8-second ad for yourself as the \"dream date\"."
+      "Mach 15 Sekunden lang deinen besten Flirt-Blick in die Kamera.",
+      "Mach einen 10-Sekunden-Catwalk durch den Raum.",
+      "Rede 20 Sekunden wie ein Dating-Coach.",
+      "Sag \"Ich bin total unauffällig\" in 5 Emotionen.",
+      "Erfinde einen cringe Anmachspruch und sag ihn ganz ernst.",
+      "Mach 8 Sekunden Werbung für dich als das \"Traumdate\"."
     ],
     fakeWahrheit: [
-      "What is your favorite food?",
-      "Which season do you like most?",
-      "Name your favorite drink.",
-      "What is your favorite movie?"
+      "Was ist dein Lieblingsessen?",
+      "Welche Jahreszeit magst du am liebsten?",
+      "Nenne dein Lieblingsgetränk.",
+      "Was ist dein Lieblingsfilm?"
     ],
     fakePflicht: [
-      "Name three fruits.",
-      "Count slowly to 10.",
-      "Say the current month out loud.",
-      "Name three colors."
+      "Nenne drei Früchte.",
+      "Zähle langsam bis 10.",
+      "Sag den aktuellen Monat laut.",
+      "Nenne drei Farben."
     ]
   },
   chaos: {
     wahrheit: [
-      "Which message would you delete immediately if someone grabbed your phone?",
-      "What was your most awkward flirting moment ever?",
-      "Which red flag would you never admit publicly?",
-      "Who here is most likely to secretly juggle two chats at once?",
-      "Who here would you call at night when you're stressed?",
-      "What was your worst \"I talked too much\" moment?"
+      "Welche Nachricht würdest du sofort löschen, wenn jemand dein Handy nimmt?",
+      "Was war dein peinlichster Flirt-Moment überhaupt?",
+      "Welche Red Flag würdest du nie öffentlich zugeben?",
+      "Wer hier würde am ehesten heimlich zwei Chats gleichzeitig führen?",
+      "Wen hier würdest du nachts anrufen, wenn du gestresst bist?",
+      "Was war dein schlimmster \"Ich hab zu viel geredet\"-Moment?"
     ],
     pflicht: [
-      "Talk for 20 seconds in a super dramatic soap-opera voice.",
-      "Take a \"cringe but confident\" selfie and show it briefly.",
-      "Give a fake motivational speech to the group for 10 seconds.",
-      "Give 3 ultra-overdramatic tips for a first date.",
-      "Act out your inner villain for 10 seconds.",
-      "Say your name backwards like a magic spell."
+      "Rede 20 Sekunden mit einer extrem dramatischen Soap-Opera-Stimme.",
+      "Mach ein \"cringe aber selbstbewusst\"-Selfie und zeig es kurz.",
+      "Halte 10 Sekunden eine Fake-Motivationsrede an die Gruppe.",
+      "Gib 3 ultra-überdramatische Tipps für ein erstes Date.",
+      "Spiele 10 Sekunden lang deinen inneren Bösewicht.",
+      "Sag deinen Namen rückwärts wie ein Zauberspruch."
     ],
     fakeWahrheit: [
-      "What is your favorite fruit?",
-      "Which color do you like?",
-      "Name your favorite movie.",
-      "What is your favorite drink?"
+      "Was ist deine Lieblingsfrucht?",
+      "Welche Farbe magst du?",
+      "Nenne deinen Lieblingsfilm.",
+      "Was ist dein Lieblingsgetränk?"
     ],
     fakePflicht: [
-      "Name three animals.",
-      "Count to 8.",
-      "Name three cities.",
-      "Clap once."
+      "Nenne drei Tiere.",
+      "Zähle bis 8.",
+      "Nenne drei Städte.",
+      "Klatsche einmal."
     ]
   }
 };
@@ -345,7 +345,7 @@ function finishVoting(room, byTimer = false) {
     }
   });
 
-  addAudit(room, `Runde beendet: ${winner === "gruppe" ? "Gruppe" : "Imposter"} gewinnt.`);
+  addAudit(room, `Runde beendet: ${winner === "gruppe" ? "Gruppe" : "Hochstapler"} gewinnt.`);
 
   io.to(room.code).emit("round_result", {
     winner,
@@ -429,7 +429,15 @@ function assignRound(room) {
     });
   });
 
-  addAudit(room, `Neue Runde gestartet (${mode}, Filter: ${room.settings.contentFilter}).`);
+  const filterLabel =
+    room.settings.contentFilter === "family"
+      ? "Familie"
+      : room.settings.contentFilter === "normal"
+        ? "Normal"
+        : room.settings.contentFilter === "spicy"
+          ? "Scharf"
+          : room.settings.contentFilter;
+  addAudit(room, `Neue Runde gestartet (${mode}, Filter: ${filterLabel}).`);
 
   room.phaseTimer = setTimeout(() => {
     const liveRoom = rooms.get(room.code);
@@ -658,7 +666,7 @@ function amongCheckWin(room) {
     room.deadBody = null;
     if (room.meeting?.timer) clearTimeout(room.meeting.timer);
     room.meeting = null;
-    amongLog(room, room.winner === "crew" ? "Crew gewinnt die Runde." : "Imposter gewinnt die Runde.");
+    amongLog(room, room.winner === "crew" ? "Crew gewinnt die Runde." : "Hochstapler gewinnt die Runde.");
     io.to(room.code).emit("among_game_over", { winner: room.winner });
     amongBroadcast(room.code);
     return true;
@@ -699,7 +707,7 @@ function amongResolveMeeting(room) {
       amongLog(room, `${targetPlayer.name} wurde rausgewählt.`);
     }
   } else {
-    amongLog(room, "Meeting endete ohne Rauswahl.");
+    amongLog(room, "Besprechung endete ohne Rauswahl.");
   }
 
   room.state = "playing";
@@ -735,7 +743,8 @@ function amongStartMeeting(room, reason, reporterName) {
     amongResolveMeeting(liveRoom);
   }, 45000);
 
-  amongLog(room, `Meeting gestartet (${reason}) von ${reporterName}.`);
+  const reasonLabel = reason === "body" ? "Leiche" : reason === "emergency" ? "Notfall" : reason;
+  amongLog(room, `Besprechung gestartet (${reasonLabel}) von ${reporterName}.`);
   io.to(room.code).emit("among_meeting_started", {
     reason,
     reporterName,
@@ -981,7 +990,7 @@ io.on("connection", (socket) => {
     const caller = room.players.find((entry) => entry.id === socket.id);
     if (!caller || !caller.alive) return;
     if (caller.emergencyLeft <= 0) {
-      socket.emit("among_error", "Keine Notfall-Meetings mehr übrig.");
+      socket.emit("among_error", "Keine Notfall-Besprechungen mehr übrig.");
       return;
     }
 
@@ -1496,5 +1505,5 @@ server.on("error", (error) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Imposter game running on http://localhost:${PORT}`);
+  console.log(`Hochstapler-Spiel läuft auf http://localhost:${PORT}`);
 });

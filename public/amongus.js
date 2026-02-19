@@ -54,14 +54,14 @@ function sanitizeCode(value) {
 function getStateLabel(state) {
   if (state === "lobby") return "Lobby";
   if (state === "playing") return "Spiel läuft";
-  if (state === "meeting") return "Meeting läuft";
+  if (state === "meeting") return "Besprechung läuft";
   if (state === "ended") return "Spiel beendet";
   return state;
 }
 
 function getRoleLabel(roleValue) {
-  if (roleValue === "crewmate") return "Crewmate";
-  if (roleValue === "imposter") return "Imposter";
+  if (roleValue === "crewmate") return "Crewmitglied";
+  if (roleValue === "imposter") return "Hochstapler";
   return roleValue;
 }
 
@@ -268,20 +268,20 @@ if (socket) {
 
   socket.on("among_meeting_started", ({ reason, reporterName }) => {
     voted = false;
-    const reasonLabel = reason === "report" ? "Leiche gemeldet" : "Notfall";
-    showError(`Meeting (${reasonLabel}) wurde von ${reporterName} gestartet`);
+    const reasonLabel = reason === "body" ? "Leiche gemeldet" : "Notfall";
+    showError(`Besprechung (${reasonLabel}) wurde von ${reporterName} gestartet`);
   });
 
   socket.on("among_meeting_result", ({ ejected, tie }) => {
     if (tie || !ejected) {
-      showError("Meeting-Ergebnis: Niemand wurde rausgewählt.");
+      showError("Besprechungs-Ergebnis: Niemand wurde rausgewählt.");
     } else {
-      showError(`Meeting-Ergebnis: ${ejected.name} (${getRoleLabel(ejected.role)}) wurde rausgewählt.`);
+      showError(`Besprechungs-Ergebnis: ${ejected.name} (${getRoleLabel(ejected.role)}) wurde rausgewählt.`);
     }
   });
 
   socket.on("among_game_over", ({ winner }) => {
-    showError(winner === "crew" ? "Crew gewinnt!" : "Imposter gewinnt!");
+    showError(winner === "crew" ? "Crew gewinnt!" : "Hochstapler gewinnt!");
   });
 
   socket.on("among_error", (message) => {

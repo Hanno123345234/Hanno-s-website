@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Imposter – Wahrheit oder Pflicht</title>
+    <title>Hochstapler – Wahrheit oder Pflicht</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -21,7 +21,7 @@
 
         <p class="subtitle">Gemacht von Hanno</p>
         <p id="connectionBadge" class="connection connection-offline">● Verbinden…</p>
-        <h1>Imposter – Wahrheit oder Pflicht</h1>
+        <h1>Hochstapler – Wahrheit oder Pflicht</h1>
         <p class="subtitle">Raum erstellen oder mit Code beitreten</p>
 
         <div class="account-box">
@@ -59,10 +59,10 @@
             <li>Der Host erstellt eine Lobby und alle treten mit Code bei.</li>
             <li>Zum Beitreten brauchst du Raumcode + 4-stellige PIN.</li>
             <li>Jeder Spieler bekommt heimlich Wahrheit oder Pflicht.</li>
-            <li>Ein Spieler ist der Imposter und bekommt eine Fake-Aufgabe.</li>
+            <li>Ein Spieler ist der Hochstapler und bekommt eine Fake-Aufgabe.</li>
             <li>Alle führen ihre Aufgabe aus und versuchen normal zu wirken.</li>
-            <li>Dann wird abgestimmt: Wer ist der Imposter?</li>
-            <li>Bei richtiger Wahl gewinnt die Gruppe, sonst der Imposter.</li>
+            <li>Dann wird abgestimmt: Wer ist der Hochstapler?</li>
+            <li>Bei richtiger Wahl gewinnt die Gruppe, sonst der Hochstapler.</li>
           </ol>
         </details>
 
@@ -82,8 +82,8 @@
 
         <div class="score-board">
           <span class="score-chip">Gruppe: <strong id="scoreGroup">0</strong></span>
-          <span class="score-chip">Imposter: <strong id="scoreImposter">0</strong></span>
-          <span id="modeBadgeRoom" class="score-chip">Modus: spicy</span>
+          <span class="score-chip">Hochstapler: <strong id="scoreImposter">0</strong></span>
+          <span id="modeBadgeRoom" class="score-chip">Filter: Normal</span>
         </div>
 
         <div id="inviteBox" class="invite-box hidden">
@@ -110,7 +110,7 @@
           <select id="modeSelect">
             <option value="family">Familie</option>
             <option value="normal">Normal</option>
-            <option value="spicy">Spicy</option>
+            <option value="spicy">Scharf</option>
           </select>
           <div class="prompt-editor">
             <input id="customTruthInput" maxlength="180" placeholder="Eigene Wahrheit hinzufügen" />
@@ -160,7 +160,7 @@
         </div>
 
         <div id="voteBox" class="hidden">
-          <h3>Abstimmung: Wer ist der Imposter?</h3>
+          <h3>Abstimmung: Wer ist der Hochstapler?</h3>
           <div id="voteButtons" class="vote-buttons"></div>
           <p id="voteInfo" class="subtitle"></p>
         </div>
