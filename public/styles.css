@@ -56,6 +56,26 @@ h3 {
   margin: 0 0 14px;
 }
 
+.room-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.room-header h2 {
+  margin: 0;
+}
+
+.back-btn {
+  width: auto;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .connection {
   margin: 0 0 14px;
   display: inline-flex;
@@ -155,6 +175,24 @@ button:disabled {
   margin: 16px 0;
 }
 
+.invite-box {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.invite-actions {
+  display: grid;
+  gap: 8px;
+}
+
+#inviteInfo {
+  min-height: 18px;
+  margin: 10px 0 0;
+}
+
 .player-list {
   list-style: none;
   margin: 0;
@@ -168,6 +206,25 @@ button:disabled {
   border-radius: 12px;
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kick-btn {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 91, 124, 0.2);
+  border-color: rgba(255, 91, 124, 0.4);
+  flex-shrink: 0;
 }
 
 .badge {
@@ -207,6 +264,10 @@ button:disabled {
   border-radius: 14px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+#resultNewRoundBtn {
+  margin-top: 10px;
 }
 
 .hidden {

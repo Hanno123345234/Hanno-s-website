@@ -30,8 +30,21 @@
       </section>
 
       <section id="room" class="card">
-        <h2>Raum <span id="roomCode">-----</span></h2>
+        <div class="room-header">
+          <button id="backBtn" class="back-btn">← Zurück</button>
+          <h2>Raum <span id="roomCode">-----</span></h2>
+        </div>
         <p id="stateText" class="subtitle">Warte in der Lobby…</p>
+
+        <div id="inviteBox" class="invite-box hidden">
+          <h3>Einladen</h3>
+          <p class="subtitle">Teile den Code oder Link mit deinen Freunden</p>
+          <div class="invite-actions">
+            <button id="copyCodeBtn">Code kopieren</button>
+            <button id="copyLinkBtn">Einladungslink kopieren</button>
+          </div>
+          <p id="inviteInfo" class="subtitle"></p>
+        </div>
 
         <div class="player-list-wrap">
           <h3>Spieler</h3>
@@ -58,6 +71,7 @@
         </div>
 
         <div id="resultBox" class="hidden result"></div>
+        <button id="resultNewRoundBtn" class="primary hidden">Neue Runde starten</button>
       </section>
     </main>
 
