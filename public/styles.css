@@ -175,6 +175,26 @@ button:disabled {
   padding-top: 6px;
 }
 
+.account-box,
+.rules-box {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rules-box summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.rules-box ol {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
 .error {
   color: #ff9cb0;
   min-height: 22px;
@@ -405,4 +425,16 @@ button:disabled {
 @keyframes pop {
   0% { transform: scale(0.97); opacity: 0.6; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+.rename-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rename-row button {
+  width: auto;
+  min-width: 120px;
 }

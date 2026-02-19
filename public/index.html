@@ -13,18 +13,35 @@
         <h1>Imposter – Wahrheit oder Pflicht</h1>
         <p class="subtitle">Raum erstellen oder mit Code beitreten</p>
 
-        <label for="nameInput">Dein Name</label>
-        <input id="nameInput" maxlength="24" placeholder="z. B. Hanno" />
+        <div class="account-box">
+          <h3>Account</h3>
+          <p id="savedNameText" class="subtitle">Noch nicht angemeldet</p>
+          <label for="profileNameInput">Dein Name (dauerhaft gespeichert)</label>
+          <input id="profileNameInput" maxlength="24" placeholder="z. B. Hanno" />
+          <button id="saveProfileBtn" class="primary">Anmelden / Name speichern</button>
+        </div>
 
-        <div class="stack">
+        <div id="menuActions" class="stack hidden">
           <button id="createBtn" class="primary">Raum erstellen</button>
         </div>
 
-        <div class="join-box">
+        <div id="joinBox" class="join-box hidden">
           <label for="codeInput">Raumcode</label>
           <input id="codeInput" maxlength="5" placeholder="ABCDE" />
           <button id="joinBtn">Raum beitreten</button>
         </div>
+
+        <details class="rules-box">
+          <summary>Spielregeln anzeigen</summary>
+          <ol>
+            <li>Host erstellt eine Lobby, alle joinen per Code.</li>
+            <li>Jeder bekommt geheim Wahrheit oder Pflicht.</li>
+            <li>Eine Person ist Imposter und bekommt eine Fake-Aufgabe.</li>
+            <li>Alle führen ihre Aufgabe aus und versuchen normal zu wirken.</li>
+            <li>Dann abstimmen: Wer ist Imposter?</li>
+            <li>Richtig gewählt: Gruppe gewinnt. Sonst gewinnt der Imposter.</li>
+          </ol>
+        </details>
 
         <p id="errorBox" class="error"></p>
       </section>
@@ -75,6 +92,10 @@
 
         <div class="player-list-wrap">
           <h3>Spieler</h3>
+          <div class="rename-row">
+            <input id="renameInput" maxlength="24" placeholder="Neuer Name (optional)" />
+            <button id="renameBtn">Name ändern</button>
+          </div>
           <ul id="playerList" class="player-list"></ul>
         </div>
 

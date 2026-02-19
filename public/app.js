@@ -2,7 +2,11 @@ const socket = typeof window.io === "function" ? window.io() : null;
 
 const homeView = document.getElementById("home");
 const roomView = document.getElementById("room");
-const nameInput = document.getElementById("nameInput");
+const profileNameInput = document.getElementById("profileNameInput");
+const saveProfileBtn = document.getElementById("saveProfileBtn");
+const savedNameText = document.getElementById("savedNameText");
+const menuActions = document.getElementById("menuActions");
+const joinBox = document.getElementById("joinBox");
 const codeInput = document.getElementById("codeInput");
 const createBtn = document.getElementById("createBtn");
 const joinBtn = document.getElementById("joinBtn");
@@ -18,6 +22,8 @@ const scoreImposter = document.getElementById("scoreImposter");
 const modeBadgeRoom = document.getElementById("modeBadgeRoom");
 
 const playerList = document.getElementById("playerList");
+const renameInput = document.getElementById("renameInput");
+const renameBtn = document.getElementById("renameBtn");
 const hostControls = document.getElementById("hostControls");
 const startRoundBtn = document.getElementById("startRoundBtn");
 const startVoteBtn = document.getElementById("startVoteBtn");
@@ -54,6 +60,8 @@ let timerInterval = null;
 let currentQrValue = "";
 let isMuted = false;
 let lastLobbyLocked = null;
+let profileName = "";
+const PROFILE_STORAGE_KEY = "imposter_profile_name_v1";
 
 function showError(message = "") {
   errorBox.textContent = message;
@@ -71,6 +79,38 @@ function setConnectionState(connected, text) {
   connectionBadge.classList.toggle("connection-offline", !connected);
   createBtn.disabled = !connected;
   joinBtn.disabled = !connected;
+}
+
+function sanitizeAnyName(value) {
+  return String(value || "").trim().slice(0, 24);
+}
+
+function applyProfileUi() {
+  const hasProfile = !!profileName;
+  savedNameText.textContent = hasProfile ? `Angemeldet als: ${profileName}` : "Noch nicht angemeldet";
+  menuActions.classList.toggle("hidden", !hasProfile);
+  joinBox.classList.toggle("hidden", !hasProfile);
+  if (hasProfile) {
+    profileNameInput.value = profileName;
+  }
+}
+
+function loadProfile() {
+  profileName = sanitizeAnyName(window.localStorage.getItem(PROFILE_STORAGE_KEY) || "");
+  applyProfileUi();
+}
+
+function saveProfile(nextName) {
+  profileName = sanitizeAnyName(nextName);
+  if (!profileName) {
+    showError("Bitte einen gültigen Namen eingeben.");
+    return false;
+  }
+
+  window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
+  applyProfileUi();
+  showError("");
+  return true;
 }
 
 function setView(inRoom) {
@@ -305,8 +345,12 @@ function renderState() {
 }
 
 function sanitizeName() {
-  return String(nameInput.value || "").trim().slice(0, 24);
+  return sanitizeAnyName(profileName);
 }
+
+saveProfileBtn.addEventListener("click", () => {
+  saveProfile(profileNameInput.value);
+});
 
 createBtn.addEventListener("click", () => {
   if (!socket || !socket.connected) {
@@ -316,7 +360,7 @@ createBtn.addEventListener("click", () => {
 
   const name = sanitizeName();
   if (!name) {
-    showError("Bitte gib einen Namen ein.");
+    showError("Bitte melde dich zuerst mit deinem Namen an.");
     return;
   }
 
@@ -333,7 +377,7 @@ joinBtn.addEventListener("click", () => {
   const name = sanitizeName();
   const code = String(codeInput.value || "").trim().toUpperCase();
   if (!name || !code) {
-    showError("Name und Raumcode eingeben.");
+    showError("Bitte anmelden und Raumcode eingeben.");
     return;
   }
 
@@ -341,10 +385,10 @@ joinBtn.addEventListener("click", () => {
   socket.emit("join_room", { name, code });
 });
 
-nameInput.addEventListener("keydown", (event) => {
+profileNameInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
-    createBtn.click();
+    saveProfileBtn.click();
   }
 });
 
@@ -402,6 +446,16 @@ abortRoundBtn.addEventListener("click", () => {
   socket.emit("abort_round");
 });
 
+renameBtn.addEventListener("click", () => {
+  if (!socket || !room) return;
+  const nextName = sanitizeAnyName(renameInput.value);
+  if (!nextName) {
+    showError("Bitte einen gültigen neuen Namen eingeben.");
+    return;
+  }
+  socket.emit("update_name", { name: nextName });
+});
+
 startRoundBtn.addEventListener("click", () => {
   if (!socket) return;
   socket.emit("start_round");
@@ -446,6 +500,8 @@ if (initialCode) {
   codeInput.value = String(initialCode).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
 }
 
+loadProfile();
+
 if (!socket) {
   setConnectionState(false, "Socket nicht geladen");
   showError("Socket.IO nicht gefunden. Öffne die App über den Node-Server, nicht als Datei.");
@@ -475,6 +531,7 @@ if (!socket) {
     resultBox.classList.add("hidden");
     resultNewRoundBtn.classList.add("hidden");
     showInviteInfo("");
+    renameInput.value = profileName;
     setView(true);
     renderState();
   });
@@ -565,6 +622,14 @@ if (!socket) {
   socket.on("room_closed", ({ message }) => {
     showError(message || "Die Lobby wurde geschlossen.");
     resetToHome();
+  });
+
+  socket.on("name_updated", ({ name }) => {
+    profileName = sanitizeAnyName(name);
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, profileName);
+    applyProfileUi();
+    renameInput.value = profileName;
+    showError("Name erfolgreich geändert ✅");
   });
 
   socket.on("error_message", (message) => {
