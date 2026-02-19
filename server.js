@@ -14,40 +14,58 @@ const rooms = new Map();
 
 const PROMPTS = {
   wahrheit: [
-    "Erzähl von deinem peinlichsten Moment.",
-    "Was war deine größte Ausrede in der Schule?",
-    "Welche Angewohnheit an dir nervt dich selbst?",
-    "Was war deine schlechteste Idee überhaupt?",
-    "Welche Lüge hast du am längsten aufrechterhalten?",
-    "Welche App öffnest du viel zu oft?",
-    "Was war dein seltsamster Traum?",
-    "Wann hast du zuletzt richtig Fremdscham gehabt?"
+    "Wer in dieser Runde hat den besten Vibe und warum?",
+    "Was war dein peinlichster Chat-Moment?",
+    "Welche Person hier würdest du auf ein 1-zu-1 Treffen mitnehmen?",
+    "Was war dein letzter kleiner Crush?",
+    "Wann hast du zuletzt jemanden gestalkt (Instagram/TikTok)?",
+    "Welche Red Flag ignorierst du manchmal trotzdem?",
+    "Was war dein schlimmster Flirt-Fail?",
+    "Welche Nachricht bereust du, jemals geschickt zu haben?",
+    "Mit wem hier würdest du am ehesten einen Roadtrip machen?",
+    "Was ist das Wildeste, was du aus Nervosität gesagt hast?",
+    "Was ist dein toxischster \"Ich antworte später\"-Moment gewesen?",
+    "Welche Person hier wirkt am unschuldigsten, ist es aber safe nicht?",
+    "Hattest du schon mal einen Crush auf jemanden, den niemand erwartet hätte?",
+    "Wann warst du zuletzt richtig eifersüchtig?",
+    "Welche erste Nachricht funktioniert bei dir am besten?"
   ],
   pflicht: [
-    "Mach 10 Sekunden einen Nachrichtensprecher nach.",
-    "Sprich den nächsten Satz wie ein Roboter.",
-    "Mach 5 Kniebeugen und zähl laut.",
-    "Erfinde spontan einen Werbeslogan für Wasser.",
-    "Sag das Alphabet rückwärts so weit du kannst.",
-    "Stell ein Tier deiner Wahl 8 Sekunden lang dar.",
-    "Mach ein ernstes Selfie mit dramatischem Blick.",
-    "Sprich 15 Sekunden ohne den Buchstaben E."
+    "Mach 15 Sekunden lang den besten Flirt-Blick in die Kamera.",
+    "Lies die letzte Notiz in deinem Handy in dramatischer Stimme vor.",
+    "Schick einem Kontakt ein harmloses \"Ey, wir müssen reden 😳\" und zeig die Reaktion später.",
+    "Mach 10 Sekunden Catwalk durchs Zimmer.",
+    "Sag 3 ehrliche Komplimente an die Runde.",
+    "Erfinde einen peinlichen Spitznamen für dich selbst und nutze ihn 1 Runde lang.",
+    "Imitiere 12 Sekunden eine Person aus der Runde (freundlich).",
+    "Mach ein Selfie mit maximal overdramatischem Gesicht.",
+    "Sprich 20 Sekunden wie ein Dating-Coach.",
+    "Zeig deinen zuletzt benutzten Emoji und begründe ihn.",
+    "Sag den Satz \"Ich bin absolut unauffällig\" in 5 verschiedenen Emotionen.",
+    "Mach eine 8-Sekunden-Werbung für dich als \"Traum-Date\".",
+    "Erfinde einen peinlichen Anmachspruch und trage ihn ernst vor.",
+    "Mach 5 Kniebeugen und sag bei jeder den Namen deines Lieblingssnacks.",
+    "Sprich die nächsten 30 Sekunden mit maximal seriöser Nachrichtensprecher-Stimme."
   ],
   fakeWahrheit: [
-    "Erzähl von deinem Lieblingsessen.",
+    "Was ist dein Lieblingsessen?",
     "Welche Jahreszeit magst du am meisten?",
-    "Was ist dein Lieblingsfilmgenre?",
     "Nenne dein Lieblingsgetränk.",
-    "Was ist dein Lieblingsfach?",
-    "Welche Farbe findest du am schönsten?"
+    "Welche App nutzt du am häufigsten?",
+    "Was ist dein Lieblingswochentag?",
+    "Welche Farbe magst du am meisten?",
+    "Was ist dein Lieblingsfilm?",
+    "Nenne dein Lieblingsfach in der Schule."
   ],
   fakePflicht: [
     "Nenne drei Obstsorten.",
-    "Zähle langsam bis 8.",
-    "Sag laut den heutigen Wochentag.",
+    "Zähle langsam bis 10.",
     "Nenne zwei Tiere, die fliegen können.",
     "Sag deinen Vornamen rückwärts.",
-    "Nenne drei Länder in Europa."
+    "Nenne drei Länder in Europa.",
+    "Klatsche zweimal in die Hände.",
+    "Nenne drei Farben.",
+    "Sag laut den aktuellen Monat."
   ]
 };
 
@@ -151,6 +169,42 @@ function finishVoting(room) {
   });
 
   broadcastRoom(room.code);
+}
+
+function removePlayerFromCurrentRoom(socket) {
+  const roomCode = socket.data.roomCode;
+  if (!roomCode) return;
+
+  const room = rooms.get(roomCode);
+  socket.data.roomCode = undefined;
+  if (!room) return;
+
+  room.players = room.players.filter((p) => p.id !== socket.id);
+  delete room.votes[socket.id];
+
+  if (room.currentRound) {
+    Object.keys(room.votes).forEach((voterId) => {
+      if (room.votes[voterId] === socket.id) {
+        delete room.votes[voterId];
+      }
+    });
+  }
+
+  if (room.players.length === 0) {
+    rooms.delete(roomCode);
+    return;
+  }
+
+  if (room.hostId === socket.id) {
+    room.hostId = room.players[0].id;
+  }
+
+  if (room.state === "vote" && Object.keys(room.votes).length === room.players.length) {
+    finishVoting(room);
+    return;
+  }
+
+  broadcastRoom(roomCode);
 }
 
 io.on("connection", (socket) => {
@@ -266,39 +320,42 @@ io.on("connection", (socket) => {
     assignRound(room);
   });
 
-  socket.on("disconnect", () => {
+  socket.on("kick_player", ({ targetId }) => {
     const roomCode = socket.data.roomCode;
-    if (!roomCode) return;
-
     const room = rooms.get(roomCode);
     if (!room) return;
+    if (room.hostId !== socket.id) return;
 
-    room.players = room.players.filter((p) => p.id !== socket.id);
-    delete room.votes[socket.id];
+    const normalizedTargetId = String(targetId || "");
+    if (!normalizedTargetId || normalizedTargetId === socket.id) return;
 
-    if (room.currentRound) {
-      Object.keys(room.votes).forEach((voterId) => {
-        if (room.votes[voterId] === socket.id) {
-          delete room.votes[voterId];
-        }
-      });
-    }
+    const targetIsInRoom = room.players.some((player) => player.id === normalizedTargetId);
+    if (!targetIsInRoom) return;
 
-    if (room.players.length === 0) {
-      rooms.delete(roomCode);
+    const targetSocket = io.sockets.sockets.get(normalizedTargetId);
+    if (!targetSocket) return;
+
+    targetSocket.leave(roomCode);
+    removePlayerFromCurrentRoom(targetSocket);
+    io.to(normalizedTargetId).emit("kicked", {
+      message: "Du wurdest vom Host aus dem Raum entfernt."
+    });
+  });
+
+  socket.on("leave_room", () => {
+    const roomCode = socket.data.roomCode;
+    if (!roomCode) {
+      socket.emit("left_room");
       return;
     }
 
-    if (room.hostId === socket.id) {
-      room.hostId = room.players[0].id;
-    }
+    socket.leave(roomCode);
+    removePlayerFromCurrentRoom(socket);
+    socket.emit("left_room");
+  });
 
-    if (room.state === "vote" && Object.keys(room.votes).length === room.players.length) {
-      finishVoting(room);
-      return;
-    }
-
-    broadcastRoom(roomCode);
+  socket.on("disconnect", () => {
+    removePlayerFromCurrentRoom(socket);
   });
 });
 
