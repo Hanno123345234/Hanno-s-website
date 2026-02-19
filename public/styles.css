@@ -104,7 +104,8 @@ label {
 }
 
 input,
-button {
+button,
+select {
   width: 100%;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.17);
@@ -122,6 +123,13 @@ input {
 input:focus {
   border-color: rgba(93, 123, 255, 0.75);
   box-shadow: 0 0 0 3px rgba(93, 123, 255, 0.16);
+}
+
+select {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 12px;
+  outline: none;
 }
 
 button {
@@ -175,6 +183,42 @@ button:disabled {
   margin: 16px 0;
 }
 
+.state-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timer {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(93, 123, 255, 0.18);
+  font-weight: 700;
+}
+
+.timer.warn {
+  background: rgba(255, 91, 124, 0.24);
+  border-color: rgba(255, 91, 124, 0.5);
+}
+
+.score-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.score-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+
 .invite-box {
   margin: 12px 0 16px;
   padding: 12px;
@@ -186,6 +230,26 @@ button:disabled {
 .invite-actions {
   display: grid;
   gap: 8px;
+}
+
+.qr-wrap {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+#qrCode {
+  background: #fff;
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.admin-box {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 #inviteInfo {
@@ -217,6 +281,11 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.player-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
 .kick-btn {
   width: auto;
   min-height: 36px;
@@ -225,6 +294,20 @@ button:disabled {
   background: rgba(255, 91, 124, 0.2);
   border-color: rgba(255, 91, 124, 0.4);
   flex-shrink: 0;
+}
+
+.mute-btn {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 196, 72, 0.18);
+  border-color: rgba(255, 196, 72, 0.5);
+  flex-shrink: 0;
+}
+
+.player-muted {
+  opacity: 0.7;
 }
 
 .badge {
@@ -282,4 +365,23 @@ button:disabled {
   .card {
     padding: 30px;
   }
+}
+
+.pulse {
+  animation: pulse 0.45s ease;
+}
+
+.pop {
+  animation: pop 0.38s ease;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.97); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 1; }
 }
