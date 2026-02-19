@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Imposter – Wahrheit oder Pflicht</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section id="home" class="card active">
+        <p id="connectionBadge" class="connection connection-offline">● Verbinde…</p>
+        <h1>Imposter – Wahrheit oder Pflicht</h1>
+        <p class="subtitle">Raum erstellen oder mit Code beitreten</p>
+
+        <label for="nameInput">Dein Name</label>
+        <input id="nameInput" maxlength="24" placeholder="z. B. Hanno" />
+
+        <div class="stack">
+          <button id="createBtn" class="primary">Raum erstellen</button>
+        </div>
+
+        <div class="join-box">
+          <label for="codeInput">Raumcode</label>
+          <input id="codeInput" maxlength="5" placeholder="ABCDE" />
+          <button id="joinBtn">Raum beitreten</button>
+        </div>
+
+        <p id="errorBox" class="error"></p>
+      </section>
+
+      <section id="room" class="card">
+        <h2>Raum <span id="roomCode">-----</span></h2>
+        <p id="stateText" class="subtitle">Warte in der Lobby…</p>
+
+        <div class="player-list-wrap">
+          <h3>Spieler</h3>
+          <ul id="playerList" class="player-list"></ul>
+        </div>
+
+        <div id="hostControls" class="stack hidden">
+          <button id="startRoundBtn" class="primary">Runde starten</button>
+          <button id="startVoteBtn">Abstimmung starten</button>
+          <button id="newRoundBtn">Neue Runde</button>
+        </div>
+
+        <div id="assignmentBox" class="assignment hidden">
+          <h3>Deine geheime Aufgabe</h3>
+          <p id="modeBadge" class="badge"></p>
+          <p id="roleBadge" class="badge role"></p>
+          <p id="promptText" class="prompt"></p>
+        </div>
+
+        <div id="voteBox" class="hidden">
+          <h3>Abstimmung: Wer ist der Imposter?</h3>
+          <div id="voteButtons" class="vote-buttons"></div>
+          <p id="voteInfo" class="subtitle"></p>
+        </div>
+
+        <div id="resultBox" class="hidden result"></div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,224 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --bg: #0f1220;
+  --card: #171b2e;
+  --text: #edf1ff;
+  --muted: #b8c0e3;
+  --primary: #5d7bff;
+  --danger: #ff5b7c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(122, 148, 255, 0.2), transparent 45%),
+    radial-gradient(900px 500px at 110% 20%, rgba(255, 93, 128, 0.14), transparent 45%),
+    radial-gradient(circle at top, #1a2140, var(--bg) 55%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app {
+  width: min(740px, 100%);
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.card {
+  display: none;
+  background: color-mix(in oklab, var(--card) 88%, black);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.card.active {
+  display: block;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 10px;
+  line-height: 1.2;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
+.connection {
+  margin: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.connection-online {
+  background: rgba(100, 255, 150, 0.12);
+  color: #8effb3;
+}
+
+.connection-offline {
+  background: rgba(255, 94, 94, 0.12);
+  color: #ffadad;
+}
+
+label {
+  display: block;
+  margin: 10px 0 8px;
+  font-size: 0.95rem;
+}
+
+input,
+button {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  font-size: 1rem;
+  min-height: 50px;
+}
+
+input {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 14px 12px;
+  outline: none;
+}
+
+input:focus {
+  border-color: rgba(93, 123, 255, 0.75);
+  box-shadow: 0 0 0 3px rgba(93, 123, 255, 0.16);
+}
+
+button {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+
+button.primary {
+  background: linear-gradient(135deg, #6f8dff, #5b74ef);
+  border-color: transparent;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.join-box {
+  margin-top: 18px;
+  display: grid;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.error {
+  color: #ff9cb0;
+  min-height: 22px;
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.player-list-wrap {
+  margin: 16px 0;
+}
+
+.player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.player-list li {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(93, 123, 255, 0.22);
+  margin: 0 6px 10px 0;
+}
+
+.badge.role {
+  background: rgba(255, 91, 124, 0.2);
+}
+
+.assignment {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.prompt {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.vote-buttons {
+  display: grid;
+  gap: 8px;
+}
+
+.result {
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.hidden {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .app {
+    padding-top: 32px;
+  }
+
+  .card {
+    padding: 30px;
+  }
+}
