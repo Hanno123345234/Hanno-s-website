@@ -25,9 +25,11 @@ const connectionBadge = document.getElementById("connectionBadge");
 const roomCodeEl = document.getElementById("roomCode");
 const stateText = document.getElementById("stateText");
 const phaseTimer = document.getElementById("phaseTimer");
+const eventText = document.getElementById("eventText");
 const roomNotice = document.getElementById("roomNotice");
 const scoreGroup = document.getElementById("scoreGroup");
 const scoreImposter = document.getElementById("scoreImposter");
+const scoreJoker = document.getElementById("scoreJoker");
 const modeBadgeRoom = document.getElementById("modeBadgeRoom");
 
 const playerList = document.getElementById("playerList");
@@ -387,7 +389,7 @@ function renderAuditAndStats() {
   statsList.innerHTML = "";
   (room.playerStats || []).forEach((stat) => {
     const li = document.createElement("li");
-    li.textContent = `${stat.name}: Stimmen ${stat.votesCorrect}/${stat.votesGiven}, Verdächtigt ${stat.suspected}, S(Gruppe/Hochst) ${stat.groupWins}/${stat.imposterWins}`;
+    li.textContent = `${stat.name}: Lvl ${stat.level || 1} (${stat.xp || 0} XP) • Stimmen ${stat.votesCorrect}/${stat.votesGiven} • Verdächtigt ${stat.suspected} • Siege G/I/J ${stat.groupWins}/${stat.imposterWins}/${stat.jokerWins || 0}`;
     statsList.appendChild(li);
   });
 }
@@ -423,7 +425,18 @@ function renderState() {
   stateText.textContent = getStateLabel(room.state);
   scoreGroup.textContent = room.scores?.gruppe ?? 0;
   scoreImposter.textContent = room.scores?.imposter ?? 0;
+  if (scoreJoker) {
+    scoreJoker.textContent = room.scores?.joker ?? 0;
+  }
   modeBadgeRoom.textContent = `Filter: ${getFilterLabel(room.settings?.contentFilter)}`;
+
+  if (room.activeEvent?.title) {
+    eventText.textContent = `Event: ${room.activeEvent.title} — ${room.activeEvent.description || ""}`;
+    eventText.classList.remove("hidden");
+  } else {
+    eventText.textContent = "";
+    eventText.classList.add("hidden");
+  }
 
   isMuted = (room.mutedPlayerIds || []).includes(selfId);
   renderPlayers();
@@ -436,7 +449,11 @@ function renderState() {
       voteInfo.textContent = "Du bist Zuschauer und kannst nicht abstimmen.";
       voteButtons.innerHTML = "";
     } else {
-      voteInfo.textContent = `${Object.keys(room.votes || {}).length}/${room.expectedVotes ?? room.players.length} Stimmen abgegeben${isMuted ? " • Du bist stummgeschaltet" : ""}`;
+      if (room.activeEvent?.hideVoteProgress) {
+        voteInfo.textContent = `Event aktiv: Stimmen bleiben bis zum Ende verborgen${isMuted ? " • Du bist stummgeschaltet" : ""}`;
+      } else {
+        voteInfo.textContent = `${Object.keys(room.votes || {}).length}/${room.expectedVotes ?? room.players.length} Stimmen abgegeben${isMuted ? " • Du bist stummgeschaltet" : ""}`;
+      }
       renderVoteOptions();
     }
   } else {
@@ -466,6 +483,8 @@ function resetToHome() {
   resultNewRoundBtn.classList.add("hidden");
   roomNotice.textContent = "";
   roomNotice.classList.add("hidden");
+  eventText.textContent = "";
+  eventText.classList.add("hidden");
   showInviteInfo("");
   pinDisplay.textContent = "----";
   qrCodeEl.innerHTML = "";
@@ -722,8 +741,16 @@ if (!socket) {
     assignmentBox.classList.remove("hidden");
     resultBox.classList.add("hidden");
     modeBadge.textContent = data.mode === "wahrheit" ? "Wahrheit" : "Pflicht";
-    roleBadge.textContent = data.role === "imposter" ? "Rolle: Hochstapler" : "Rolle: Normal";
-    promptText.textContent = data.prompt;
+    if (data.role === "imposter") {
+      roleBadge.textContent = "Rolle: Hochstapler";
+    } else if (data.role === "detective") {
+      roleBadge.textContent = "Rolle: Detective";
+    } else if (data.role === "joker") {
+      roleBadge.textContent = "Rolle: Joker";
+    } else {
+      roleBadge.textContent = "Rolle: Normal";
+    }
+    promptText.textContent = data.hint ? `${data.prompt} • ${data.hint}` : data.prompt;
     pulse(assignmentBox, "pulse");
   });
 
@@ -759,7 +786,9 @@ if (!socket) {
 
     const winnerText = result.winner === "gruppe"
       ? "✅ Gruppe gewinnt – Hochstapler enttarnt"
-      : "😈 Hochstapler gewinnt – nicht enttarnt";
+      : result.winner === "joker"
+        ? "🃏 Joker gewinnt – rausgevotet wie geplant"
+        : "😈 Hochstapler gewinnt – nicht enttarnt";
 
     const tieText = result.tie ? "Es war ein Unentschieden." : "";
     const hostHint = room && room.hostId === selfId ? "" : "Warte, bis der Host die nächste Runde startet.";

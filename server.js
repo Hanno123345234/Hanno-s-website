@@ -121,6 +121,33 @@ const PROMPT_SETS = {
   }
 };
 
+const ROUND_EVENTS = [
+  {
+    id: "speed_round",
+    title: "Speed Round",
+    description: "Do it fast: the action phase is shortened.",
+    roundSeconds: 30
+  },
+  {
+    id: "speed_vote",
+    title: "Hot Vote",
+    description: "Voting is shorter this round.",
+    voteSeconds: 18
+  },
+  {
+    id: "fog_vote",
+    title: "Fog Vote",
+    description: "Vote count stays hidden until voting ends.",
+    hideVoteProgress: true
+  },
+  {
+    id: "spotlight",
+    title: "Spotlight",
+    description: "One random player gets bonus XP if they survive the round.",
+    spotlightBonusXp: 15
+  }
+];
+
 function createRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -193,15 +220,54 @@ function updateStatName(room, name) {
       name,
       rounds: 0,
       imposterRounds: 0,
+      jokerRounds: 0,
       groupWins: 0,
       imposterWins: 0,
+      jokerWins: 0,
       votesGiven: 0,
       votesCorrect: 0,
-      suspected: 0
+      suspected: 0,
+      xp: 0,
+      level: 1
     };
   } else {
     room.playerStats[key].name = name;
+    if (typeof room.playerStats[key].xp !== "number") {
+      room.playerStats[key].xp = 0;
+    }
+    if (typeof room.playerStats[key].level !== "number") {
+      room.playerStats[key].level = 1;
+    }
+    if (typeof room.playerStats[key].jokerRounds !== "number") {
+      room.playerStats[key].jokerRounds = 0;
+    }
+    if (typeof room.playerStats[key].jokerWins !== "number") {
+      room.playerStats[key].jokerWins = 0;
+    }
   }
+}
+
+function getLevelFromXp(xp) {
+  return 1 + Math.floor(Math.max(0, xp) / 120);
+}
+
+function addXp(room, name, amount) {
+  const stat = getStat(room, name);
+  stat.xp += Math.max(0, amount);
+  stat.level = getLevelFromXp(stat.xp);
+}
+
+function createRoundEvent(room) {
+  const selected = { ...randomItem(ROUND_EVENTS) };
+
+  if (selected.id === "spotlight") {
+    const spotlightPlayer = randomItem(room.players);
+    selected.spotlightPlayerId = spotlightPlayer.id;
+    selected.spotlightPlayerName = spotlightPlayer.name;
+    selected.description = `${selected.description} Spotlight: ${spotlightPlayer.name}.`;
+  }
+
+  return selected;
 }
 
 function getStat(room, name) {
@@ -226,6 +292,16 @@ function getExpectedVoteCount(room) {
 
 function getRoomView(room, viewerSocketId = null) {
   const isHostViewer = viewerSocketId && room.hostId === viewerSocketId;
+  const activeEvent = room.currentRound?.event
+    ? {
+      id: room.currentRound.event.id,
+      title: room.currentRound.event.title,
+      description: room.currentRound.event.description,
+      hideVoteProgress: !!room.currentRound.event.hideVoteProgress,
+      spotlightPlayerId: room.currentRound.event.spotlightPlayerId || null,
+      spotlightPlayerName: room.currentRound.event.spotlightPlayerName || null
+    }
+    : null;
 
   return {
     code: room.code,
@@ -239,6 +315,7 @@ function getRoomView(room, viewerSocketId = null) {
     mutedPlayerIds: Array.from(room.mutedPlayerIds),
     scores: room.scores,
     phaseEndsAt: room.phaseEndsAt,
+    activeEvent,
     expectedVotes: room.state === "vote" ? getExpectedVoteCount(room) : null,
     contentFilter: room.settings.contentFilter,
     customPromptCounts: {
@@ -328,24 +405,56 @@ function finishVoting(room, byTimer = false) {
   });
 
   const imposterId = room.currentRound.imposterId;
+  const jokerId = room.currentRound.jokerId;
   const imposter = room.players.find((player) => player.id === imposterId);
-  const winner = !tie && topId === imposterId ? "gruppe" : "imposter";
+  const winner = !tie && topId === jokerId
+    ? "joker"
+    : !tie && topId === imposterId
+      ? "gruppe"
+      : "imposter";
 
   room.state = "ended";
-  room.scores[winner] += 1;
+  room.scores[winner] = (room.scores[winner] || 0) + 1;
 
   room.players.forEach((player) => {
     const stat = getStat(room, player.name);
     stat.rounds += 1;
-    if (player.id === imposterId) {
+    addXp(room, player.name, 10);
+
+    const assignedRole = room.currentRound.assignments[player.id]?.role;
+
+    if (assignedRole === "imposter") {
       stat.imposterRounds += 1;
-      if (winner === "imposter") stat.imposterWins += 1;
+      if (winner === "imposter") {
+        stat.imposterWins += 1;
+        addXp(room, player.name, 30);
+      }
+    } else if (assignedRole === "joker") {
+      stat.jokerRounds += 1;
+      if (winner === "joker") {
+        stat.jokerWins += 1;
+        addXp(room, player.name, 40);
+      }
     } else if (winner === "gruppe") {
       stat.groupWins += 1;
+      addXp(room, player.name, 18);
+    }
+
+    if (!tie && topId === imposterId && room.votes[player.id] === imposterId) {
+      addXp(room, player.name, 12);
+    }
+
+    if (assignedRole === "detective" && room.votes[player.id] === imposterId) {
+      addXp(room, player.name, 18);
+    }
+
+    if (room.currentRound.event?.id === "spotlight" && room.currentRound.event.spotlightPlayerId === player.id) {
+      addXp(room, player.name, room.currentRound.event.spotlightBonusXp || 0);
     }
   });
 
-  addAudit(room, `Runde beendet: ${winner === "gruppe" ? "Gruppe" : "Hochstapler"} gewinnt.`);
+  const winnerLabel = winner === "gruppe" ? "Gruppe" : winner === "imposter" ? "Hochstapler" : "Joker";
+  addAudit(room, `Runde beendet: ${winnerLabel} gewinnt.`);
 
   io.to(room.code).emit("round_result", {
     winner,
@@ -365,7 +474,8 @@ function startVotePhase(room, byTimer = false) {
   clearPhaseTimer(room);
   room.state = "vote";
   room.votes = {};
-  room.phaseEndsAt = Date.now() + room.settings.voteSeconds * 1000;
+  const voteSeconds = room.currentRound?.event?.voteSeconds || room.settings.voteSeconds;
+  room.phaseEndsAt = Date.now() + voteSeconds * 1000;
 
   addAudit(room, byTimer ? "Abstimmungsphase automatisch gestartet." : "Abstimmungsphase vom Host gestartet.");
 
@@ -378,7 +488,7 @@ function startVotePhase(room, byTimer = false) {
     const liveRoom = rooms.get(room.code);
     if (!liveRoom || liveRoom.state !== "vote") return;
     finishVoting(liveRoom, true);
-  }, room.settings.voteSeconds * 1000);
+  }, voteSeconds * 1000);
 
   broadcastRoom(room.code);
 }
@@ -400,24 +510,63 @@ function assignRound(room) {
 
   const imposterIndex = Math.floor(Math.random() * room.players.length);
   const imposterId = room.players[imposterIndex].id;
+  const remainingForRoles = room.players.filter((player) => player.id !== imposterId);
+  const detectiveId = room.players.length >= 5 && remainingForRoles.length > 0
+    ? randomItem(remainingForRoles).id
+    : null;
+  const remainingForJoker = remainingForRoles.filter((player) => player.id !== detectiveId);
+  const jokerId = room.players.length >= 6 && remainingForJoker.length > 0
+    ? randomItem(remainingForJoker).id
+    : null;
+
+  const event = createRoundEvent(room);
+  const roundSeconds = event.roundSeconds || room.settings.roundSeconds;
 
   room.state = "round";
   room.votes = {};
-  room.phaseEndsAt = Date.now() + room.settings.roundSeconds * 1000;
+  room.phaseEndsAt = Date.now() + roundSeconds * 1000;
   room.currentRound = {
     mode,
     realPrompt,
     fakePrompt,
     imposterId,
+    detectiveId,
+    jokerId,
+    event,
     assignments: {}
   };
 
   room.players.forEach((player) => {
     const isImposter = player.id === imposterId;
+    const isDetective = player.id === detectiveId;
+    const isJoker = player.id === jokerId;
+
+    let role = "normal";
+    if (isImposter) role = "imposter";
+    if (isDetective) role = "detective";
+    if (isJoker) role = "joker";
+
+    let hint = null;
+    if (isDetective) {
+      const decoy = randomItem(room.players.filter((entry) => entry.id !== player.id && entry.id !== imposterId));
+      const imposterName = room.players.find((entry) => entry.id === imposterId)?.name || "?";
+      hint = decoy
+        ? `Detective-Hinweis: Der Hochstapler ist entweder ${imposterName} oder ${decoy.name}.`
+        : "Detective-Hinweis: Achte auf unpassende Reaktionen.";
+    }
+
+    let prompt = realPrompt;
+    if (isImposter) {
+      prompt = fakePrompt;
+    } else if (isJoker) {
+      prompt = `${realPrompt} (Geheimes Joker-Ziel: Lass dich rausvoten.)`;
+    }
+
     room.currentRound.assignments[player.id] = {
-      role: isImposter ? "imposter" : "normal",
-      prompt: isImposter ? fakePrompt : realPrompt,
-      mode
+      role,
+      prompt,
+      mode,
+      hint
     };
 
     io.to(player.id).emit("assignment", room.currentRound.assignments[player.id]);
@@ -437,13 +586,13 @@ function assignRound(room) {
         : room.settings.contentFilter === "spicy"
           ? "Scharf"
           : room.settings.contentFilter;
-  addAudit(room, `Neue Runde gestartet (${mode}, Filter: ${filterLabel}).`);
+  addAudit(room, `Neue Runde gestartet (${mode}, Filter: ${filterLabel}, Event: ${event.title}).`);
 
   room.phaseTimer = setTimeout(() => {
     const liveRoom = rooms.get(room.code);
     if (!liveRoom || liveRoom.state !== "round") return;
     startVotePhase(liveRoom, true);
-  }, room.settings.roundSeconds * 1000);
+  }, roundSeconds * 1000);
 
   io.to(room.code).emit("round_started", {
     mode,
@@ -1079,7 +1228,8 @@ io.on("connection", (socket) => {
       },
       scores: {
         gruppe: 0,
-        imposter: 0
+        imposter: 0,
+        joker: 0
       },
       phaseTimer: null,
       phaseEndsAt: null,
