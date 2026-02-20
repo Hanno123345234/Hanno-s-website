@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1220" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Among Us Modus</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -25,12 +27,29 @@
         <label for="amongNameInput">Dein Name</label>
         <input id="amongNameInput" maxlength="24" placeholder="z. B. Hanno" />
 
+        <div class="score-board">
+          <span class="score-chip">Queue Casual: <strong id="queueCasual">0</strong></span>
+          <span class="score-chip">Queue Ranked: <strong id="queueRanked">0</strong></span>
+        </div>
+
+        <div class="stack">
+          <button id="amongQuickCasualBtn">Quick Play Casual</button>
+          <button id="amongQuickRankedBtn">Quick Play Ranked</button>
+          <button id="amongLeaveQueueBtn">Queue verlassen</button>
+        </div>
+
         <button id="amongCreateBtn" class="primary">Raum erstellen</button>
 
         <div class="join-box">
           <label for="amongCodeInput">Raumcode</label>
           <input id="amongCodeInput" maxlength="5" placeholder="ABCDE" />
           <button id="amongJoinBtn">Raum beitreten</button>
+        </div>
+
+        <div class="join-box">
+          <label for="amongPartyInput">Party-Code</label>
+          <input id="amongPartyInput" maxlength="6" placeholder="ABC123" />
+          <button id="amongJoinPartyBtn">Mit Party-Code beitreten</button>
         </div>
 
         <p id="amongError" class="error"></p>
@@ -40,6 +59,12 @@
         <div class="room-header">
           <button id="amongBackBtn" class="back-btn">← Zurück</button>
           <h2>Raum <span id="amongRoomCode">-----</span></h2>
+        </div>
+
+        <div class="score-board">
+          <span class="score-chip">Party: <strong id="amongPartyCode">------</strong></span>
+          <span class="score-chip">Mode: <strong id="amongQueueMode">casual</strong></span>
+          <span class="score-chip">Voice: <strong id="amongVoice">-</strong></span>
         </div>
 
         <p id="amongState" class="subtitle">Lobby</p>
@@ -58,11 +83,26 @@
           <button id="amongTaskBtn">Aufgabe erledigen</button>
           <button id="amongMeetingBtn">Notfall-Besprechung</button>
           <button id="amongReportBtn">Leiche melden</button>
+          <button id="amongFixSabotageBtn">Sabotage fixen</button>
+        </div>
+
+        <div id="amongMovement" class="hidden">
+          <h3>Map Bewegung</h3>
+          <div id="amongMoveTargets" class="vote-buttons"></div>
         </div>
 
         <div id="amongKillBox" class="hidden">
           <h3>Hochstapler-Aktionen</h3>
           <div id="amongKillTargets" class="vote-buttons"></div>
+          <button id="amongSabotageLightsBtn">Sabotage: Lights</button>
+          <button id="amongSabotageReactorBtn">Sabotage: Reactor</button>
+        </div>
+
+        <div id="amongRoleActions" class="hidden">
+          <h3>Spezialrolle</h3>
+          <div id="amongRoleActionTargets" class="vote-buttons"></div>
+          <button id="amongHackerScanBtn" class="hidden">Hacker Scan</button>
+          <button id="amongTricksterBtn" class="hidden">Trickster Decoy</button>
         </div>
 
         <div id="amongVoteBox" class="hidden">
@@ -80,6 +120,33 @@
           <h3>Ereignisse</h3>
           <ul id="amongLogs" class="player-list"></ul>
         </div>
+
+        <div class="player-list-wrap">
+          <h3>Highlights</h3>
+          <ul id="amongHighlights" class="player-list"></ul>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Chat</h3>
+          <ul id="amongChatList" class="player-list"></ul>
+          <div class="join-box">
+            <input id="amongChatInput" maxlength="220" placeholder="Nachricht schreiben…" />
+            <button id="amongChatSendBtn">Senden</button>
+          </div>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Voice</h3>
+          <p id="amongVoiceStatus" class="subtitle">Voice aus</p>
+          <div class="stack">
+            <button id="amongVoiceStartBtn">Voice starten</button>
+            <button id="amongVoiceMuteBtn">Mikro stumm</button>
+            <button id="amongVoiceLeaveBtn">Voice verlassen</button>
+          </div>
+          <div id="amongVoiceAudioMount" class="hidden"></div>
+        </div>
+
+        <button id="amongRematchBtn" class="primary hidden">Rematch bereit</button>
       </section>
     </main>
 
@@ -114,6 +181,7 @@
         applyLang(getLang());
       })();
     </script>
+    <script src="pwa.js"></script>
     <script src="amongus.js"></script>
   </body>
   </html>

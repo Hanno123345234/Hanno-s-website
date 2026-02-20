@@ -624,19 +624,16 @@ button:disabled {
   margin-bottom: 10px;
 }
 
-.audit-box,
 .stats-box {
   margin-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   padding-top: 10px;
 }
 
-.audit-box h4,
 .stats-box h4 {
   margin: 0 0 8px;
 }
 
-.audit-box ul,
 .stats-box ul {
   list-style: none;
   margin: 0;

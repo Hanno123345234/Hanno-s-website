@@ -57,9 +57,13 @@ const customTruthInput = document.getElementById("customTruthInput");
 const customDareInput = document.getElementById("customDareInput");
 const addTruthBtn = document.getElementById("addTruthBtn");
 const addDareBtn = document.getElementById("addDareBtn");
+const packNameInput = document.getElementById("packNameInput");
+const sharePackBtn = document.getElementById("sharePackBtn");
+const refreshPacksBtn = document.getElementById("refreshPacksBtn");
+const packSelect = document.getElementById("packSelect");
+const importPackBtn = document.getElementById("importPackBtn");
 const toggleLockBtn = document.getElementById("toggleLockBtn");
 const abortRoundBtn = document.getElementById("abortRoundBtn");
-const auditList = document.getElementById("auditList");
 const statsList = document.getElementById("statsList");
 
 const assignmentBox = document.getElementById("assignmentBox");
@@ -375,16 +379,8 @@ function renderPlayers() {
   });
 }
 
-function renderAuditAndStats() {
+function renderStats() {
   if (!room) return;
-
-  auditList.innerHTML = "";
-  (room.auditLog || []).slice().reverse().forEach((entry) => {
-    const li = document.createElement("li");
-    const time = new Date(entry.at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-    li.textContent = `[${time}] ${entry.message}`;
-    auditList.appendChild(li);
-  });
 
   statsList.innerHTML = "";
   (room.playerStats || []).forEach((stat) => {
@@ -409,7 +405,7 @@ function renderHostControls() {
     pinDisplay.textContent = room.pin || "----";
     renderQrForHost();
     renderInviteRecent();
-    renderAuditAndStats();
+    renderStats();
   }
 
   startRoundBtn.style.display = room.state === "lobby" || room.state === "ended" ? "block" : "none";
@@ -488,7 +484,6 @@ function resetToHome() {
   showInviteInfo("");
   pinDisplay.textContent = "----";
   qrCodeEl.innerHTML = "";
-  auditList.innerHTML = "";
   statsList.innerHTML = "";
   resetTimer();
   setView(false);
@@ -626,6 +621,31 @@ addDareBtn.addEventListener("click", () => {
   if (!text) return;
   socket.emit("add_custom_prompt", { kind: "pflicht", text });
   customDareInput.value = "";
+});
+
+refreshPacksBtn.addEventListener("click", () => {
+  if (!socket) return;
+  socket.emit("list_prompt_packs");
+});
+
+sharePackBtn.addEventListener("click", () => {
+  if (!socket) return;
+  const name = String(packNameInput.value || "").trim();
+  if (!name) {
+    showError("Bitte Pack-Namen eingeben.");
+    return;
+  }
+  socket.emit("share_prompt_pack", { name });
+});
+
+importPackBtn.addEventListener("click", () => {
+  if (!socket) return;
+  const id = String(packSelect.value || "");
+  if (!id) {
+    showError("Bitte zuerst ein Pack wählen.");
+    return;
+  }
+  socket.emit("import_prompt_pack", { id });
 });
 
 toggleLockBtn.addEventListener("click", () => {
@@ -839,5 +859,28 @@ if (!socket) {
 
   socket.on("error_message", (message) => {
     showError(message);
+  });
+
+  socket.on("prompt_packs", (list) => {
+    packSelect.innerHTML = "";
+    if (!Array.isArray(list) || list.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Keine Packs";
+      packSelect.appendChild(option);
+      return;
+    }
+
+    list.forEach((entry) => {
+      const option = document.createElement("option");
+      option.value = entry.id;
+      option.textContent = `${entry.name} • ${entry.truthCount}/${entry.dareCount} • by ${entry.by}`;
+      packSelect.appendChild(option);
+    });
+  });
+
+  socket.on("pack_shared", ({ name }) => {
+    showError(`Pack geteilt ✅ ${name}`);
+    socket.emit("list_prompt_packs");
   });
 }

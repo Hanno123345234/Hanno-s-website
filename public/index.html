@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1220" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Spielauswahl</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -23,9 +25,13 @@
         <div class="stack">
           <a id="truthLink" class="mode-link" href="/truth.html">Wahrheit oder Pflicht</a>
           <a id="amongLink" class="mode-link" href="/amongus.html">Among Us Modus</a>
+          <a class="mode-link" href="/stats.html">Stats Dashboard</a>
+          <a class="mode-link" href="/admin.html">Admin Dashboard</a>
         </div>
       </section>
     </main>
+
+    <script src="pwa.js"></script>
 
     <script>
       const LANGUAGE_KEY = "app_lang_v1";

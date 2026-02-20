@@ -19,8 +19,88 @@ app.use((req, res, next) => {
 
 app.use(express.static("public"));
 
+app.get("/api/stats", (req, res) => {
+  const profiles = [...amongProfiles.values()];
+  const roleStats = {
+    crewWinRate: 0,
+    imposterWinRate: 0
+  };
+  const totalRoleWins = amongAnalytics.roleWins.crew + amongAnalytics.roleWins.imposter;
+  if (totalRoleWins > 0) {
+    roleStats.crewWinRate = Number(((amongAnalytics.roleWins.crew / totalRoleWins) * 100).toFixed(1));
+    roleStats.imposterWinRate = Number(((amongAnalytics.roleWins.imposter / totalRoleWins) * 100).toFixed(1));
+  }
+
+  res.json({
+    roleStats,
+    killHeatmap: amongAnalytics.killHeatmap,
+    eloTop: profiles
+      .map((profile) => ({ name: profile.displayName, elo: profile.elo, level: profile.level }))
+      .sort((first, second) => second.elo - first.elo)
+      .slice(0, 20),
+    eloHistory: profiles
+      .filter((profile) => Array.isArray(profile.eloHistory) && profile.eloHistory.length > 0)
+      .slice(0, 30)
+      .map((profile) => ({ name: profile.displayName, history: profile.eloHistory.slice(-12) })),
+    highlights: amongAnalytics.highlights.slice(-50)
+  });
+});
+
+app.get("/api/admin", (req, res) => {
+  const bans = [...amongSoftBans.entries()].map(([fingerprint, entry]) => ({
+    fingerprint,
+    until: entry.until,
+    reason: entry.reason
+  }));
+
+  const risk = [...amongProfiles.values()]
+    .map((profile) => ({
+      name: profile.displayName,
+      risk: profile.risk,
+      lastFlags: (profile.riskHistory || []).slice(-5)
+    }))
+    .sort((first, second) => second.risk - first.risk)
+    .slice(0, 30);
+
+  const reports = [...amongProfiles.values()]
+    .map((profile) => ({ name: profile.displayName, reports: profile.reports || 0 }))
+    .filter((entry) => entry.reports > 0)
+    .sort((first, second) => second.reports - first.reports)
+    .slice(0, 30);
+
+  res.json({
+    bans,
+    risk,
+    reports
+  });
+});
+
 const rooms = new Map();
 const amongRooms = new Map();
+const amongQueue = {
+  casual: [],
+  ranked: []
+};
+const amongProfiles = new Map();
+const amongSoftBans = new Map();
+const sharedPromptPacks = new Map();
+const amongOnlineByFingerprint = new Map();
+const amongAnalytics = {
+  roleWins: {
+    crew: 0,
+    imposter: 0
+  },
+  killHeatmap: {
+    cafeteria: 0,
+    admin: 0,
+    medbay: 0,
+    electrical: 0,
+    security: 0,
+    reactor: 0,
+    navigation: 0
+  },
+  highlights: []
+};
 const CONTENT_FILTERS = ["family", "normal", "spicy"];
 const FILTER_PROMPT_MAP = {
   family: "soft",
@@ -148,6 +228,13 @@ const ROUND_EVENTS = [
   }
 ];
 
+const AMONG_DAILY_MISSIONS = [
+  { id: "play_rounds", target: 3, xp: 60, title: "Daily Grinder" },
+  { id: "complete_tasks", target: 8, xp: 70, title: "Task Machine" },
+  { id: "meetings", target: 2, xp: 45, title: "Town Crier" },
+  { id: "votes", target: 5, xp: 50, title: "Sharp Voter" }
+];
+
 function createRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -171,13 +258,6 @@ function randomItem(list) {
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function addAudit(room, message) {
-  room.auditLog.push({ message, at: nowIso() });
-  if (room.auditLog.length > 80) {
-    room.auditLog.shift();
-  }
 }
 
 function isRateLimited(socket, key, cooldownMs, eventLabel) {
@@ -323,7 +403,6 @@ function getRoomView(room, viewerSocketId = null) {
       pflicht: room.customPrompts.pflicht.length
     },
     recentPlayers: room.recentPlayers,
-    auditLog: isHostViewer ? room.auditLog.slice(-20) : [],
     playerStats: isHostViewer ? Object.values(room.playerStats) : [],
     pin: isHostViewer ? room.pin : null
   };
@@ -453,9 +532,6 @@ function finishVoting(room, byTimer = false) {
     }
   });
 
-  const winnerLabel = winner === "gruppe" ? "Gruppe" : winner === "imposter" ? "Hochstapler" : "Joker";
-  addAudit(room, `Runde beendet: ${winnerLabel} gewinnt.`);
-
   io.to(room.code).emit("round_result", {
     winner,
     imposterId,
@@ -476,8 +552,6 @@ function startVotePhase(room, byTimer = false) {
   room.votes = {};
   const voteSeconds = room.currentRound?.event?.voteSeconds || room.settings.voteSeconds;
   room.phaseEndsAt = Date.now() + voteSeconds * 1000;
-
-  addAudit(room, byTimer ? "Abstimmungsphase automatisch gestartet." : "Abstimmungsphase vom Host gestartet.");
 
   io.to(room.code).emit("vote_started", {
     byTimer,
@@ -586,8 +660,6 @@ function assignRound(room) {
         : room.settings.contentFilter === "spicy"
           ? "Scharf"
           : room.settings.contentFilter;
-  addAudit(room, `Neue Runde gestartet (${mode}, Filter: ${filterLabel}, Event: ${event.title}).`);
-
   room.phaseTimer = setTimeout(() => {
     const liveRoom = rooms.get(room.code);
     if (!liveRoom || liveRoom.state !== "round") return;
@@ -607,8 +679,6 @@ function abortRound(room) {
   room.state = "lobby";
   room.votes = {};
   room.currentRound = null;
-
-  addAudit(room, "Runde vom Host abgebrochen.");
 
   io.to(room.code).emit("round_aborted", {
     message: "Der Host hat die Runde abgebrochen."
@@ -675,7 +745,6 @@ function removeParticipantFromRoom(socket, reason = "leave") {
       role: "player",
       assignment: leavingAssignment
     };
-    addAudit(room, `${leavingName} hat die Verbindung verloren (Rejoin für 90s möglich).`);
   }
 
   if (room.players.length === 0) {
@@ -724,13 +793,323 @@ function attachPlayer(room, socket, name, asRejoin = false) {
     room.recentPlayers = room.recentPlayers.slice(0, 12);
   }
 
-  addAudit(room, asRejoin ? `${name} ist wieder verbunden.` : `${name} ist beigetreten.`);
 }
 
 function attachSpectator(room, socket, name, asRejoin = false) {
   room.spectators.push({ id: socket.id, name });
   socket.data.participantType = "spectator";
-  addAudit(room, asRejoin ? `Zuschauer ${name} ist wieder verbunden.` : `Zuschauer ${name} ist beigetreten.`);
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeFingerprint(value) {
+  const normalized = String(value || "").trim().slice(0, 80);
+  return normalized || null;
+}
+
+function createPartyCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let index = 0; index < 6; index += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  const duplicate = [...amongRooms.values()].some((room) => room.partyCode === code);
+  return duplicate ? createPartyCode() : code;
+}
+
+function ensureAmongProfile(fingerprint, fallbackName = "Player") {
+  const key = fingerprint || `anon:${fallbackName.toLowerCase()}`;
+  if (!amongProfiles.has(key)) {
+    amongProfiles.set(key, {
+      key,
+      displayName: fallbackName,
+      xp: 0,
+      level: 1,
+      elo: 1000,
+      titles: ["Rookie"],
+      badges: [],
+      banners: ["Default"],
+      emotes: ["wave"],
+      equipped: {
+        title: "Rookie",
+        badge: null,
+        banner: "Default",
+        emote: "wave"
+      },
+      friends: [],
+      reports: 0,
+      seasonTier: 1,
+      eloHistory: [{ at: nowIso(), elo: 1000 }],
+      missionsDay: todayKey(),
+      missions: AMONG_DAILY_MISSIONS.map((mission) => ({ id: mission.id, progress: 0, completed: false })),
+      risk: 0,
+      riskHistory: []
+    });
+  }
+
+  const profile = amongProfiles.get(key);
+  profile.displayName = fallbackName || profile.displayName;
+
+  if (profile.missionsDay !== todayKey()) {
+    profile.missionsDay = todayKey();
+    profile.missions = AMONG_DAILY_MISSIONS.map((mission) => ({ id: mission.id, progress: 0, completed: false }));
+  }
+
+  profile.level = 1 + Math.floor(profile.xp / 250);
+  profile.seasonTier = 1 + Math.floor(profile.xp / 500);
+
+  if (!Array.isArray(profile.friends)) {
+    profile.friends = [];
+  }
+  if (!Array.isArray(profile.eloHistory)) {
+    profile.eloHistory = [{ at: nowIso(), elo: profile.elo || 1000 }];
+  }
+  if (!profile.equipped) {
+    profile.equipped = {
+      title: "Rookie",
+      badge: null,
+      banner: "Default",
+      emote: "wave"
+    };
+  }
+
+  return profile;
+}
+
+function addAmongXp(profile, amount) {
+  profile.xp += Math.max(0, amount || 0);
+  profile.level = 1 + Math.floor(profile.xp / 250);
+  profile.seasonTier = 1 + Math.floor(profile.xp / 500);
+  unlockCosmetics(profile);
+}
+
+function updateAmongMission(profile, missionId, amount = 1) {
+  const mission = profile.missions.find((entry) => entry.id === missionId);
+  const config = AMONG_DAILY_MISSIONS.find((entry) => entry.id === missionId);
+  if (!mission || !config || mission.completed) return;
+
+  mission.progress += Math.max(1, amount);
+  if (mission.progress >= config.target) {
+    mission.completed = true;
+    addAmongXp(profile, config.xp);
+    if (!profile.titles.includes(config.title)) {
+      profile.titles.push(config.title);
+    }
+    if (!profile.badges.includes(`daily:${config.id}`)) {
+      profile.badges.push(`daily:${config.id}`);
+    }
+  }
+}
+
+function recordElo(profile) {
+  profile.eloHistory.push({ at: nowIso(), elo: profile.elo });
+  if (profile.eloHistory.length > 60) {
+    profile.eloHistory.shift();
+  }
+}
+
+function unlockCosmetics(profile) {
+  if (profile.level >= 5 && !profile.badges.includes("bronze-star")) {
+    profile.badges.push("bronze-star");
+  }
+  if (profile.level >= 10 && !profile.titles.includes("Elite")) {
+    profile.titles.push("Elite");
+  }
+  if (profile.level >= 12 && !profile.banners.includes("Neon")) {
+    profile.banners.push("Neon");
+  }
+  if (profile.level >= 15 && !profile.emotes.includes("gg")) {
+    profile.emotes.push("gg");
+  }
+}
+
+function markAmongOnline(fingerprint, socketId) {
+  if (!fingerprint) return;
+  if (!amongOnlineByFingerprint.has(fingerprint)) {
+    amongOnlineByFingerprint.set(fingerprint, new Set());
+  }
+  amongOnlineByFingerprint.get(fingerprint).add(socketId);
+}
+
+function markAmongOffline(fingerprint, socketId) {
+  if (!fingerprint) return;
+  const set = amongOnlineByFingerprint.get(fingerprint);
+  if (!set) return;
+  set.delete(socketId);
+  if (set.size === 0) {
+    amongOnlineByFingerprint.delete(fingerprint);
+  }
+}
+
+function isFriendOnline(fingerprint) {
+  if (!fingerprint) return false;
+  const set = amongOnlineByFingerprint.get(fingerprint);
+  return !!set && set.size > 0;
+}
+
+function buildThemePrompts(theme) {
+  const normalizedTheme = String(theme || "general").trim().slice(0, 30) || "general";
+  const truth = [
+    `What is your hottest take about ${normalizedTheme}?`,
+    `What is your most chaotic ${normalizedTheme} memory?`,
+    `Who in this room fits ${normalizedTheme} vibes most and why?`,
+    `What would you never admit about ${normalizedTheme} in public?`
+  ];
+  const dare = [
+    `Sell ${normalizedTheme} as a product in 10 seconds.`,
+    `Do a dramatic ad for ${normalizedTheme}.`,
+    `Explain ${normalizedTheme} like a movie trailer.`,
+    `Give a fake TED talk about ${normalizedTheme} for 15 seconds.`
+  ];
+  return { truth, dare, theme: normalizedTheme };
+}
+
+function isAmongSoftBanned(fingerprint) {
+  if (!fingerprint) return false;
+  const entry = amongSoftBans.get(fingerprint);
+  if (!entry) return false;
+  if (entry.until <= Date.now()) {
+    amongSoftBans.delete(fingerprint);
+    return false;
+  }
+  return true;
+}
+
+function bumpAmongRisk(socket, reason, points = 1) {
+  const fingerprint = socket.data.amongFingerprint;
+  if (!fingerprint) return;
+  const profile = ensureAmongProfile(fingerprint, socket.data.amongName || "Player");
+  profile.risk += points;
+  profile.riskHistory.push({ reason, at: nowIso(), points });
+  if (profile.riskHistory.length > 40) {
+    profile.riskHistory.shift();
+  }
+  if (profile.risk >= 12) {
+    amongSoftBans.set(fingerprint, {
+      until: Date.now() + 15 * 60 * 1000,
+      reason: "Suspicious behavior"
+    });
+    profile.risk = 0;
+    socket.emit("among_error", "Soft-ban active for 15 minutes (anti-cheat).");
+  }
+}
+
+function amongMapTemplate() {
+  return {
+    nodes: {
+      cafeteria: ["admin", "medbay", "navigation"],
+      admin: ["cafeteria", "electrical", "security"],
+      medbay: ["cafeteria", "reactor"],
+      electrical: ["admin", "security", "reactor"],
+      security: ["admin", "electrical", "reactor"],
+      reactor: ["medbay", "electrical", "security"],
+      navigation: ["cafeteria"]
+    },
+    sabotage: null
+  };
+}
+
+function getAmongProfileView(player) {
+  const profile = ensureAmongProfile(player.fingerprint, player.name);
+  return {
+    level: profile.level,
+    xp: profile.xp,
+    elo: profile.elo,
+    seasonTier: profile.seasonTier,
+    titles: profile.titles.slice(-3),
+    badges: profile.badges.slice(-4),
+    banners: profile.banners.slice(-3),
+    emotes: profile.emotes.slice(-4),
+    equipped: profile.equipped,
+    friends: profile.friends.length,
+    missions: profile.missions
+  };
+}
+
+function removeFromAmongQueue(socketId) {
+  ["casual", "ranked"].forEach((queueType) => {
+    amongQueue[queueType] = amongQueue[queueType].filter((entry) => entry.socketId !== socketId);
+  });
+}
+
+function amongQueueView() {
+  return {
+    casual: amongQueue.casual.length,
+    ranked: amongQueue.ranked.length
+  };
+}
+
+function maybeCreateQuickPlayRoom(queueType) {
+  const queue = amongQueue[queueType];
+  const required = 4;
+  if (!queue || queue.length < required) return;
+
+  const group = queue.splice(0, required);
+  const hostEntry = group[0];
+  const hostSocket = io.sockets.sockets.get(hostEntry.socketId);
+  if (!hostSocket) return;
+
+  const code = createAmongCode();
+  const room = {
+    code,
+    partyCode: createPartyCode(),
+    queueType,
+    hostId: hostSocket.id,
+    state: "lobby",
+    players: [],
+    logs: [],
+    deadBody: null,
+    meeting: null,
+    winner: null,
+    rematchReady: new Set(),
+    highlights: [],
+    map: amongMapTemplate(),
+    voiceChannel: `voice-${code}`,
+    voiceState: "open"
+  };
+
+  amongRooms.set(code, room);
+  amongLog(room, `Quick Play room created (${queueType}).`);
+
+  group.forEach((entry) => {
+    const targetSocket = io.sockets.sockets.get(entry.socketId);
+    if (!targetSocket) return;
+    targetSocket.join(code);
+    targetSocket.data.amongRoomCode = code;
+    targetSocket.data.amongFingerprint = entry.fingerprint;
+    targetSocket.data.amongName = entry.name;
+
+    room.players.push({
+      id: targetSocket.id,
+      name: entry.name,
+      fingerprint: entry.fingerprint,
+      role: null,
+      alive: true,
+      tasksDone: 0,
+      tasksTotal: 3,
+      emergencyLeft: 1,
+      killCooldownUntil: 0,
+      position: "cafeteria",
+      vision: 1,
+      shieldUntil: 0,
+      abilityCooldowns: {}
+    });
+
+    const profile = ensureAmongProfile(entry.fingerprint, entry.name);
+    updateAmongMission(profile, "play_rounds", 1);
+
+    targetSocket.emit("among_joined", {
+      code,
+      selfId: targetSocket.id,
+      partyCode: room.partyCode,
+      queueType,
+      profile: getAmongProfileView({ fingerprint: entry.fingerprint, name: entry.name })
+    });
+  });
+
+  amongBroadcast(code);
 }
 
 function createAmongCode() {
@@ -759,6 +1138,10 @@ function amongBroadcast(roomCode) {
 
   io.to(roomCode).emit("among_room_update", {
     code: room.code,
+    partyCode: room.partyCode || null,
+    queueType: room.queueType || "casual",
+    voiceChannel: room.voiceChannel || null,
+    voiceState: room.voiceState || "open",
     state: room.state,
     hostId: room.hostId,
     players: room.players.map((player) => ({
@@ -767,8 +1150,12 @@ function amongBroadcast(roomCode) {
       alive: player.alive,
       tasksDone: player.tasksDone,
       tasksTotal: player.tasksTotal,
-      emergencyLeft: player.emergencyLeft
+      emergencyLeft: player.emergencyLeft,
+      position: player.position,
+      role: room.state === "ended" ? player.role : null,
+      profile: getAmongProfileView(player)
     })),
+    rematchReady: Array.from(room.rematchReady || []),
     meeting: room.meeting ? {
       active: true,
       reason: room.meeting.reason,
@@ -777,14 +1164,28 @@ function amongBroadcast(roomCode) {
       endsAt: room.meeting.endsAt
     } : null,
     deadBody: room.deadBody,
+    map: {
+      sabotage: room.map?.sabotage || null,
+      nodes: room.map?.nodes || {}
+    },
+    chat: (room.chat || []).slice(-40),
     winner: room.winner,
-    logs: room.logs.slice(-20)
+    logs: room.logs.slice(-20),
+    highlights: (room.highlights || []).slice(-6),
+    queueSizes: amongQueueView()
   });
 }
 
 function amongLog(room, message) {
   room.logs.push({ message, at: nowIso() });
   if (room.logs.length > 80) room.logs.shift();
+}
+
+function pushAmongAnalyticsHighlight(text) {
+  amongAnalytics.highlights.push({ at: nowIso(), text });
+  if (amongAnalytics.highlights.length > 120) {
+    amongAnalytics.highlights.shift();
+  }
 }
 
 function amongAlive(room) {
@@ -796,14 +1197,14 @@ function amongCheckWin(room) {
 
   const alive = amongAlive(room);
   const aliveImposters = alive.filter((player) => player.role === "imposter").length;
-  const aliveCrew = alive.filter((player) => player.role === "crewmate").length;
+  const aliveCrew = alive.filter((player) => player.role !== "imposter").length;
 
   if (aliveImposters <= 0) {
     room.winner = "crew";
   } else if (aliveImposters >= aliveCrew) {
     room.winner = "imposter";
   } else {
-    const crew = room.players.filter((player) => player.role === "crewmate");
+    const crew = room.players.filter((player) => player.role !== "imposter");
     const allTasksDone = crew.length > 0 && crew.every((player) => player.tasksDone >= player.tasksTotal);
     if (allTasksDone) {
       room.winner = "crew";
@@ -812,10 +1213,45 @@ function amongCheckWin(room) {
 
   if (room.winner) {
     room.state = "ended";
+    room.voiceState = "open";
     room.deadBody = null;
+    amongAnalytics.roleWins[room.winner] = (amongAnalytics.roleWins[room.winner] || 0) + 1;
     if (room.meeting?.timer) clearTimeout(room.meeting.timer);
     room.meeting = null;
+    room.rematchReady = new Set();
+
+    const aliveWinners = room.players.filter((player) => {
+      if (room.winner === "crew") return player.role !== "imposter" && player.alive;
+      return player.role === "imposter" && player.alive;
+    });
+    const mvp = aliveWinners[0] || room.players[0];
+    if (mvp) {
+      room.highlights.push({
+        at: nowIso(),
+        text: `MVP: ${mvp.name} (${mvp.role || "crew"})`
+      });
+      pushAmongAnalyticsHighlight(`[${room.code}] MVP: ${mvp.name} (${mvp.role || "crew"})`);
+    }
+
+    room.players.forEach((player) => {
+      const profile = ensureAmongProfile(player.fingerprint, player.name);
+      const baseXp = player.role === room.winner || (room.winner === "crew" && player.role !== "imposter") ? 55 : 22;
+      addAmongXp(profile, baseXp);
+      updateAmongMission(profile, "play_rounds", 1);
+
+      if (room.queueType === "ranked") {
+        const won = room.winner === "imposter" ? player.role === "imposter" : player.role !== "imposter";
+        profile.elo += won ? 16 : -12;
+        if (profile.elo < 800) profile.elo = 800;
+      }
+
+      if (room.highlights.length > 20) {
+        room.highlights.shift();
+      }
+    });
+
     amongLog(room, room.winner === "crew" ? "Crew gewinnt die Runde." : "Hochstapler gewinnt die Runde.");
+    pushAmongAnalyticsHighlight(`[${room.code}] Winner: ${room.winner}`);
     io.to(room.code).emit("among_game_over", { winner: room.winner });
     amongBroadcast(room.code);
     return true;
@@ -854,12 +1290,25 @@ function amongResolveMeeting(room) {
       targetPlayer.alive = false;
       ejected = { id: targetPlayer.id, name: targetPlayer.name, role: targetPlayer.role };
       amongLog(room, `${targetPlayer.name} wurde rausgewählt.`);
+      room.highlights.push({
+        at: nowIso(),
+        text: `Meeting ejection: ${targetPlayer.name} (${targetPlayer.role})`
+      });
     }
   } else {
     amongLog(room, "Besprechung endete ohne Rauswahl.");
   }
 
+  Object.keys(room.meeting.votes).forEach((voterId) => {
+    const voter = room.players.find((player) => player.id === voterId);
+    if (!voter) return;
+    const profile = ensureAmongProfile(voter.fingerprint, voter.name);
+    updateAmongMission(profile, "votes", 1);
+    addAmongXp(profile, 8);
+  });
+
   room.state = "playing";
+  room.voiceState = "task-muted";
   room.deadBody = null;
   room.meeting = null;
 
@@ -878,6 +1327,7 @@ function amongStartMeeting(room, reason, reporterName) {
   if (room.meeting || room.state !== "playing") return;
 
   room.state = "meeting";
+  room.voiceState = "meeting-open";
   room.meeting = {
     reason,
     reporterName,
@@ -904,6 +1354,7 @@ function amongStartMeeting(room, reason, reporterName) {
 
 function amongRemoveSocket(socket, reason = "leave") {
   const roomCode = socket.data.amongRoomCode;
+  removeFromAmongQueue(socket.id);
   if (!roomCode) return;
 
   const room = amongRooms.get(roomCode);
@@ -911,6 +1362,9 @@ function amongRemoveSocket(socket, reason = "leave") {
   if (!room) return;
 
   room.players = room.players.filter((player) => player.id !== socket.id);
+  if (room.rematchReady) {
+    room.rematchReady.delete(socket.id);
+  }
   if (room.meeting?.votes?.[socket.id]) {
     delete room.meeting.votes[socket.id];
   }
@@ -936,99 +1390,321 @@ function amongRemoveSocket(socket, reason = "leave") {
   amongBroadcast(room.code);
 }
 
+function amongCanUseAbility(player, key, cooldownMs) {
+  const now = Date.now();
+  const until = player.abilityCooldowns?.[key] || 0;
+  if (until > now) {
+    return { ok: false, retryMs: until - now };
+  }
+  player.abilityCooldowns[key] = now + cooldownMs;
+  return { ok: true, retryMs: 0 };
+}
+
+function amongRolePlan(players) {
+  const shuffled = [...players].sort(() => Math.random() - 0.5);
+  const plan = {
+    imposterId: shuffled[0]?.id || null,
+    medicId: null,
+    hackerId: null,
+    tricksterId: null
+  };
+
+  const extras = shuffled.slice(1);
+  if (extras[0]) plan.medicId = extras[0].id;
+  if (extras[1]) plan.hackerId = extras[1].id;
+  if (extras[2]) plan.tricksterId = extras[2].id;
+  return plan;
+}
+
+function amongStartGame(room) {
+  room.state = "playing";
+  room.voiceState = "task-muted";
+  room.winner = null;
+  room.deadBody = null;
+  room.meeting = null;
+  room.highlights.push({ at: nowIso(), text: "Match started" });
+  room.map.sabotage = null;
+
+  const plan = amongRolePlan(room.players);
+  const tasks = amongTaskPool();
+
+  room.players.forEach((player) => {
+    player.alive = true;
+    player.tasksDone = 0;
+    player.tasksTotal = 3;
+    player.emergencyLeft = 1;
+    player.killCooldownUntil = 0;
+    player.position = "cafeteria";
+    player.vision = 1;
+    player.shieldUntil = 0;
+    player.abilityCooldowns = {};
+    player.role = "crewmate";
+  });
+
+  const imposter = room.players.find((player) => player.id === plan.imposterId);
+  if (imposter) {
+    imposter.role = "imposter";
+    imposter.killCooldownUntil = Date.now() + 10000;
+  }
+  const medic = room.players.find((player) => player.id === plan.medicId);
+  if (medic) medic.role = "medic";
+  const hacker = room.players.find((player) => player.id === plan.hackerId);
+  if (hacker) hacker.role = "hacker";
+  const trickster = room.players.find((player) => player.id === plan.tricksterId);
+  if (trickster) trickster.role = "trickster";
+
+  room.players.forEach((player) => {
+    const taskList = [...tasks].sort(() => Math.random() - 0.5).slice(0, 3);
+    const roleTasks = player.role === "imposter"
+      ? ["Sabotage", "Fake alibi", "Eliminate"]
+      : taskList;
+    io.to(player.id).emit("among_role", {
+      role: player.role,
+      tasks: roleTasks,
+      position: player.position
+    });
+  });
+
+  amongLog(room, "Game started.");
+  io.to(room.code).emit("among_game_started");
+  amongBroadcast(room.code);
+}
+
+function amongCanRelayVoice(fromSocket, targetId) {
+  const roomCode = fromSocket.data.amongRoomCode;
+  if (!roomCode) return false;
+  const room = amongRooms.get(roomCode);
+  if (!room) return false;
+  const fromPlayer = room.players.find((entry) => entry.id === fromSocket.id);
+  const targetPlayer = room.players.find((entry) => entry.id === String(targetId || ""));
+  return !!fromPlayer && !!targetPlayer;
+}
+
 io.on("connection", (socket) => {
-  socket.on("among_create_room", ({ name }) => {
+  socket.emit("among_queue_update", amongQueueView());
+
+  socket.on("among_create_room", ({ name, fingerprint, queueType = "casual" }) => {
     if (isRateLimited(socket, "among_create_room", 900, "among_create_room")) {
-      socket.emit("error_message", "Bitte kurz warten.");
+      socket.emit("among_error", "Please wait a moment.");
       return;
     }
 
     const trimmedName = validName(name);
+    const fp = normalizeFingerprint(fingerprint);
     if (!trimmedName) {
-      socket.emit("among_error", "Bitte einen Namen eingeben.");
+      socket.emit("among_error", "Please enter a name.");
+      return;
+    }
+    if (isAmongSoftBanned(fp)) {
+      socket.emit("among_error", "Soft-ban active. Try again later.");
       return;
     }
 
+    removeFromAmongQueue(socket.id);
     const code = createAmongCode();
     const room = {
       code,
+      partyCode: createPartyCode(),
+      queueType: queueType === "ranked" ? "ranked" : "casual",
       hostId: socket.id,
       state: "lobby",
       players: [{
         id: socket.id,
         name: trimmedName,
+        fingerprint: fp,
         role: null,
         alive: true,
         tasksDone: 0,
         tasksTotal: 3,
         emergencyLeft: 1,
-        killCooldownUntil: 0
+        killCooldownUntil: 0,
+        position: "cafeteria",
+        vision: 1,
+        shieldUntil: 0,
+        abilityCooldowns: {}
       }],
       logs: [],
       deadBody: null,
       meeting: null,
-      winner: null
+      winner: null,
+      rematchReady: new Set(),
+      highlights: [],
+      chat: [],
+      chat: [],
+      map: amongMapTemplate(),
+      voiceChannel: `voice-${code}`,
+      voiceState: "open"
     };
 
-    amongLog(room, `${trimmedName} hat die Among-Lobby erstellt.`);
     amongRooms.set(code, room);
     socket.join(code);
     socket.data.amongRoomCode = code;
+    socket.data.amongFingerprint = fp;
+    socket.data.amongName = trimmedName;
+    ensureAmongProfile(fp, trimmedName);
+    amongLog(room, `${trimmedName} created the room.`);
 
-    socket.emit("among_joined", { code, selfId: socket.id });
+    socket.emit("among_joined", {
+      code,
+      selfId: socket.id,
+      partyCode: room.partyCode,
+      queueType: room.queueType,
+      profile: getAmongProfileView(room.players[0])
+    });
     amongBroadcast(code);
   });
 
-  socket.on("among_join_room", ({ name, code }) => {
-    if (isRateLimited(socket, "among_join_room", 700, "among_join_room")) {
-      socket.emit("among_error", "Bitte kurz warten.");
-      return;
-    }
-
+  socket.on("among_quick_play", ({ name, fingerprint, queueType = "casual" }) => {
     const trimmedName = validName(name);
-    const normalizedCode = String(code || "").trim().toUpperCase();
-    if (!trimmedName || !normalizedCode) {
-      socket.emit("among_error", "Name und Raumcode sind erforderlich.");
+    const fp = normalizeFingerprint(fingerprint);
+    const normalizedQueue = queueType === "ranked" ? "ranked" : "casual";
+    if (!trimmedName) {
+      socket.emit("among_error", "Please enter a name.");
+      return;
+    }
+    if (isAmongSoftBanned(fp)) {
+      socket.emit("among_error", "Soft-ban active. Try again later.");
       return;
     }
 
-    const room = amongRooms.get(normalizedCode);
-    if (!room) {
-      socket.emit("among_error", "Raum nicht gefunden.");
+    socket.data.amongFingerprint = fp;
+    socket.data.amongName = trimmedName;
+    ensureAmongProfile(fp, trimmedName);
+    removeFromAmongQueue(socket.id);
+    amongQueue[normalizedQueue].push({
+      socketId: socket.id,
+      name: trimmedName,
+      fingerprint: fp
+    });
+
+    io.emit("among_queue_update", amongQueueView());
+    maybeCreateQuickPlayRoom(normalizedQueue);
+    io.emit("among_queue_update", amongQueueView());
+  });
+
+  socket.on("among_join_party", ({ name, fingerprint, partyCode }) => {
+    const trimmedName = validName(name);
+    const normalizedPartyCode = String(partyCode || "").trim().toUpperCase();
+    const fp = normalizeFingerprint(fingerprint);
+    if (!trimmedName || !normalizedPartyCode) {
+      socket.emit("among_error", "Name and party code are required.");
       return;
     }
-
-    if (room.state !== "lobby") {
-      socket.emit("among_error", "Spiel läuft bereits.");
+    const room = [...amongRooms.values()].find((entry) => entry.partyCode === normalizedPartyCode);
+    if (!room || room.state !== "lobby") {
+      socket.emit("among_error", "Party room not found.");
       return;
     }
-
     if (room.players.length >= 12) {
-      socket.emit("among_error", "Raum ist voll.");
+      socket.emit("among_error", "Room is full.");
+      return;
+    }
+    if (fp && room.players.some((player) => player.fingerprint && player.fingerprint === fp)) {
+      socket.emit("among_error", "Fingerprint already used in this room.");
       return;
     }
 
-    const duplicate = room.players.some((player) => player.name.toLowerCase() === trimmedName.toLowerCase());
-    if (duplicate) {
-      socket.emit("among_error", "Name ist bereits vergeben.");
-      return;
-    }
+    socket.join(room.code);
+    socket.data.amongRoomCode = room.code;
+    socket.data.amongFingerprint = fp;
+    socket.data.amongName = trimmedName;
 
     room.players.push({
       id: socket.id,
       name: trimmedName,
+      fingerprint: fp,
       role: null,
       alive: true,
       tasksDone: 0,
       tasksTotal: 3,
       emergencyLeft: 1,
-      killCooldownUntil: 0
+      killCooldownUntil: 0,
+      position: "cafeteria",
+      vision: 1,
+      shieldUntil: 0,
+      abilityCooldowns: {}
     });
+    ensureAmongProfile(fp, trimmedName);
+    amongLog(room, `${trimmedName} joined via party code.`);
+    socket.emit("among_joined", {
+      code: room.code,
+      selfId: socket.id,
+      partyCode: room.partyCode,
+      queueType: room.queueType,
+      profile: getAmongProfileView(room.players[room.players.length - 1])
+    });
+    amongBroadcast(room.code);
+  });
+
+  socket.on("among_join_room", ({ name, code, fingerprint }) => {
+    if (isRateLimited(socket, "among_join_room", 700, "among_join_room")) {
+      socket.emit("among_error", "Please wait a moment.");
+      return;
+    }
+
+    const trimmedName = validName(name);
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const fp = normalizeFingerprint(fingerprint);
+    if (!trimmedName || !normalizedCode) {
+      socket.emit("among_error", "Name and room code are required.");
+      return;
+    }
+
+    const room = amongRooms.get(normalizedCode);
+    if (!room) {
+      socket.emit("among_error", "Room not found.");
+      return;
+    }
+
+    if (room.state !== "lobby") {
+      socket.emit("among_error", "Game already running.");
+      return;
+    }
+
+    if (room.players.length >= 12) {
+      socket.emit("among_error", "Room is full.");
+      return;
+    }
+    if (fp && room.players.some((player) => player.fingerprint && player.fingerprint === fp)) {
+      socket.emit("among_error", "Fingerprint already used in this room.");
+      return;
+    }
+
+    const duplicate = room.players.some((player) => player.name.toLowerCase() === trimmedName.toLowerCase());
+    if (duplicate) {
+      socket.emit("among_error", "Name already taken.");
+      return;
+    }
+
     socket.join(normalizedCode);
     socket.data.amongRoomCode = normalizedCode;
+    socket.data.amongFingerprint = fp;
+    socket.data.amongName = trimmedName;
+    room.players.push({
+      id: socket.id,
+      name: trimmedName,
+      fingerprint: fp,
+      role: null,
+      alive: true,
+      tasksDone: 0,
+      tasksTotal: 3,
+      emergencyLeft: 1,
+      killCooldownUntil: 0,
+      position: "cafeteria",
+      vision: 1,
+      shieldUntil: 0,
+      abilityCooldowns: {}
+    });
 
-    amongLog(room, `${trimmedName} ist beigetreten.`);
-    socket.emit("among_joined", { code: normalizedCode, selfId: socket.id });
+    ensureAmongProfile(fp, trimmedName);
+    amongLog(room, `${trimmedName} joined.`);
+    socket.emit("among_joined", {
+      code: normalizedCode,
+      selfId: socket.id,
+      partyCode: room.partyCode,
+      queueType: room.queueType,
+      profile: getAmongProfileView(room.players[room.players.length - 1])
+    });
     amongBroadcast(normalizedCode);
   });
 
@@ -1037,43 +1713,149 @@ io.on("connection", (socket) => {
     const room = amongRooms.get(roomCode);
     if (!room) return;
     if (room.hostId !== socket.id) {
-      socket.emit("among_error", "Nur der Host kann starten.");
+      socket.emit("among_error", "Only host can start.");
       return;
     }
-
     if (room.players.length < 4) {
-      socket.emit("among_error", "Mindestens 4 Spieler sind erforderlich.");
+      socket.emit("among_error", "At least 4 players required.");
+      return;
+    }
+    amongStartGame(room);
+  });
+
+  socket.on("among_move", ({ to }) => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "playing") return;
+    const player = room.players.find((entry) => entry.id === socket.id);
+    if (!player || !player.alive) return;
+    const next = String(to || "").toLowerCase();
+    const neighbors = room.map?.nodes?.[player.position] || [];
+    if (!neighbors.includes(next)) {
+      bumpAmongRisk(socket, "invalid_move", 1);
+      socket.emit("among_error", "Invalid movement path.");
+      return;
+    }
+    player.position = next;
+    amongBroadcast(room.code);
+  });
+
+  socket.on("among_start_sabotage", ({ type }) => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "playing") return;
+    const player = room.players.find((entry) => entry.id === socket.id);
+    if (!player || !player.alive || player.role !== "imposter") return;
+
+    const check = amongCanUseAbility(player, "sabotage", 30000);
+    if (!check.ok) {
+      socket.emit("among_error", `Sabotage cooldown: ${Math.ceil(check.retryMs / 1000)}s`);
+      return;
+    }
+    if (room.map.sabotage) {
+      socket.emit("among_error", "Sabotage already active.");
       return;
     }
 
-    room.state = "playing";
-    room.winner = null;
-    room.deadBody = null;
-    room.players.forEach((player) => {
-      player.alive = true;
-      player.tasksDone = 0;
-      player.tasksTotal = 3;
-      player.emergencyLeft = 1;
-      player.killCooldownUntil = 0;
-      player.role = "crewmate";
+    const sabotageType = type === "reactor" ? "reactor" : "lights";
+    room.map.sabotage = {
+      type: sabotageType,
+      startedAt: Date.now(),
+      endsAt: sabotageType === "reactor" ? Date.now() + 30000 : Date.now() + 22000,
+      fixedBy: []
+    };
+    room.highlights.push({ at: nowIso(), text: `Sabotage started: ${sabotageType}` });
+    amongLog(room, `Sabotage started (${sabotageType}).`);
+
+    if (sabotageType === "reactor") {
+      setTimeout(() => {
+        const liveRoom = amongRooms.get(room.code);
+        if (!liveRoom || liveRoom.state !== "playing") return;
+        if (!liveRoom.map.sabotage || liveRoom.map.sabotage.type !== "reactor") return;
+        liveRoom.winner = "imposter";
+        amongCheckWin(liveRoom);
+      }, 30000);
+    }
+
+    amongBroadcast(room.code);
+  });
+
+  socket.on("among_fix_sabotage", () => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "playing" || !room.map.sabotage) return;
+    const player = room.players.find((entry) => entry.id === socket.id);
+    if (!player || !player.alive || player.role === "imposter") return;
+
+    if (room.map.sabotage.type === "lights" && player.position !== "electrical") {
+      socket.emit("among_error", "Fix lights in Electrical.");
+      return;
+    }
+    if (room.map.sabotage.type === "reactor" && player.position !== "reactor") {
+      socket.emit("among_error", "Fix reactor in Reactor room.");
+      return;
+    }
+
+    if (!room.map.sabotage.fixedBy.includes(player.id)) {
+      room.map.sabotage.fixedBy.push(player.id);
+    }
+    const required = room.map.sabotage.type === "reactor" ? 2 : 1;
+    if (room.map.sabotage.fixedBy.length >= required) {
+      amongLog(room, `Sabotage fixed by ${room.map.sabotage.fixedBy.length} crew.`);
+      room.highlights.push({ at: nowIso(), text: `Sabotage fixed (${room.map.sabotage.type})` });
+      room.map.sabotage = null;
+    }
+    amongBroadcast(room.code);
+  });
+
+  socket.on("among_medic_shield", ({ targetId }) => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "playing") return;
+    const medic = room.players.find((entry) => entry.id === socket.id);
+    const target = room.players.find((entry) => entry.id === String(targetId || ""));
+    if (!medic || !target || !medic.alive || !target.alive) return;
+    if (medic.role !== "medic") return;
+
+    const check = amongCanUseAbility(medic, "medic_shield", 25000);
+    if (!check.ok) {
+      socket.emit("among_error", `Shield cooldown: ${Math.ceil(check.retryMs / 1000)}s`);
+      return;
+    }
+    target.shieldUntil = Date.now() + 15000;
+    amongLog(room, `${medic.name} shielded ${target.name}.`);
+    amongBroadcast(room.code);
+  });
+
+  socket.on("among_hacker_scan", () => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "playing") return;
+    const hacker = room.players.find((entry) => entry.id === socket.id);
+    if (!hacker || !hacker.alive || hacker.role !== "hacker") return;
+
+    const check = amongCanUseAbility(hacker, "hacker_scan", 22000);
+    if (!check.ok) {
+      socket.emit("among_error", `Scan cooldown: ${Math.ceil(check.retryMs / 1000)}s`);
+      return;
+    }
+
+    const candidates = room.players.filter((entry) => entry.id !== hacker.id);
+    const possible = candidates.filter((entry) => entry.role === "imposter" || Math.random() < 0.35).slice(0, 2);
+    io.to(hacker.id).emit("among_hack_result", {
+      suspects: possible.map((entry) => entry.name)
     });
+  });
 
-    const imposterIndex = Math.floor(Math.random() * room.players.length);
-    room.players[imposterIndex].role = "imposter";
-    room.players[imposterIndex].killCooldownUntil = Date.now() + 10000;
+  socket.on("among_trickster_decoy", () => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "playing") return;
+    const trickster = room.players.find((entry) => entry.id === socket.id);
+    if (!trickster || !trickster.alive || trickster.role !== "trickster") return;
 
-    const tasks = amongTaskPool();
-    room.players.forEach((player) => {
-      if (player.role === "crewmate") {
-        const shuffled = [...tasks].sort(() => Math.random() - 0.5).slice(0, 3);
-        io.to(player.id).emit("among_role", { role: "crewmate", tasks: shuffled });
-      } else {
-        io.to(player.id).emit("among_role", { role: "imposter", tasks: ["Sabotage", "Falsches Alibi", "Ausschalten"] });
-      }
-    });
+    const check = amongCanUseAbility(trickster, "trickster_decoy", 20000);
+    if (!check.ok) {
+      socket.emit("among_error", `Decoy cooldown: ${Math.ceil(check.retryMs / 1000)}s`);
+      return;
+    }
 
-    amongLog(room, "Spiel gestartet.");
-    io.to(room.code).emit("among_game_started");
+    amongLog(room, `Decoy signal detected near ${trickster.position}.`);
+    room.highlights.push({ at: nowIso(), text: `Trickster decoy in ${trickster.position}` });
     amongBroadcast(room.code);
   });
 
@@ -1083,11 +1865,14 @@ io.on("connection", (socket) => {
     if (!room || room.state !== "playing") return;
 
     const player = room.players.find((entry) => entry.id === socket.id);
-    if (!player || !player.alive || player.role !== "crewmate") return;
+    if (!player || !player.alive || player.role === "imposter") return;
     if (player.tasksDone >= player.tasksTotal) return;
 
     player.tasksDone += 1;
-    amongLog(room, `${player.name} hat eine Aufgabe erledigt.`);
+    const profile = ensureAmongProfile(player.fingerprint, player.name);
+    updateAmongMission(profile, "complete_tasks", 1);
+    addAmongXp(profile, 10);
+    amongLog(room, `${player.name} completed a task.`);
     amongCheckWin(room);
     amongBroadcast(roomCode);
   });
@@ -1102,9 +1887,20 @@ io.on("connection", (socket) => {
     if (!killer || !target) return;
     if (!killer.alive || killer.role !== "imposter") return;
     if (!target.alive || target.id === killer.id) return;
+    if (killer.position !== target.position) {
+      bumpAmongRisk(socket, "cross_room_kill", 2);
+      socket.emit("among_error", "Target must be in the same room.");
+      return;
+    }
 
     if (Date.now() < killer.killCooldownUntil) {
-      socket.emit("among_error", "Kill-Cooldown aktiv.");
+      socket.emit("among_error", "Kill cooldown active.");
+      return;
+    }
+
+    if (target.shieldUntil > Date.now()) {
+      socket.emit("among_error", "Target is shielded by Medic.");
+      killer.killCooldownUntil = Date.now() + 8000;
       return;
     }
 
@@ -1112,10 +1908,14 @@ io.on("connection", (socket) => {
     killer.killCooldownUntil = Date.now() + 20000;
     room.deadBody = {
       id: target.id,
-      name: target.name
+      name: target.name,
+      room: target.position
     };
 
-    amongLog(room, `${target.name} wurde ausgeschaltet.`);
+    amongLog(room, `${target.name} was eliminated in ${target.position}.`);
+    room.highlights.push({ at: nowIso(), text: `Kill in ${target.position}: ${target.name}` });
+    amongAnalytics.killHeatmap[target.position] = (amongAnalytics.killHeatmap[target.position] || 0) + 1;
+    pushAmongAnalyticsHighlight(`[${room.code}] Kill in ${target.position}: ${target.name}`);
     io.to(room.code).emit("among_body_found", { name: target.name });
     if (!amongCheckWin(room)) amongBroadcast(roomCode);
   });
@@ -1127,7 +1927,13 @@ io.on("connection", (socket) => {
 
     const reporter = room.players.find((entry) => entry.id === socket.id);
     if (!reporter || !reporter.alive) return;
+    if (reporter.position !== room.deadBody.room) {
+      socket.emit("among_error", "You can only report in the body room.");
+      return;
+    }
 
+    const profile = ensureAmongProfile(reporter.fingerprint, reporter.name);
+    updateAmongMission(profile, "meetings", 1);
     amongStartMeeting(room, "body", reporter.name);
   });
 
@@ -1139,11 +1945,13 @@ io.on("connection", (socket) => {
     const caller = room.players.find((entry) => entry.id === socket.id);
     if (!caller || !caller.alive) return;
     if (caller.emergencyLeft <= 0) {
-      socket.emit("among_error", "Keine Notfall-Besprechungen mehr übrig.");
+      socket.emit("among_error", "No emergency meetings left.");
       return;
     }
 
     caller.emergencyLeft -= 1;
+    const profile = ensureAmongProfile(caller.fingerprint, caller.name);
+    updateAmongMission(profile, "meetings", 1);
     amongStartMeeting(room, "emergency", caller.name);
   });
 
@@ -1155,14 +1963,15 @@ io.on("connection", (socket) => {
     const voter = room.players.find((entry) => entry.id === socket.id);
     if (!voter || !voter.alive) return;
     if (room.meeting.votes[socket.id]) {
-      socket.emit("among_error", "Du hast bereits abgestimmt.");
+      socket.emit("among_error", "You already voted.");
       return;
     }
 
     const normalizedTarget = String(targetId || "skip");
     const validTarget = normalizedTarget === "skip" || room.players.some((entry) => entry.id === normalizedTarget && entry.alive);
     if (!validTarget) {
-      socket.emit("among_error", "Ungültige Stimme.");
+      bumpAmongRisk(socket, "invalid_vote_target", 1);
+      socket.emit("among_error", "Invalid vote.");
       return;
     }
 
@@ -1175,10 +1984,89 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("among_rematch_ready", () => {
+    const room = amongRooms.get(socket.data.amongRoomCode);
+    if (!room || room.state !== "ended") return;
+    room.rematchReady.add(socket.id);
+    amongBroadcast(room.code);
+
+    if (room.rematchReady.size >= room.players.length && room.players.length >= 4) {
+      room.rematchReady.clear();
+      amongStartGame(room);
+    }
+  });
+
+  socket.on("among_leave_queue", () => {
+    removeFromAmongQueue(socket.id);
+    io.emit("among_queue_update", amongQueueView());
+  });
+
+  socket.on("among_chat_send", ({ text }) => {
+    if (isRateLimited(socket, "among_chat_send", 350, "among_chat_send")) {
+      return;
+    }
+
+    const roomCode = socket.data.amongRoomCode;
+    const room = amongRooms.get(roomCode);
+    if (!room) return;
+
+    const sender = room.players.find((entry) => entry.id === socket.id);
+    if (!sender) return;
+
+    const normalizedText = String(text || "").trim().slice(0, 220);
+    if (!normalizedText) return;
+
+    const entry = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      senderId: sender.id,
+      senderName: sender.name,
+      text: normalizedText,
+      at: nowIso()
+    };
+
+    room.chat.push(entry);
+    if (room.chat.length > 80) {
+      room.chat.shift();
+    }
+
+    io.to(room.code).emit("among_chat_message", entry);
+  });
+
+  socket.on("among_voice_offer", ({ targetId, sdp }) => {
+    if (!amongCanRelayVoice(socket, targetId)) return;
+    if (!sdp || typeof sdp.sdp !== "string" || typeof sdp.type !== "string") return;
+    if (sdp.sdp.length > 20000) return;
+    io.to(String(targetId)).emit("among_voice_offer", {
+      fromId: socket.id,
+      sdp
+    });
+  });
+
+  socket.on("among_voice_answer", ({ targetId, sdp }) => {
+    if (!amongCanRelayVoice(socket, targetId)) return;
+    if (!sdp || typeof sdp.sdp !== "string" || typeof sdp.type !== "string") return;
+    if (sdp.sdp.length > 20000) return;
+    io.to(String(targetId)).emit("among_voice_answer", {
+      fromId: socket.id,
+      sdp
+    });
+  });
+
+  socket.on("among_voice_ice", ({ targetId, candidate }) => {
+    if (!amongCanRelayVoice(socket, targetId)) return;
+    if (!candidate || typeof candidate.candidate !== "string") return;
+    if (candidate.candidate.length > 1500) return;
+    io.to(String(targetId)).emit("among_voice_ice", {
+      fromId: socket.id,
+      candidate
+    });
+  });
+
   socket.on("among_leave_room", () => {
     const roomCode = socket.data.amongRoomCode;
     if (!roomCode) return;
     socket.leave(roomCode);
+    removeFromAmongQueue(socket.id);
     amongRemoveSocket(socket, "leave");
     socket.emit("among_left");
   });
@@ -1233,7 +2121,6 @@ io.on("connection", (socket) => {
       },
       phaseTimer: null,
       phaseEndsAt: null,
-      auditLog: [],
       playerStats: {},
       reconnectTokens: {},
       recentPlayers: []
@@ -1241,8 +2128,6 @@ io.on("connection", (socket) => {
 
     updateStatName(room, trimmedName);
     room.recentPlayers.push(trimmedName);
-    addAudit(room, `${trimmedName} hat die Lobby erstellt.`);
-
     rooms.set(code, room);
     socket.join(code);
     socket.data.roomCode = code;
@@ -1381,7 +2266,6 @@ io.on("connection", (socket) => {
 
     updateStatName(room, nextName);
 
-    addAudit(room, `${oldName} heißt jetzt ${nextName}.`);
     socket.emit("name_updated", { name: nextName });
     broadcastRoom(roomCode);
   });
@@ -1406,7 +2290,6 @@ io.on("connection", (socket) => {
     }
 
     room.settings.contentFilter = normalizedFilter;
-    addAudit(room, `Inhaltsfilter auf ${normalizedFilter} gesetzt.`);
     broadcastRoom(room.code);
   });
 
@@ -1427,7 +2310,63 @@ io.on("connection", (socket) => {
     }
 
     room.customPrompts[normalizedKind].push(normalizedText);
-    addAudit(room, `Eigene ${normalizedKind}-Aufgabe hinzugefügt.`);
+    broadcastRoom(room.code);
+  });
+
+  socket.on("list_prompt_packs", () => {
+    const list = [...sharedPromptPacks.values()].slice(-30).reverse().map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      by: entry.by,
+      truthCount: entry.truth.length,
+      dareCount: entry.dare.length,
+      createdAt: entry.createdAt
+    }));
+    socket.emit("prompt_packs", list);
+  });
+
+  socket.on("share_prompt_pack", ({ name }) => {
+    const room = getHostRoom(socket);
+    if (!room) return;
+
+    const packName = String(name || "").trim().slice(0, 40);
+    if (!packName) {
+      socket.emit("error_message", "Pack-Name fehlt.");
+      return;
+    }
+
+    const truth = room.customPrompts.wahrheit.slice(-80);
+    const dare = room.customPrompts.pflicht.slice(-80);
+    if (truth.length + dare.length < 4) {
+      socket.emit("error_message", "Mindestens 4 Custom-Prompts nötig.");
+      return;
+    }
+
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    sharedPromptPacks.set(id, {
+      id,
+      name: packName,
+      by: room.players.find((entry) => entry.id === socket.id)?.name || "Host",
+      truth,
+      dare,
+      createdAt: nowIso()
+    });
+
+    socket.emit("pack_shared", { id, name: packName });
+  });
+
+  socket.on("import_prompt_pack", ({ id }) => {
+    const room = getHostRoom(socket);
+    if (!room) return;
+
+    const pack = sharedPromptPacks.get(String(id || ""));
+    if (!pack) {
+      socket.emit("error_message", "Pack nicht gefunden.");
+      return;
+    }
+
+    room.customPrompts.wahrheit = [...new Set([...room.customPrompts.wahrheit, ...pack.truth])].slice(-140);
+    room.customPrompts.pflicht = [...new Set([...room.customPrompts.pflicht, ...pack.dare])].slice(-140);
     broadcastRoom(room.code);
   });
 
@@ -1441,7 +2380,6 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     room.settings.lobbyLocked = !room.settings.lobbyLocked;
-    addAudit(room, room.settings.lobbyLocked ? "Lobby gesperrt." : "Lobby entsperrt.");
     broadcastRoom(room.code);
   });
 
@@ -1469,12 +2407,10 @@ io.on("connection", (socket) => {
     if (room.mutedPlayerIds.has(normalizedTargetId)) {
       room.mutedPlayerIds.delete(normalizedTargetId);
       io.to(normalizedTargetId).emit("muted_status", { muted: false });
-      addAudit(room, `${target.name} wurde entstummt.`);
     } else {
       room.mutedPlayerIds.add(normalizedTargetId);
       delete room.votes[normalizedTargetId];
       io.to(normalizedTargetId).emit("muted_status", { muted: true });
-      addAudit(room, `${target.name} wurde stummgeschaltet.`);
     }
 
     tryAutoFinishVote(room);
@@ -1510,7 +2446,6 @@ io.on("connection", (socket) => {
     io.to(normalizedTargetId).emit("kicked", {
       message: "Du wurdest vom Host aus dem Raum entfernt."
     });
-    addAudit(room, `${targetPlayer.name} was kicked.`);
     broadcastRoom(room.code);
   });
 
@@ -1586,7 +2521,6 @@ io.on("connection", (socket) => {
     }
 
     room.votes[socket.id] = normalizedTargetId;
-    addAudit(room, "A vote was submitted.");
     broadcastRoom(roomCode);
     tryAutoFinishVote(room);
   });
@@ -1641,6 +2575,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     amongRemoveSocket(socket, "disconnect");
+    io.emit("among_queue_update", amongQueueView());
     removeParticipantFromRoom(socket, "disconnect");
   });
 });

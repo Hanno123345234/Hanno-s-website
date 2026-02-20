@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1220" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="card active">
+        <div class="top-tools">
+          <a href="/" class="mini-link">← Zur Auswahl</a>
+          <button id="refreshAdminBtn">Neu laden</button>
+        </div>
+
+        <h1>Admin Dashboard</h1>
+        <p id="adminInfo" class="subtitle">Lade Daten…</p>
+
+        <div class="player-list-wrap">
+          <h3>Risk Ranking</h3>
+          <ul id="riskList" class="player-list"></ul>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Softbans</h3>
+          <ul id="banList" class="player-list"></ul>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Reports</h3>
+          <ul id="reportList" class="player-list"></ul>
+        </div>
+      </section>
+    </main>
+
+    <script src="pwa.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>
