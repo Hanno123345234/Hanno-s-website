@@ -1,0 +1,23 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="800" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="800" height="500" rx="28" fill="url(#bg)"/>
+
+  <circle cx="150" cy="380" r="140" fill="#FFFFFF" fill-opacity="0.10"/>
+  <circle cx="670" cy="140" r="120" fill="#FFFFFF" fill-opacity="0.12"/>
+
+  <path d="M410 90c55 35 90 95 90 165 0 110-90 200-200 200s-200-90-200-200c0-70 35-130 90-165" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="18" stroke-linecap="round"/>
+
+  <path d="M300 260l55 55 145-145" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="120" y="120" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#FFFFFF">Don’t break the streak</text>
+  <text x="120" y="160" font-family="Arial, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.75">One tap per day. Compare with friends.</text>
+
+  <rect x="120" y="210" width="260" height="56" rx="28" fill="#FFFFFF" fill-opacity="0.14"/>
+  <text x="148" y="246" font-family="Arial, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.9">Today: check in</text>
+</svg>

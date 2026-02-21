@@ -1,0 +1,39 @@
+workflows:
+  ios-workflow:
+    name: iOS (Flutter) - build IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      vars:
+        FLUTTER_ROOT_DIR: "."
+    scripts:
+      - name: Bootstrap (generate platform folders if missing)
+        script: |
+          cd "$FLUTTER_ROOT_DIR"
+          flutter --version
+          if [ ! -d "ios" ]; then
+            flutter create .
+          fi
+      - name: Pub get
+        script: |
+          cd "$FLUTTER_ROOT_DIR"
+          flutter pub get
+      - name: Build iOS (no codesign)
+        script: |
+          cd "$FLUTTER_ROOT_DIR"
+          flutter build ios --release --no-codesign
+      # To produce an IPA for TestFlight/App Store you need signing.
+      # Codemagic can handle signing with App Store Connect integration.
+      # Replace below with a signed IPA step once signing is configured.
+    artifacts:
+      - build/ios/iphoneos/*.app
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - your@email.com
+        notify:
+          success: true
+          failure: true

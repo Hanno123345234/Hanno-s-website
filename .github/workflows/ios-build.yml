@@ -1,0 +1,29 @@
+name: iOS Build (Flutter)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Bootstrap (generate platform folders if missing)
+        run: |
+          flutter --version
+          if [ ! -d "ios" ]; then
+            flutter create .
+          fi
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      # For TestFlight/App Store you must add signing (certs/profiles) + export IPA.

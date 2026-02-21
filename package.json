@@ -1,14 +1,9 @@
 {
-  "name": "imposter-wahrheit-oder-pflicht",
-  "version": "1.0.0",
+  "name": "hanno-s-website",
   "private": true,
-  "description": "Mobile party game: Wahrheit oder Pflicht mit Imposter-Vibes",
-  "main": "server.js",
+  "version": "0.0.0",
   "scripts": {
+    "postinstall": "bash tool/render_build.sh",
     "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.21.2",
-    "socket.io": "^4.8.1"
   }
 }
