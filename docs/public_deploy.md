@@ -51,6 +51,24 @@ cd C:\Users\HANNO\OneDrive\App\habit_challenge
 .\tool\build_github_pages.ps1 -RepoName <your-repo-name> -Renderer html -NoPwa
 ```
 
+## Render (Static Site)
+
+Render works best for this project as a **Static Site** (not a Node web service).
+
+This repo includes:
+
+- `render.yaml`
+- `tool/render_build.sh`
+
+Steps (dashboard):
+
+1) Render → **New → Static Site**
+2) Connect GitHub repo and select branch `flutter-web`
+3) Build Command: `bash tool/render_build.sh`
+4) Publish Directory: `build/web`
+
+If you already created a Node “Web Service” for this repo, create a new Static Site instead (or change the service type in settings if available).
+
 ## Alternative: Firebase Hosting
 
 Firebase is great if you want a stable domain + CI later, but it’s more setup.
