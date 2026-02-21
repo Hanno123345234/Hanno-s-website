@@ -14,8 +14,8 @@ if (-not $flutterBat) {
   exit 1
 }
 
-Write-Host "Building web (release, no PWA cache)..." -ForegroundColor Cyan
-& $flutterBat build web --release --pwa-strategy none
+Write-Host "Building web (release)..." -ForegroundColor Cyan
+& $flutterBat build web --release
 
 $dir = Join-Path $root 'build\web'
 if (-not (Test-Path $dir)) {

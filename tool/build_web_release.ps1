@@ -34,11 +34,17 @@ if ($Renderer -eq 'html') {
 
 $args = @('build', 'web', '--release', "--base-href=$BaseHref") + $defines
 if ($NoPwa) {
-  # Flutter 3.38 supports build web --pwa-strategy
+  # --pwa-strategy is deprecated in newer Flutter versions and may be removed.
+  # We try it first for older SDKs, then retry without it if unsupported.
   $args += @('--pwa-strategy', 'none')
 }
 
 Write-Host "Building web release (Renderer=$Renderer, BaseHref=$BaseHref, NoPwa=$NoPwa) ..." -ForegroundColor Cyan
 & $flutterCmd @args
+if ($LASTEXITCODE -ne 0 -and $NoPwa) {
+  Write-Host "Retrying build without deprecated --pwa-strategy ..." -ForegroundColor Yellow
+  $args2 = @('build', 'web', '--release', "--base-href=$BaseHref") + $defines
+  & $flutterCmd @args2
+}
 
 Write-Host "\nOK: Output is in $root\build\web" -ForegroundColor Green
