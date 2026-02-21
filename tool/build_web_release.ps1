@@ -32,19 +32,19 @@ if ($Renderer -eq 'html') {
   $defines += '--dart-define=FLUTTER_WEB_USE_SKIA=true'
 }
 
-$args = @('build', 'web', '--release', "--base-href=$BaseHref") + $defines
+$flutterArgs = @('build', 'web', '--release', "--base-href=$BaseHref") + $defines
 if ($NoPwa) {
   # --pwa-strategy is deprecated in newer Flutter versions and may be removed.
   # We try it first for older SDKs, then retry without it if unsupported.
-  $args += @('--pwa-strategy', 'none')
+  $flutterArgs += @('--pwa-strategy', 'none')
 }
 
 Write-Host "Building web release (Renderer=$Renderer, BaseHref=$BaseHref, NoPwa=$NoPwa) ..." -ForegroundColor Cyan
-& $flutterCmd @args
+& $flutterCmd @flutterArgs
 if ($LASTEXITCODE -ne 0 -and $NoPwa) {
   Write-Host "Retrying build without deprecated --pwa-strategy ..." -ForegroundColor Yellow
-  $args2 = @('build', 'web', '--release', "--base-href=$BaseHref") + $defines
-  & $flutterCmd @args2
+  $flutterArgsFallback = @('build', 'web', '--release', "--base-href=$BaseHref") + $defines
+  & $flutterCmd @flutterArgsFallback
 }
 
 Write-Host "\nOK: Output is in $root\build\web" -ForegroundColor Green
