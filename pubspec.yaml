@@ -1,0 +1,42 @@
+name: habit_challenge
+description: Daily habit/workout challenges with friends (MVP).
+publish_to: 'none'
+
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State & utils
+  collection: ^1.18.0
+  intl: ^0.20.2
+  uuid: ^4.4.2
+
+  # Local persistence
+  shared_preferences: ^2.2.3
+
+  # Sharing / proof / reminders (MVP optional)
+  share_plus: ^10.0.2
+  image_picker: ^1.1.2
+  flutter_svg: ^2.0.10+1
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.10.0
+  flutter_timezone: ^3.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  generate: true
+  uses-material-design: true
+  assets:
+    - assets/illustrations/
