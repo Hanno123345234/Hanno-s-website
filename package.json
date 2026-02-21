@@ -1,0 +1,9 @@
+{
+  "name": "hanno-s-website",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "postinstall": "bash tool/render_build.sh",
+    "start": "node server.js"
+  }
+}

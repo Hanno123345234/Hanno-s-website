@@ -1,9 +1,10 @@
 services:
   - type: web
     name: hanno-s-website
-    runtime: static
+    runtime: node
     plan: free
-    branch: flutter-web
+    branch: main
     autoDeployTrigger: commit
-    buildCommand: bash tool/render_build.sh
-    staticPublishPath: build/web
+    buildCommand: npm install
+    startCommand: npm start
+

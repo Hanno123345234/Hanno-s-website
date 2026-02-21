@@ -53,12 +53,19 @@ cd C:\Users\HANNO\OneDrive\App\habit_challenge
 
 ## Render (Static Site)
 
-Render works best for this project as a **Static Site** (not a Node web service).
+If you already have a Render **Node Web Service** for this repo, you can keep it and just update it to serve the built Flutter Web output.
 
 This repo includes:
 
 - `render.yaml`
 - `tool/render_build.sh`
+
+For an existing Node Web Service, set:
+
+- Build Command: `npm install`
+- Start Command: `npm start`
+
+The `postinstall` script runs `bash tool/render_build.sh` to build Flutter Web into `build/web`.
 
 Steps (dashboard):
 
@@ -67,7 +74,10 @@ Steps (dashboard):
 3) Build Command: `bash tool/render_build.sh`
 4) Publish Directory: `build/web`
 
-If you already created a Node “Web Service” for this repo, create a new Static Site instead (or change the service type in settings if available).
+Alternatively, you can create a new Render **Static Site** (often simpler/cheaper) and use:
+
+- Build Command: `bash tool/render_build.sh`
+- Publish Directory: `build/web`
 
 ## Alternative: Firebase Hosting
 
