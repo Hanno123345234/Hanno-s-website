@@ -41,10 +41,16 @@ function sendFile(res, filePath) {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = mimeTypes[ext] || 'application/octet-stream';
 
+    // Flutter web outputs some non-fingerprinted files (e.g. main.dart.js).
+    // Avoid long-lived caching to ensure deploys update reliably.
+    const noCacheExts = new Set(['.html', '.js', '.json', '.map']);
+    const cacheControl = noCacheExts.has(ext)
+      ? 'no-cache, must-revalidate'
+      : 'public, max-age=604800';
+
     res.writeHead(200, {
       'Content-Type': contentType,
-      // Reasonable default caching; HTML is typically revalidated.
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+      'Cache-Control': cacheControl,
     });
 
     fs.createReadStream(filePath).pipe(res);
