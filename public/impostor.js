@@ -4,7 +4,8 @@ const screens = {
   impostors: document.getElementById("screenImpostors"),
   categories: document.getElementById("screenCategories"),
   reveal: document.getElementById("screenReveal"),
-  done: document.getElementById("screenDone")
+  discussion: document.getElementById("screenDiscussion"),
+  result: document.getElementById("screenResult")
 };
 
 const SPECY_WORDS_KEY = "impostor_specy_words_v1";
@@ -71,6 +72,9 @@ const state = {
   roundCards: [],
   revealIndex: 0,
   revealed: false,
+  discussionSeconds: 5 * 60,
+  discussionLeft: 5 * 60,
+  discussionTimerId: null,
   moderation: {
     banned: false,
     banUntil: null,
@@ -107,6 +111,9 @@ const revealWord = document.getElementById("revealWord");
 const revealBtn = document.getElementById("revealBtn");
 const nextPlayerBtn = document.getElementById("nextPlayerBtn");
 const moderationBanner = document.getElementById("impostorBanBanner");
+const discussionTitle = document.getElementById("discussionTitle");
+const discussionTimerText = document.getElementById("discussionTimerText");
+const resultTitle = document.getElementById("resultTitle");
 
 function getFingerprint() {
   let value = window.localStorage.getItem(FINGERPRINT_KEY);
@@ -286,10 +293,70 @@ function normalizeWord(value) {
   return String(value || "").trim().slice(0, 36);
 }
 
+function formatSeconds(totalSeconds) {
+  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
+  const seconds = Math.max(0, totalSeconds) % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function stopDiscussionTimer() {
+  if (state.discussionTimerId) {
+    window.clearInterval(state.discussionTimerId);
+    state.discussionTimerId = null;
+  }
+}
+
 function getWordPool() {
   return state.categories
     .filter((category) => state.selectedCategoryIds.has(category.id))
     .flatMap((category) => (category.id === "spicy" ? state.specyWords : category.words));
+}
+
+function renderDiscussion() {
+  if (!discussionTitle || !discussionTimerText) return;
+  const starter = state.roundCards[0]?.name || "Spieler";
+  discussionTitle.textContent = `${starter} beginnt!`;
+  if (!state.timerEnabled) {
+    discussionTimerText.textContent = "Für dieses Spiel gibt es keinen Timer. Deckt den Impostor auf, sobald ihr euch einig seid.";
+    return;
+  }
+  discussionTimerText.textContent = `Diskussionszeit läuft: ${formatSeconds(state.discussionLeft)}`;
+}
+
+function startDiscussionPhase() {
+  stopDiscussionTimer();
+  state.discussionLeft = state.discussionSeconds;
+  showScreen("discussion");
+  renderDiscussion();
+
+  if (!state.timerEnabled) {
+    applyInteractionLock();
+    return;
+  }
+
+  state.discussionTimerId = window.setInterval(() => {
+    if (state.discussionLeft <= 0) {
+      stopDiscussionTimer();
+      return;
+    }
+    state.discussionLeft -= 1;
+    renderDiscussion();
+  }, 1000);
+
+  applyInteractionLock();
+}
+
+function showResultPhase() {
+  stopDiscussionTimer();
+  if (!resultTitle) return;
+  const impostorNames = state.roundCards.filter((entry) => entry.isImpostor).map((entry) => entry.name);
+  if (impostorNames.length <= 1) {
+    resultTitle.textContent = `Der Impostor ist ${impostorNames[0] || "Unbekannt"}`;
+  } else {
+    resultTitle.textContent = `Die Impostor sind ${impostorNames.join(", ")}`;
+  }
+  showScreen("result");
+  applyInteractionLock();
 }
 
 function renderSpecyWords() {
@@ -501,7 +568,7 @@ function buildRound() {
 function renderReveal() {
   const card = state.roundCards[state.revealIndex];
   if (!card) {
-    showScreen("done");
+    startDiscussionPhase();
     return;
   }
 
@@ -589,17 +656,26 @@ function bootstrap() {
     state.revealed = false;
     state.revealIndex += 1;
     if (state.revealIndex >= state.roundCards.length) {
-      showScreen("done");
+      startDiscussionPhase();
       return;
     }
     renderReveal();
   });
 
+  const revealImpostorBtn = document.getElementById("revealImpostorBtn");
+  if (revealImpostorBtn) {
+    revealImpostorBtn.addEventListener("click", () => {
+      showResultPhase();
+    });
+  }
+
   document.getElementById("newRoundBtn").addEventListener("click", () => {
+    stopDiscussionTimer();
     showScreen("main");
     state.roundCards = [];
     state.revealIndex = 0;
     state.revealed = false;
+    state.discussionLeft = state.discussionSeconds;
     renderMain();
   });
 }
