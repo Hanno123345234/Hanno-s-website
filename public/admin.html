@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1220" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="card active">
+        <div class="top-tools">
+          <a href="/" class="mini-link">← Zur Auswahl</a>
+          <button id="refreshAdminBtn" class="hidden">Neu laden</button>
+        </div>
+
+        <h1>Admin Dashboard</h1>
+        <div id="adminLoginBox" class="admin-box">
+          <p class="subtitle">Zugriff nur mit Admin-Key</p>
+          <label for="adminKeyInput">Admin Access Key</label>
+          <input id="adminKeyInput" type="password" placeholder="z. B. owner oder team key" autocomplete="off" />
+          <div class="stack">
+            <button id="adminLoginBtn">Einloggen</button>
+            <button id="adminLogoutBtn" class="mini-btn" type="button">Logout</button>
+          </div>
+          <p id="adminInfo" class="subtitle"></p>
+        </div>
+
+        <div id="adminPanel" class="hidden">
+          <div class="stats-box">
+            <h4>Übersicht</h4>
+            <ul id="summaryList"></ul>
+          </div>
+
+          <div class="player-list-wrap">
+            <h3>Mitglieder (Registriert & Aktivität)</h3>
+            <ul id="memberList" class="player-list"></ul>
+          </div>
+
+          <div class="player-list-wrap">
+            <h3>Aktive Bans</h3>
+            <ul id="banList" class="player-list"></ul>
+          </div>
+
+          <div class="player-list-wrap">
+            <h3>Aktive Mutes</h3>
+            <ul id="muteList" class="player-list"></ul>
+          </div>
+
+          <div class="player-list-wrap">
+            <h3>Zuletzt gespielte Matches</h3>
+            <ul id="matchList" class="player-list"></ul>
+          </div>
+
+          <div id="accessBox" class="admin-box hidden">
+            <h3>Access vergeben</h3>
+            <label for="grantLabel">Name/Label</label>
+            <input id="grantLabel" type="text" value="Teammate" maxlength="40" />
+
+            <label for="grantRole">Rolle</label>
+            <select id="grantRole">
+              <option value="viewer">viewer (nur lesen)</option>
+              <option value="editor">editor (ban/mute)</option>
+            </select>
+
+            <label for="grantHours">Laufzeit in Stunden</label>
+            <input id="grantHours" type="number" min="1" max="8760" value="72" />
+
+            <button id="grantAccessBtn">Access Code erstellen</button>
+            <p id="grantInfo" class="subtitle"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="pwa.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>
