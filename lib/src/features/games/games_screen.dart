@@ -27,7 +27,7 @@ class _GamesScreenState extends State<GamesScreen> {
       _GameCardModel(
         id: 'impostor',
         title: 'Impostor',
-        subtitle: 'von Hannes & Jeremy',
+        subtitle: 'von Hanno',
         popular: true,
         onTap: () {
           Navigator.of(context).push(

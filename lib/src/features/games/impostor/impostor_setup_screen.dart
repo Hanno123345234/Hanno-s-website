@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'category_screen.dart';
 import 'card_reveal_screen.dart';
 import 'impostor_controller.dart';
 import 'impostor_count_screen.dart';
@@ -72,7 +73,7 @@ class _ImpostorSetupScreenState extends State<ImpostorSetupScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'von Hannes & Jeremy',
+                  'von Hanno',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: cs.onPrimary.withAlpha(220),
                   ),
@@ -143,7 +144,7 @@ class _ImpostorSetupScreenState extends State<ImpostorSetupScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Neue Begriff…',
+                              _controller.selectedCategory,
                               style: TextStyle(color: cs.onSurfaceVariant),
                             ),
                             const SizedBox(width: 8),
@@ -151,8 +152,10 @@ class _ImpostorSetupScreenState extends State<ImpostorSetupScreen> {
                           ],
                         ),
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Kommt bald.')),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => CategoryScreen(controller: _controller),
+                            ),
                           );
                         },
                       ),
