@@ -33,6 +33,9 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <div id="boot-status" style="padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;opacity:.8">
+    Lädt…
+  </div>
   <script>
     // Avoid stale Flutter web builds caused by Service Worker + CacheStorage.
     // This keeps deployments updating reliably (at the cost of disabling PWA/offline caching).
@@ -46,6 +49,16 @@
         .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
         .catch(function (_) {});
     }
+
+    // Give a visible hint on devices where Flutter fails to start.
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('boot-status');
+      if (el) el.remove();
+    });
+    setTimeout(function () {
+      var el = document.getElementById('boot-status');
+      if (el) el.textContent = 'Start dauert ungewöhnlich lange… (bitte Seite neu laden)';
+    }, 8000);
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

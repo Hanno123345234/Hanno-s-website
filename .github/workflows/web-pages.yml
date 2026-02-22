@@ -41,7 +41,7 @@ jobs:
         env:
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          flutter build web --release --base-href "/${REPO_NAME}/"
+          flutter build web --release --web-renderer html --dart-define=FLUTTER_WEB_USE_SKIA=false --base-href "/${REPO_NAME}/"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
