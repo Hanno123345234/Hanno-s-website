@@ -6,12 +6,16 @@ const adminPanel = document.getElementById("adminPanel");
 const adminKeyInput = document.getElementById("adminKeyInput");
 const refreshBtn = document.getElementById("refreshAdminBtn");
 const accessBox = document.getElementById("accessBox");
+const commandBox = document.getElementById("commandBox");
 const summaryList = document.getElementById("summaryList");
 const memberList = document.getElementById("memberList");
 const banList = document.getElementById("banList");
 const muteList = document.getElementById("muteList");
 const matchList = document.getElementById("matchList");
 const grantInfo = document.getElementById("grantInfo");
+const commandInfo = document.getElementById("commandInfo");
+const moderationList = document.getElementById("moderationList");
+const commandInput = document.getElementById("commandInput");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 
@@ -22,6 +26,10 @@ function setInfo(text) {
 function setLoggedIn(isLoggedIn) {
   adminPanel.classList.toggle("hidden", !isLoggedIn);
   refreshBtn.classList.toggle("hidden", !isLoggedIn);
+}
+
+function setCommandInfo(text) {
+  commandInfo.textContent = text;
 }
 
 async function adminFetch(url, options = {}) {
@@ -66,7 +74,9 @@ function renderSummary(summary = {}, access = {}) {
     `Aktive Räume: ${summary.activeRooms || 0}`,
     `Aktive Queue: ${summary.activeQueue || 0}`,
     `Online Fingerprints: ${summary.activeOnlineFingerprints || 0}`,
-    `Match-Historie: ${summary.totalMatchesTracked || 0}`
+    `Match-Historie: ${summary.totalMatchesTracked || 0}`,
+    `Moderation Actions: ${summary.moderationActions || 0}`,
+    `Join Logs: ${summary.joinLogCount || 0}`
   ];
   rows.forEach((text) => {
     const li = document.createElement("li");
@@ -149,6 +159,113 @@ function renderMatches(matches = []) {
   });
 }
 
+function renderModerationLogs(entries = []) {
+  moderationList.innerHTML = "";
+  if (!entries.length) {
+    const li = document.createElement("li");
+    li.textContent = "Noch keine Moderation-Logs.";
+    moderationList.appendChild(li);
+    return;
+  }
+  entries.slice(0, 80).forEach((entry) => {
+    const li = document.createElement("li");
+    const at = entry.at ? new Date(entry.at).toLocaleString("de-DE") : "-";
+    const duration = entry.permanent ? "permanent" : (entry.minutes ? `${entry.minutes}m` : "-");
+    li.textContent = `${at} • ${entry.action} • ${entry.fingerprint} • ${duration} • ${entry.reason || "-"} • by ${entry.by || "-"}`;
+    moderationList.appendChild(li);
+  });
+}
+
+async function loadModerationLogs() {
+  const response = await adminFetch("/api/admin/moderation-logs");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Moderation-Logs konnten nicht geladen werden");
+  }
+  renderModerationLogs(data.logs || []);
+  return data.logs || [];
+}
+
+function parseDurationToken(token) {
+  if (!token) return NaN;
+  const normalized = String(token).trim().toLowerCase();
+  if (/^\d+$/.test(normalized)) {
+    return Number(normalized);
+  }
+  const match = normalized.match(/^(\d+)(m|min|h|d)$/);
+  if (!match) return NaN;
+  const value = Number(match[1]);
+  const unit = match[2];
+  if (unit === "m" || unit === "min") return value;
+  if (unit === "h") return value * 60;
+  if (unit === "d") return value * 1440;
+  return NaN;
+}
+
+async function runAdminCommand(raw) {
+  const input = String(raw || "").trim();
+  if (!input.startsWith("*")) {
+    throw new Error("Command muss mit * starten");
+  }
+  const tokens = input.split(/\s+/).filter(Boolean);
+  const command = (tokens[0] || "").toLowerCase();
+
+  if (command === "*md") {
+    const logs = await loadModerationLogs();
+    return `Moderation-Logs geladen (${logs.length})`;
+  }
+
+  if (command === "*unban") {
+    const fingerprint = tokens[1];
+    if (!fingerprint) throw new Error("Nutze: *unban <fingerprint>");
+    await postAdmin("/api/admin/unban", { fingerprint });
+    return `Unban gesetzt für ${fingerprint}`;
+  }
+
+  if (command === "*unmute") {
+    const fingerprint = tokens[1];
+    if (!fingerprint) throw new Error("Nutze: *unmute <fingerprint>");
+    await postAdmin("/api/admin/unmute", { fingerprint });
+    return `Unmute gesetzt für ${fingerprint}`;
+  }
+
+  if (command === "*ban") {
+    const fingerprint = tokens[1];
+    if (!fingerprint) throw new Error("Nutze: *ban <fingerprint> <reason...> [zeit]");
+    const tail = tokens.slice(2);
+    let minutes = null;
+    if (tail.length) {
+      const maybeDuration = parseDurationToken(tail[tail.length - 1]);
+      if (Number.isFinite(maybeDuration) && maybeDuration > 0) {
+        minutes = maybeDuration;
+        tail.pop();
+      }
+    }
+    const reason = tail.join(" ").trim() || "admin_command_ban";
+    await postAdmin("/api/admin/ban", {
+      fingerprint,
+      reason,
+      ...(minutes ? { minutes } : {})
+    });
+    return minutes
+      ? `Ban gesetzt für ${fingerprint} (${minutes}m)`
+      : `Permanenter Ban gesetzt für ${fingerprint}`;
+  }
+
+  if (command === "*mute") {
+    const fingerprint = tokens[1];
+    const minutes = parseDurationToken(tokens[2]);
+    if (!fingerprint || !Number.isFinite(minutes) || minutes <= 0) {
+      throw new Error("Nutze: *mute <fingerprint> <zeit> [reason...]");
+    }
+    const reason = tokens.slice(3).join(" ").trim() || "admin_command_mute";
+    await postAdmin("/api/admin/mute", { fingerprint, minutes, reason });
+    return `Mute gesetzt für ${fingerprint} (${minutes}m)`;
+  }
+
+  throw new Error("Unbekannter Command. Erlaubt: *ban *unban *mute *unmute *md");
+}
+
 async function loadAdmin() {
   setInfo("Lade Admin-Daten…");
   try {
@@ -163,8 +280,11 @@ async function loadAdmin() {
     renderBanMuteList(banList, data.bans || [], "Bans");
     renderBanMuteList(muteList, data.mutes || [], "Mutes");
     renderMatches(data.recentMatches || []);
+    renderModerationLogs([]);
+    await loadModerationLogs();
 
     accessBox.classList.toggle("hidden", !data.access?.canGrant);
+    commandBox.classList.toggle("hidden", !data.access?.canEdit);
     setInfo(`Aktualisiert (${data.access?.role || "viewer"})`);
     setLoggedIn(true);
   } catch (error) {
@@ -206,6 +326,23 @@ document.getElementById("grantAccessBtn").addEventListener("click", async () => 
   } catch (error) {
     grantInfo.textContent = error.message || "Konnte Access nicht erstellen";
   }
+});
+
+document.getElementById("runCommandBtn").addEventListener("click", async () => {
+  try {
+    setCommandInfo("Command läuft…");
+    const message = await runAdminCommand(commandInput.value);
+    setCommandInfo(message);
+    await loadAdmin();
+  } catch (error) {
+    setCommandInfo(error.message || "Command fehlgeschlagen");
+  }
+});
+
+commandInput.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  document.getElementById("runCommandBtn").click();
 });
 
 if (adminKey) {

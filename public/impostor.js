@@ -4,7 +4,8 @@ const screens = {
   impostors: document.getElementById("screenImpostors"),
   categories: document.getElementById("screenCategories"),
   reveal: document.getElementById("screenReveal"),
-  done: document.getElementById("screenDone")
+  discussion: document.getElementById("screenDiscussion"),
+  result: document.getElementById("screenResult")
 };
 
 const state = {
@@ -13,17 +14,63 @@ const state = {
   hintsEnabled: true,
   timerEnabled: false,
   categories: [
-    { id: "trends", emoji: "🚀", name: "Trends", desc: "Hypes, Styles und Themen von heute.", words: ["Chill Guy", "AI", "Fortnite", "TikTok", "Rizz"] },
-    { id: "alltag", emoji: "⏰", name: "Alltag", desc: "Dinge aus Schule, Zuhause und Alltag.", words: ["Rucksack", "Zahnbürste", "Mathe", "Kopfhörer", "Bäckerei"] },
-    { id: "filme", emoji: "🎬", name: "Filme & Serien", desc: "Blockbuster und Kulttitel.", words: ["Avatar", "Batman", "Wednesday", "Naruto", "Netflix"] },
-    { id: "games", emoji: "🎮", name: "Gaming", desc: "Games, Maps und bekannte Begriffe.", words: ["Minecraft", "Roblox", "Valorant", "FIFA", "Controller"] },
-    { id: "welt", emoji: "🌍", name: "Rund um die Welt", desc: "Länder, Orte, Reisen.", words: ["Paris", "Sahara", "Tokyo", "Alpen", "Nil"] }
+    {
+      id: "trends",
+      emoji: "🚀",
+      name: "Trends",
+      desc: "Memes, Internet-Phänomene und moderne Kultur.",
+      words: ["Algorithmus-Bubble", "Parasoziale Beziehung", "Creator Economy", "Shadowban", "FOMO", "Doomscrolling", "Microtrend", "Cancel Culture", "Prompt Engineering", "Deepfake"]
+    },
+    {
+      id: "alltag",
+      emoji: "⏰",
+      name: "Alltag",
+      desc: "Komplexere Begriffe aus Schule, Leben und Routinen.",
+      words: ["Prokrastination", "Mikromanagement", "Priorisierung", "Zeitmanagement", "Selbstdisziplin", "Kognitive Verzerrung", "Multitasking", "Reizüberflutung", "Routinenbruch", "Kontextwechsel"]
+    },
+    {
+      id: "filme",
+      emoji: "🎬",
+      name: "Filme & Serien",
+      desc: "Begriffe aus Storytelling und Filmwelt.",
+      words: ["Plottwist", "Cliffhanger", "Charakterbogen", "Antagonist", "Foreshadowing", "Suspense", "Coming-of-Age", "Cold Open", "Mockumentary", "Retcon"]
+    },
+    {
+      id: "games",
+      emoji: "🎮",
+      name: "Gaming",
+      desc: "Strategie- und E-Sport-nahe Begriffe.",
+      words: ["Meta", "Hitbox", "Skill Ceiling", "Map Control", "Cooldown-Management", "Snowball-Effekt", "Nerf", "Buff", "Crosshair Placement", "Mindgame"]
+    },
+    {
+      id: "welt",
+      emoji: "🌍",
+      name: "Rund um die Welt",
+      desc: "Geografie, Politik und globale Begriffe.",
+      words: ["Geopolitik", "Demografie", "Infrastruktur", "Urbanisierung", "Rohstoffabhängigkeit", "Handelsroute", "Klimazone", "Topografie", "Migration", "Wasserknappheit"]
+    }
   ],
   selectedCategoryIds: new Set(["trends", "alltag", "welt"]),
   roundCards: [],
   revealIndex: 0,
-  revealed: false
+  revealed: false,
+  discussionSeconds: 5 * 60,
+  discussionLeft: 5 * 60,
+  discussionTimerId: null,
+  moderation: {
+    banned: false,
+    banUntil: null,
+    banReason: null,
+    banPermanent: false,
+    muted: false,
+    muteUntil: null,
+    muteReason: null
+  }
 };
+
+const FINGERPRINT_KEY = "among_fingerprint_v1";
+const MODERATION_POLL_MS = 15000;
+let moderationTimer = null;
 
 const playerCountLabel = document.getElementById("playerCountLabel");
 const impostorCountLabel = document.getElementById("impostorCountLabel");
@@ -42,6 +89,202 @@ const revealRoleLabel = document.getElementById("revealRoleLabel");
 const revealWord = document.getElementById("revealWord");
 const revealBtn = document.getElementById("revealBtn");
 const nextPlayerBtn = document.getElementById("nextPlayerBtn");
+const moderationBanner = document.getElementById("impostorBanBanner");
+const discussionTitle = document.getElementById("discussionTitle");
+const discussionTimerText = document.getElementById("discussionTimerText");
+const resultTitle = document.getElementById("resultTitle");
+
+function getFingerprint() {
+  let value = window.localStorage.getItem(FINGERPRINT_KEY);
+  if (value) return value;
+  value = `fp_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+  window.localStorage.setItem(FINGERPRINT_KEY, value);
+  return value;
+}
+
+function formatUntil(until) {
+  if (!until) return "-";
+  const numeric = Number(until);
+  const date = Number.isFinite(numeric) ? new Date(numeric) : new Date(until);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("de-DE");
+}
+
+function isBanned() {
+  return !!state.moderation?.banned;
+}
+
+function applyInteractionLock() {
+  const banned = isBanned();
+  const controls = document.querySelectorAll("button, input, select, textarea");
+
+  controls.forEach((element) => {
+    if (banned) {
+      if (!element.dataset.banSnapshotDisabled) {
+        element.dataset.banSnapshotDisabled = element.disabled ? "1" : "0";
+      }
+      element.disabled = true;
+      return;
+    }
+
+    if (element.dataset.banSnapshotDisabled) {
+      element.disabled = element.dataset.banSnapshotDisabled === "1";
+      delete element.dataset.banSnapshotDisabled;
+    }
+  });
+}
+
+function renderModerationBanner() {
+  const status = state.moderation || {};
+  moderationBanner.classList.remove("muted");
+
+  if (status.banned) {
+    const untilText = status.banPermanent ? "permanent" : formatUntil(status.banUntil);
+    moderationBanner.textContent = `⛔ Du bist gebannt bis ${untilText}. Grund: ${status.banReason || "admin_ban"}`;
+    moderationBanner.classList.remove("hidden");
+    applyInteractionLock();
+    return;
+  }
+
+  if (status.muted) {
+    moderationBanner.classList.add("muted");
+    moderationBanner.textContent = `🔇 Du bist gemutet bis ${formatUntil(status.muteUntil)}. Grund: ${status.muteReason || "admin_mute"}`;
+    moderationBanner.classList.remove("hidden");
+    applyInteractionLock();
+    return;
+  }
+
+  moderationBanner.classList.add("hidden");
+  moderationBanner.textContent = "";
+  applyInteractionLock();
+}
+
+function applyModerationStatus(payload = {}) {
+  state.moderation = {
+    ...state.moderation,
+    banned: !!payload.banned,
+    banUntil: payload.banUntil || null,
+    banReason: payload.banReason || null,
+    banPermanent: !!payload.banPermanent,
+    muted: !!payload.muted,
+    muteUntil: payload.muteUntil || null,
+    muteReason: payload.muteReason || null
+  };
+  renderModerationBanner();
+}
+
+function formatSeconds(totalSeconds) {
+  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
+  const seconds = Math.max(0, totalSeconds) % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function stopDiscussionTimer() {
+  if (state.discussionTimerId) {
+    window.clearInterval(state.discussionTimerId);
+    state.discussionTimerId = null;
+  }
+}
+
+function renderDiscussion() {
+  const starter = state.roundCards[0]?.name || "Spieler";
+  discussionTitle.textContent = `${starter} beginnt!`;
+  if (!state.timerEnabled) {
+    discussionTimerText.textContent = "Für dieses Spiel gibt es keinen Timer. Deckt den Impostor auf, sobald ihr euch einig seid.";
+    return;
+  }
+  discussionTimerText.textContent = `Diskussionszeit läuft: ${formatSeconds(state.discussionLeft)}`;
+}
+
+function startDiscussionPhase() {
+  stopDiscussionTimer();
+  state.discussionLeft = state.discussionSeconds;
+  showScreen("discussion");
+  renderDiscussion();
+
+  if (!state.timerEnabled) {
+    applyInteractionLock();
+    return;
+  }
+
+  state.discussionTimerId = window.setInterval(() => {
+    if (state.discussionLeft <= 0) {
+      stopDiscussionTimer();
+      return;
+    }
+    state.discussionLeft -= 1;
+    renderDiscussion();
+  }, 1000);
+
+  applyInteractionLock();
+}
+
+function showResultPhase() {
+  stopDiscussionTimer();
+  const impostorNames = state.roundCards.filter((entry) => entry.isImpostor).map((entry) => entry.name);
+  if (impostorNames.length <= 1) {
+    resultTitle.textContent = `Der Impostor ist ${impostorNames[0] || "Unbekannt"}`;
+  } else {
+    resultTitle.textContent = `Die Impostor sind ${impostorNames.join(", ")}`;
+  }
+  showScreen("result");
+  applyInteractionLock();
+}
+
+async function fetchModerationStatus() {
+  const fingerprint = getFingerprint();
+  const response = await fetch(`/api/moderation/status?fingerprint=${encodeURIComponent(fingerprint)}`, {
+    cache: "no-store"
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Moderation status failed");
+  }
+  applyModerationStatus(data);
+}
+
+async function pingModerationOpen() {
+  const fingerprint = getFingerprint();
+  const response = await fetch("/api/moderation/ping", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      fingerprint,
+      name: state.players[0] || "Player",
+      mode: "impostor"
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Moderation ping failed");
+  }
+  if (data.status) {
+    applyModerationStatus(data.status);
+  }
+}
+
+async function startModerationWatcher() {
+  try {
+    await pingModerationOpen();
+  } catch (error) {
+    console.warn(error.message || "Moderation ping failed");
+  }
+
+  try {
+    await fetchModerationStatus();
+  } catch (error) {
+    console.warn(error.message || "Moderation status failed");
+  }
+
+  if (moderationTimer) {
+    window.clearInterval(moderationTimer);
+  }
+  moderationTimer = window.setInterval(() => {
+    fetchModerationStatus().catch(() => {});
+  }, MODERATION_POLL_MS);
+}
 
 function showScreen(key) {
   Object.values(screens).forEach((screen) => screen.classList.remove("active"));
@@ -80,6 +323,7 @@ function renderMain() {
     .filter((category) => state.selectedCategoryIds.has(category.id))
     .map((category) => category.name);
   categoryPreview.textContent = selectedNames.slice(0, 2).join(", ") + (selectedNames.length > 2 ? "…" : "");
+  applyInteractionLock();
 }
 
 function renderPlayers() {
@@ -124,6 +368,7 @@ function renderPlayers() {
     li.appendChild(actions);
     playerList.appendChild(li);
   });
+  applyInteractionLock();
 }
 
 function renderImpostorOptions() {
@@ -142,6 +387,7 @@ function renderImpostorOptions() {
     });
     impostorOptionList.appendChild(btn);
   }
+  applyInteractionLock();
 }
 
 function renderCategories() {
@@ -186,6 +432,7 @@ function renderCategories() {
 
     categoryList.appendChild(card);
   });
+  applyInteractionLock();
 }
 
 function buildRound() {
@@ -223,7 +470,7 @@ function buildRound() {
 function renderReveal() {
   const card = state.roundCards[state.revealIndex];
   if (!card) {
-    showScreen("done");
+    startDiscussionPhase();
     return;
   }
 
@@ -234,9 +481,11 @@ function renderReveal() {
   revealBtn.disabled = state.revealed;
   nextPlayerBtn.disabled = !state.revealed;
   nextPlayerBtn.textContent = state.revealIndex >= state.roundCards.length - 1 ? "Runde fertig" : "Weitergeben";
+  applyInteractionLock();
 }
 
 function bootstrap() {
+  startModerationWatcher();
   renderMain();
   renderPlayers();
   renderImpostorOptions();
@@ -294,17 +543,23 @@ function bootstrap() {
     state.revealed = false;
     state.revealIndex += 1;
     if (state.revealIndex >= state.roundCards.length) {
-      showScreen("done");
+      startDiscussionPhase();
       return;
     }
     renderReveal();
   });
 
+  document.getElementById("revealImpostorBtn").addEventListener("click", () => {
+    showResultPhase();
+  });
+
   document.getElementById("newRoundBtn").addEventListener("click", () => {
+    stopDiscussionTimer();
     showScreen("main");
     state.roundCards = [];
     state.revealIndex = 0;
     state.revealed = false;
+    state.discussionLeft = state.discussionSeconds;
     renderMain();
   });
 }

@@ -124,7 +124,9 @@ function adminPublicMemberView() {
       lastRoomCode: profile.lastRoomCode || null,
       mutedUntil: profile.adminMutedUntil || null,
       mutedReason: profile.adminMutedReason || null,
-      bannedUntil: amongSoftBans.get(fingerprint)?.until || null,
+      bannedUntil: getAmongSoftBanEntry(fingerprint)?.until || null,
+      bannedPermanent: !!getAmongSoftBanEntry(fingerprint)?.permanent,
+      bannedReason: getAmongSoftBanEntry(fingerprint)?.reason || null,
       online: onlineSet.has(fingerprint)
     }))
     .sort((first, second) => {
@@ -133,6 +135,79 @@ function adminPublicMemberView() {
       return secondTime - firstTime;
     })
     .slice(0, 400);
+}
+
+function pushLimited(list, entry, maxSize = 800) {
+  list.push(entry);
+  if (list.length > maxSize) {
+    list.splice(0, list.length - maxSize);
+  }
+}
+
+function getAmongSoftBanEntry(fingerprint) {
+  if (!fingerprint) return null;
+  const entry = amongSoftBans.get(fingerprint);
+  if (!entry) return null;
+  if (!entry.permanent && entry.until && entry.until <= Date.now()) {
+    amongSoftBans.delete(fingerprint);
+    return null;
+  }
+  return entry;
+}
+
+function logModerationAction(action, payload = {}) {
+  pushLimited(
+    amongModerationLogs,
+    {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      at: nowIso(),
+      action,
+      ...payload
+    },
+    1200
+  );
+}
+
+function logJoinAction(action, payload = {}) {
+  pushLimited(
+    amongJoinLogs,
+    {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      at: nowIso(),
+      action,
+      ...payload
+    },
+    1500
+  );
+}
+
+function emitAmongAdminStatus(socket, fingerprint) {
+  const fp = normalizeFingerprint(fingerprint || socket?.data?.amongFingerprint);
+  const ban = getAmongSoftBanEntry(fp);
+  const mute = getAmongAdminMute(fp);
+  io.to(socket.id).emit("among_admin_status", {
+    fingerprint: fp,
+    banned: !!ban,
+    banUntil: ban?.until || null,
+    banReason: ban?.reason || null,
+    banPermanent: !!ban?.permanent,
+    muted: !!mute,
+    muteUntil: mute?.until || null,
+    muteReason: mute?.reason || null
+  });
+}
+
+function blockIfBanned(socket, fingerprintOverride = null) {
+  const fp = normalizeFingerprint(fingerprintOverride || socket?.data?.amongFingerprint);
+  const ban = getAmongSoftBanEntry(fp);
+  if (!ban) return false;
+
+  emitAmongAdminStatus(socket, fp);
+  const untilText = ban.permanent || !ban.until
+    ? "permanent"
+    : new Date(ban.until).toLocaleString("de-DE");
+  io.to(socket.id).emit("among_error", `Du bist gebannt für ${untilText}. Grund: ${ban.reason || "admin_ban"}`);
+  return true;
 }
 
 app.get("/api/stats", (req, res) => {
@@ -162,6 +237,64 @@ app.get("/api/stats", (req, res) => {
   });
 });
 
+app.get("/api/moderation/status", (req, res) => {
+  const fingerprint = normalizeFingerprint(req.query?.fingerprint);
+  if (!fingerprint) {
+    res.status(400).json({ error: "fingerprint is required." });
+    return;
+  }
+
+  const ban = getAmongSoftBanEntry(fingerprint);
+  const mute = getAmongAdminMute(fingerprint);
+
+  res.json({
+    ok: true,
+    fingerprint,
+    banned: !!ban,
+    banUntil: ban?.until || null,
+    banReason: ban?.reason || null,
+    banPermanent: !!ban?.permanent,
+    muted: !!mute,
+    muteUntil: mute?.until || null,
+    muteReason: mute?.reason || null
+  });
+});
+
+app.post("/api/moderation/ping", (req, res) => {
+  const fingerprint = normalizeFingerprint(req.body?.fingerprint);
+  const name = validName(req.body?.name) || "Player";
+  const mode = String(req.body?.mode || "unknown").trim().slice(0, 30) || "unknown";
+
+  if (!fingerprint) {
+    res.status(400).json({ error: "fingerprint is required." });
+    return;
+  }
+
+  touchAmongProfile(fingerprint, name, null);
+  logJoinAction("open_site", {
+    fingerprint,
+    name,
+    mode,
+    ip: req.ip || null
+  });
+
+  const ban = getAmongSoftBanEntry(fingerprint);
+  const mute = getAmongAdminMute(fingerprint);
+  res.json({
+    ok: true,
+    status: {
+      fingerprint,
+      banned: !!ban,
+      banUntil: ban?.until || null,
+      banReason: ban?.reason || null,
+      banPermanent: !!ban?.permanent,
+      muted: !!mute,
+      muteUntil: mute?.until || null,
+      muteReason: mute?.reason || null
+    }
+  });
+});
+
 app.get("/api/admin", (req, res) => {
   const auth = requireAdminRole(req, res, "viewer");
   if (!auth) return;
@@ -169,7 +302,8 @@ app.get("/api/admin", (req, res) => {
   const bans = [...amongSoftBans.entries()].map(([fingerprint, entry]) => ({
     fingerprint,
     until: entry.until,
-    reason: entry.reason
+    reason: entry.reason,
+    permanent: !!entry.permanent
   }));
 
   const mutes = [...amongAdminMutes.entries()].map(([fingerprint, entry]) => ({
@@ -205,7 +339,9 @@ app.get("/api/admin", (req, res) => {
       activeRooms: amongRooms.size,
       activeQueue: amongQueue.casual.length + amongQueue.ranked.length,
       activeOnlineFingerprints: amongOnlineByFingerprint.size,
-      totalMatchesTracked: amongMatchHistory.length
+      totalMatchesTracked: amongMatchHistory.length,
+      moderationActions: amongModerationLogs.length,
+      joinLogCount: amongJoinLogs.length
     },
     members: adminPublicMemberView(),
     recentMatches: amongMatchHistory.slice(-120).reverse(),
@@ -216,13 +352,32 @@ app.get("/api/admin", (req, res) => {
   });
 });
 
+app.get("/api/admin/join-logs", (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+  res.json({
+    ok: true,
+    logs: amongJoinLogs.slice(-400).reverse()
+  });
+});
+
+app.get("/api/admin/moderation-logs", (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+  res.json({
+    ok: true,
+    logs: amongModerationLogs.slice(-500).reverse()
+  });
+});
+
 app.post("/api/admin/ban", (req, res) => {
   const auth = requireAdminRole(req, res, "editor");
   if (!auth) return;
 
   const fingerprint = normalizeFingerprint(req.body?.fingerprint);
   const minutesRaw = Number(req.body?.minutes);
-  const minutes = Number.isFinite(minutesRaw) ? Math.max(1, Math.min(60 * 24 * 30, Math.round(minutesRaw))) : 60;
+  const permanent = req.body?.permanent === true || !Number.isFinite(minutesRaw);
+  const minutes = permanent ? null : Math.max(1, Math.min(60 * 24 * 30, Math.round(minutesRaw)));
   const reason = String(req.body?.reason || "admin_ban").trim().slice(0, 140) || "admin_ban";
 
   if (!fingerprint) {
@@ -231,16 +386,25 @@ app.post("/api/admin/ban", (req, res) => {
   }
 
   amongSoftBans.set(fingerprint, {
-    until: Date.now() + minutes * 60 * 1000,
-    reason
+    until: permanent ? null : Date.now() + minutes * 60 * 1000,
+    reason,
+    permanent
+  });
+
+  logModerationAction("ban", {
+    fingerprint,
+    reason,
+    until: permanent ? null : new Date(Date.now() + minutes * 60 * 1000).toISOString(),
+    permanent,
+    by: auth.source || "admin"
   });
 
   const onlineSockets = amongOnlineByFingerprint.get(fingerprint);
   if (onlineSockets) {
     [...onlineSockets].forEach((socketId) => {
-      io.to(socketId).emit("among_error", "You were banned by admin.");
       const liveSocket = io.sockets.sockets.get(socketId);
       if (!liveSocket) return;
+      emitAmongAdminStatus(liveSocket, fingerprint);
       const roomCode = liveSocket.data.amongRoomCode;
       if (!roomCode) return;
       liveSocket.leave(roomCode);
@@ -248,7 +412,7 @@ app.post("/api/admin/ban", (req, res) => {
     });
   }
 
-  res.json({ ok: true, fingerprint, minutes, reason });
+  res.json({ ok: true, fingerprint, minutes, reason, permanent });
 });
 
 app.post("/api/admin/unban", (req, res) => {
@@ -262,6 +426,18 @@ app.post("/api/admin/unban", (req, res) => {
   }
 
   amongSoftBans.delete(fingerprint);
+  logModerationAction("unban", {
+    fingerprint,
+    by: auth.source || "admin"
+  });
+  const onlineSockets = amongOnlineByFingerprint.get(fingerprint);
+  if (onlineSockets) {
+    [...onlineSockets].forEach((socketId) => {
+      const liveSocket = io.sockets.sockets.get(socketId);
+      if (!liveSocket) return;
+      emitAmongAdminStatus(liveSocket, fingerprint);
+    });
+  }
   res.json({ ok: true, fingerprint });
 });
 
@@ -289,14 +465,19 @@ app.post("/api/admin/mute", (req, res) => {
   profile.adminMutedUntil = new Date(until).toISOString();
   profile.adminMutedReason = reason;
 
+  logModerationAction("mute", {
+    fingerprint,
+    reason,
+    until: new Date(until).toISOString(),
+    by: auth.source || "admin"
+  });
+
   const onlineSockets = amongOnlineByFingerprint.get(fingerprint);
   if (onlineSockets) {
     [...onlineSockets].forEach((socketId) => {
-      io.to(socketId).emit("among_muted_by_admin", {
-        muted: true,
-        until,
-        reason
-      });
+      const liveSocket = io.sockets.sockets.get(socketId);
+      if (!liveSocket) return;
+      emitAmongAdminStatus(liveSocket, fingerprint);
     });
   }
 
@@ -320,12 +501,17 @@ app.post("/api/admin/unmute", (req, res) => {
     profile.adminMutedReason = null;
   }
 
+  logModerationAction("unmute", {
+    fingerprint,
+    by: auth.source || "admin"
+  });
+
   const onlineSockets = amongOnlineByFingerprint.get(fingerprint);
   if (onlineSockets) {
     [...onlineSockets].forEach((socketId) => {
-      io.to(socketId).emit("among_muted_by_admin", {
-        muted: false
-      });
+      const liveSocket = io.sockets.sockets.get(socketId);
+      if (!liveSocket) return;
+      emitAmongAdminStatus(liveSocket, fingerprint);
     });
   }
 
@@ -392,6 +578,8 @@ const amongProfiles = new Map();
 const amongSoftBans = new Map();
 const amongAdminMutes = new Map();
 const amongMatchHistory = [];
+const amongJoinLogs = [];
+const amongModerationLogs = [];
 const sharedPromptPacks = new Map();
 const amongOnlineByFingerprint = new Map();
 const adminAccessTokens = parseAdminBootstrapCodes();
@@ -1299,14 +1487,7 @@ function buildThemePrompts(theme) {
 }
 
 function isAmongSoftBanned(fingerprint) {
-  if (!fingerprint) return false;
-  const entry = amongSoftBans.get(fingerprint);
-  if (!entry) return false;
-  if (entry.until <= Date.now()) {
-    amongSoftBans.delete(fingerprint);
-    return false;
-  }
-  return true;
+  return !!getAmongSoftBanEntry(fingerprint);
 }
 
 function getAmongAdminMute(fingerprint) {
@@ -1337,7 +1518,14 @@ function bumpAmongRisk(socket, reason, points = 1) {
   if (profile.risk >= 12) {
     amongSoftBans.set(fingerprint, {
       until: Date.now() + 15 * 60 * 1000,
-      reason: "Suspicious behavior"
+      reason: "Suspicious behavior",
+      permanent: false
+    });
+    logModerationAction("auto_soft_ban", {
+      fingerprint,
+      reason: "Suspicious behavior",
+      until: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      by: "anti-cheat"
     });
     profile.risk = 0;
     socket.emit("among_error", "Soft-ban active for 15 minutes (anti-cheat).");
@@ -1856,6 +2044,21 @@ function amongCanRelayVoice(fromSocket, targetId) {
 io.on("connection", (socket) => {
   socket.emit("among_queue_update", amongQueueView());
 
+  socket.on("among_track_open", ({ fingerprint, name }) => {
+    const fp = normalizeFingerprint(fingerprint);
+    const safeName = validName(name) || "Player";
+    socket.data.amongFingerprint = fp;
+    socket.data.amongName = safeName;
+    touchAmongProfile(fp, safeName, null);
+    logJoinAction("open_site", {
+      fingerprint: fp,
+      name: safeName,
+      socketId: socket.id,
+      ip: socket.handshake.address || null
+    });
+    emitAmongAdminStatus(socket, fp);
+  });
+
   socket.on("among_create_room", ({ name, fingerprint, queueType = "casual" }) => {
     if (isRateLimited(socket, "among_create_room", 900, "among_create_room")) {
       socket.emit("among_error", "Please wait a moment.");
@@ -1868,8 +2071,7 @@ io.on("connection", (socket) => {
       socket.emit("among_error", "Please enter a name.");
       return;
     }
-    if (isAmongSoftBanned(fp)) {
-      socket.emit("among_error", "Soft-ban active. Try again later.");
+    if (blockIfBanned(socket, fp)) {
       return;
     }
 
@@ -1915,6 +2117,14 @@ io.on("connection", (socket) => {
     socket.data.amongFingerprint = fp;
     socket.data.amongName = trimmedName;
     touchAmongProfile(fp, trimmedName, code);
+    logJoinAction("create_room", {
+      fingerprint: fp,
+      name: trimmedName,
+      roomCode: code,
+      queueType: room.queueType,
+      socketId: socket.id,
+      ip: socket.handshake.address || null
+    });
     amongLog(room, `${trimmedName} created the room.`);
 
     socket.emit("among_joined", {
@@ -1924,6 +2134,7 @@ io.on("connection", (socket) => {
       queueType: room.queueType,
       profile: getAmongProfileView(room.players[0])
     });
+    emitAmongAdminStatus(socket, fp);
     amongBroadcast(code);
   });
 
@@ -1935,14 +2146,20 @@ io.on("connection", (socket) => {
       socket.emit("among_error", "Please enter a name.");
       return;
     }
-    if (isAmongSoftBanned(fp)) {
-      socket.emit("among_error", "Soft-ban active. Try again later.");
+    if (blockIfBanned(socket, fp)) {
       return;
     }
 
     socket.data.amongFingerprint = fp;
     socket.data.amongName = trimmedName;
     touchAmongProfile(fp, trimmedName, null);
+    logJoinAction("quick_play_queue", {
+      fingerprint: fp,
+      name: trimmedName,
+      queueType: normalizedQueue,
+      socketId: socket.id,
+      ip: socket.handshake.address || null
+    });
     removeFromAmongQueue(socket.id);
     amongQueue[normalizedQueue].push({
       socketId: socket.id,
@@ -1963,8 +2180,7 @@ io.on("connection", (socket) => {
       socket.emit("among_error", "Name and party code are required.");
       return;
     }
-    if (isAmongSoftBanned(fp)) {
-      socket.emit("among_error", "Soft-ban active. Try again later.");
+    if (blockIfBanned(socket, fp)) {
       return;
     }
     const room = [...amongRooms.values()].find((entry) => entry.partyCode === normalizedPartyCode);
@@ -2002,6 +2218,14 @@ io.on("connection", (socket) => {
       abilityCooldowns: {}
     });
     touchAmongProfile(fp, trimmedName, room.code);
+    logJoinAction("join_party", {
+      fingerprint: fp,
+      name: trimmedName,
+      roomCode: room.code,
+      partyCode: normalizedPartyCode,
+      socketId: socket.id,
+      ip: socket.handshake.address || null
+    });
     amongLog(room, `${trimmedName} joined via party code.`);
     socket.emit("among_joined", {
       code: room.code,
@@ -2010,6 +2234,7 @@ io.on("connection", (socket) => {
       queueType: room.queueType,
       profile: getAmongProfileView(room.players[room.players.length - 1])
     });
+    emitAmongAdminStatus(socket, fp);
     amongBroadcast(room.code);
   });
 
@@ -2026,8 +2251,7 @@ io.on("connection", (socket) => {
       socket.emit("among_error", "Name and room code are required.");
       return;
     }
-    if (isAmongSoftBanned(fp)) {
-      socket.emit("among_error", "Soft-ban active. Try again later.");
+    if (blockIfBanned(socket, fp)) {
       return;
     }
 
@@ -2078,6 +2302,13 @@ io.on("connection", (socket) => {
     });
 
     touchAmongProfile(fp, trimmedName, normalizedCode);
+    logJoinAction("join_room", {
+      fingerprint: fp,
+      name: trimmedName,
+      roomCode: normalizedCode,
+      socketId: socket.id,
+      ip: socket.handshake.address || null
+    });
     amongLog(room, `${trimmedName} joined.`);
     socket.emit("among_joined", {
       code: normalizedCode,
@@ -2086,10 +2317,12 @@ io.on("connection", (socket) => {
       queueType: room.queueType,
       profile: getAmongProfileView(room.players[room.players.length - 1])
     });
+    emitAmongAdminStatus(socket, fp);
     amongBroadcast(normalizedCode);
   });
 
   socket.on("among_start_game", () => {
+    if (blockIfBanned(socket)) return;
     const roomCode = socket.data.amongRoomCode;
     const room = amongRooms.get(roomCode);
     if (!room) return;
@@ -2105,6 +2338,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_move", ({ to }) => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "playing") return;
     const player = room.players.find((entry) => entry.id === socket.id);
@@ -2121,6 +2355,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_start_sabotage", ({ type }) => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "playing") return;
     const player = room.players.find((entry) => entry.id === socket.id);
@@ -2160,6 +2395,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_fix_sabotage", () => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "playing" || !room.map.sabotage) return;
     const player = room.players.find((entry) => entry.id === socket.id);
@@ -2187,6 +2423,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_medic_shield", ({ targetId }) => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "playing") return;
     const medic = room.players.find((entry) => entry.id === socket.id);
@@ -2205,6 +2442,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_hacker_scan", () => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "playing") return;
     const hacker = room.players.find((entry) => entry.id === socket.id);
@@ -2224,6 +2462,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_trickster_decoy", () => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "playing") return;
     const trickster = room.players.find((entry) => entry.id === socket.id);
@@ -2241,6 +2480,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_complete_task", () => {
+    if (blockIfBanned(socket)) return;
     const roomCode = socket.data.amongRoomCode;
     const room = amongRooms.get(roomCode);
     if (!room || room.state !== "playing") return;
@@ -2259,6 +2499,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_kill", ({ targetId }) => {
+    if (blockIfBanned(socket)) return;
     const roomCode = socket.data.amongRoomCode;
     const room = amongRooms.get(roomCode);
     if (!room || room.state !== "playing") return;
@@ -2302,6 +2543,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_report_body", () => {
+    if (blockIfBanned(socket)) return;
     const roomCode = socket.data.amongRoomCode;
     const room = amongRooms.get(roomCode);
     if (!room || room.state !== "playing" || !room.deadBody) return;
@@ -2319,6 +2561,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_call_meeting", () => {
+    if (blockIfBanned(socket)) return;
     const roomCode = socket.data.amongRoomCode;
     const room = amongRooms.get(roomCode);
     if (!room || room.state !== "playing") return;
@@ -2337,6 +2580,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_vote", ({ targetId }) => {
+    if (blockIfBanned(socket)) return;
     const roomCode = socket.data.amongRoomCode;
     const room = amongRooms.get(roomCode);
     if (!room || room.state !== "meeting" || !room.meeting) return;
@@ -2366,6 +2610,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_rematch_ready", () => {
+    if (blockIfBanned(socket)) return;
     const room = amongRooms.get(socket.data.amongRoomCode);
     if (!room || room.state !== "ended") return;
     room.rematchReady.add(socket.id);
@@ -2383,6 +2628,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_chat_send", ({ text }) => {
+    if (blockIfBanned(socket)) return;
     if (isRateLimited(socket, "among_chat_send", 350, "among_chat_send")) {
       return;
     }
@@ -2419,6 +2665,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_voice_offer", ({ targetId, sdp }) => {
+    if (blockIfBanned(socket)) return;
     if (!amongCanRelayVoice(socket, targetId)) return;
     if (!sdp || typeof sdp.sdp !== "string" || typeof sdp.type !== "string") return;
     if (sdp.sdp.length > 20000) return;
@@ -2429,6 +2676,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_voice_answer", ({ targetId, sdp }) => {
+    if (blockIfBanned(socket)) return;
     if (!amongCanRelayVoice(socket, targetId)) return;
     if (!sdp || typeof sdp.sdp !== "string" || typeof sdp.type !== "string") return;
     if (sdp.sdp.length > 20000) return;
@@ -2439,6 +2687,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("among_voice_ice", ({ targetId, candidate }) => {
+    if (blockIfBanned(socket)) return;
     if (!amongCanRelayVoice(socket, targetId)) return;
     if (!candidate || typeof candidate.candidate !== "string") return;
     if (candidate.candidate.length > 1500) return;

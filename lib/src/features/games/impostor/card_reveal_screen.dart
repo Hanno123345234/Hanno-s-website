@@ -73,11 +73,20 @@ class _CardRevealScreenState extends State<CardRevealScreen> {
               children: [
                 const Spacer(),
                 Text(
-                  '${cards.first.playerName} beginnt!',
+                  'Diskussion läuft!',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.displaySmall?.copyWith(
                     color: cs.onPrimary,
                     fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Wenn ihr denkt, den Impostor gefunden zu haben, drückt auf den Button.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: cs.onPrimary.withAlpha(240),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -90,7 +99,7 @@ class _CardRevealScreenState extends State<CardRevealScreen> {
                     foregroundColor: cs.onSurface,
                     minimumSize: const Size(260, 56),
                   ),
-                  child: const Text('Impostor aufdecken'),
+                  child: const Text('Wir haben den Impostor gefunden'),
                 ),
                 const Spacer(),
                 Text(

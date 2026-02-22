@@ -34,9 +34,25 @@
             <ul id="summaryList"></ul>
           </div>
 
+          <div id="commandBox" class="admin-box hidden">
+            <h3>Channel Manager</h3>
+            <p class="subtitle">Befehle: *ban, *unban, *mute, *unmute, *md</p>
+            <label for="commandInput">Command</label>
+            <input id="commandInput" type="text" placeholder="*ban fp_xxx griefing 120" autocomplete="off" />
+            <div class="stack">
+              <button id="runCommandBtn">Command ausführen</button>
+            </div>
+            <p id="commandInfo" class="subtitle"></p>
+          </div>
+
           <div class="player-list-wrap">
             <h3>Mitglieder (Registriert & Aktivität)</h3>
             <ul id="memberList" class="player-list"></ul>
+          </div>
+
+          <div class="player-list-wrap">
+            <h3>Moderation Log</h3>
+            <ul id="moderationList" class="player-list"></ul>
           </div>
 
           <div class="player-list-wrap">

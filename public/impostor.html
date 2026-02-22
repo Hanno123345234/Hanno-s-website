@@ -10,6 +10,8 @@
   </head>
   <body>
     <main class="impostor-app">
+      <div id="impostorBanBanner" class="moderation-banner hidden"></div>
+
       <section id="screenMain" class="impostor-screen active">
         <header class="impostor-header">
           <a href="/" class="impostor-back">←</a>
@@ -93,14 +95,28 @@
         <button id="nextPlayerBtn" class="impostor-primary" disabled>Weitergeben</button>
       </section>
 
-      <section id="screenDone" class="impostor-screen">
+      <section id="screenDiscussion" class="impostor-screen">
         <header class="impostor-subheader">
           <button class="impostor-back-btn" data-back="main">←</button>
-          <h2>Runde bereit</h2>
+          <h2>Impostor</h2>
         </header>
         <div class="impostor-card">
-          <p>Alle Karten wurden verteilt. Viel Spaß!</p>
-          <button id="newRoundBtn" class="impostor-primary">Neue Runde</button>
+          <h3 id="discussionTitle" class="impostor-center-title">Diskussion läuft!</h3>
+          <p class="impostor-center-text">Wenn ihr denkt, den Impostor gefunden zu haben, drückt auf den Button.</p>
+          <div class="impostor-person-mark">👤❓</div>
+          <button id="revealImpostorBtn" class="impostor-primary">Impostor aufdecken</button>
+          <p id="discussionTimerText" class="impostor-center-text"></p>
+        </div>
+      </section>
+
+      <section id="screenResult" class="impostor-screen">
+        <header class="impostor-subheader">
+          <button class="impostor-back-btn" data-back="main">←</button>
+          <h2>Impostor</h2>
+        </header>
+        <div class="impostor-card impostor-result-card">
+          <h3 id="resultTitle" class="impostor-center-title">Der Impostor ist ...</h3>
+          <button id="newRoundBtn" class="impostor-primary">Neu starten</button>
         </div>
       </section>
     </main>
