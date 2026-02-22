@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../auth/auth_controller.dart';
 import '../../data/local_store.dart';
+import '../games/games_screen.dart';
 import '../help/help_screen.dart';
 import '../profile/profile_screen.dart';
 import '../profile/profile_hub_controller.dart';
@@ -226,6 +227,20 @@ class _DashboardTab extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.videogame_asset_outlined),
+              title: const Text('Spiele'),
+              subtitle: const Text('Impostor & mehr'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GamesScreen()),
+                );
+              },
             ),
           ),
           const SizedBox(height: 12),
