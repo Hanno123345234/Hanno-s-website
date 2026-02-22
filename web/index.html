@@ -34,11 +34,17 @@
 </head>
 <body>
   <script>
-    // Prevent white screens caused by stale Service Worker caches during development.
+    // Avoid stale Flutter web builds caused by Service Worker + CacheStorage.
+    // This keeps deployments updating reliably (at the cost of disabling PWA/offline caching).
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (r) { r.unregister(); });
-      });
+      navigator.serviceWorker.getRegistrations()
+        .then(function (regs) { regs.forEach(function (r) { r.unregister(); }); })
+        .catch(function (_) {});
+    }
+    if ('caches' in window) {
+      caches.keys()
+        .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+        .catch(function (_) {});
     }
   </script>
   <script src="flutter_bootstrap.js" async></script>
