@@ -6,7 +6,7 @@ const adminPanel = document.getElementById("adminPanel");
 const adminKeyInput = document.getElementById("adminKeyInput");
 const refreshBtn = document.getElementById("refreshAdminBtn");
 const accessBox = document.getElementById("accessBox");
-const commandBox = document.getElementById("commandBox");
+const commandBox = document.getElementById("commandSection");
 const summaryList = document.getElementById("summaryList");
 const memberList = document.getElementById("memberList");
 const banList = document.getElementById("banList");
@@ -16,6 +16,7 @@ const grantInfo = document.getElementById("grantInfo");
 const commandInfo = document.getElementById("commandInfo");
 const moderationList = document.getElementById("moderationList");
 const commandInput = document.getElementById("commandInput");
+const navButtons = document.querySelectorAll(".admin-nav-btn");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 
@@ -29,7 +30,20 @@ function setLoggedIn(isLoggedIn) {
 }
 
 function setCommandInfo(text) {
+  if (!commandInfo) return;
   commandInfo.textContent = text;
+}
+
+function wireAdminNavigation() {
+  navButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetId = String(button.getAttribute("data-target") || "").trim();
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 async function adminFetch(url, options = {}) {
@@ -352,3 +366,5 @@ if (adminKey) {
   setLoggedIn(false);
   setInfo("Bitte einloggen");
 }
+
+wireAdminNavigation();

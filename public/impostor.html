@@ -79,6 +79,15 @@
         </header>
         <div id="selectedCategories" class="impostor-chip-row"></div>
         <div id="categoryList" class="impostor-category-list"></div>
+        <div id="specyEditor" class="impostor-card">
+          <h3>spicy Wörter</h3>
+          <p class="impostor-note">Hier kannst du eigene Wörter für die Kategorie spicy eintragen.</p>
+          <div class="impostor-specy-row">
+            <input id="specyWordInput" type="text" maxlength="36" placeholder="Wort eingeben" autocomplete="off" />
+            <button id="addSpecyWordBtn" class="impostor-mini" type="button">＋</button>
+          </div>
+          <div id="specyWordList" class="impostor-chip-row"></div>
+        </div>
       </section>
 
       <section id="screenReveal" class="impostor-screen">
@@ -95,27 +104,13 @@
         <button id="nextPlayerBtn" class="impostor-primary" disabled>Weitergeben</button>
       </section>
 
-      <section id="screenDiscussion" class="impostor-screen">
+      <section id="screenDone" class="impostor-screen">
         <header class="impostor-subheader">
           <button class="impostor-back-btn" data-back="main">←</button>
-          <h2>Impostor</h2>
+          <h2>Runde bereit</h2>
         </header>
         <div class="impostor-card">
-          <h3 id="discussionTitle" class="impostor-center-title">Diskussion läuft!</h3>
-          <p class="impostor-center-text">Wenn ihr denkt, den Impostor gefunden zu haben, drückt auf den Button.</p>
-          <div class="impostor-person-mark">👤❓</div>
-          <button id="revealImpostorBtn" class="impostor-primary">Impostor aufdecken</button>
-          <p id="discussionTimerText" class="impostor-center-text"></p>
-        </div>
-      </section>
-
-      <section id="screenResult" class="impostor-screen">
-        <header class="impostor-subheader">
-          <button class="impostor-back-btn" data-back="main">←</button>
-          <h2>Impostor</h2>
-        </header>
-        <div class="impostor-card impostor-result-card">
-          <h3 id="resultTitle" class="impostor-center-title">Der Impostor ist ...</h3>
+          <p>Alle Karten wurden verteilt. Viel Spaß!</p>
           <button id="newRoundBtn" class="impostor-primary">Neu starten</button>
         </div>
       </section>

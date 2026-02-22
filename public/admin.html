@@ -17,6 +17,7 @@
         </div>
 
         <h1>Admin Dashboard</h1>
+        <p class="admin-page-subtitle">Manage Moderation, Logs und Aktivität</p>
         <div id="adminLoginBox" class="admin-box">
           <p class="subtitle">Zugriff nur mit Admin-Key</p>
           <label for="adminKeyInput">Admin Access Key</label>
@@ -29,12 +30,51 @@
         </div>
 
         <div id="adminPanel" class="hidden">
-          <div class="stats-box">
+          <div class="admin-shell">
+            <div class="admin-welcome">
+              <h3>Willkommen zurück</h3>
+              <p>Wähle unten einen Bereich aus.</p>
+            </div>
+            <div class="admin-grid">
+              <article class="admin-tile">
+                <h4>Scrims</h4>
+                <p>Letzte Matches und Runden</p>
+                <button class="admin-nav-btn" data-target="matchSection" type="button">Manage Scrims</button>
+              </article>
+              <article class="admin-tile">
+                <h4>Moderation</h4>
+                <p>Ban/Mute Commands ausführen</p>
+                <button class="admin-nav-btn" data-target="commandSection" type="button">Manage Moderation</button>
+              </article>
+              <article class="admin-tile">
+                <h4>Activity</h4>
+                <p>Mitglieder und Online-Status</p>
+                <button class="admin-nav-btn" data-target="memberSection" type="button">View Activity</button>
+              </article>
+              <article class="admin-tile">
+                <h4>Statistics</h4>
+                <p>Übersicht und Kennzahlen</p>
+                <button class="admin-nav-btn" data-target="summarySection" type="button">View Statistics</button>
+              </article>
+              <article class="admin-tile">
+                <h4>Logs</h4>
+                <p>Moderation-Aktionen prüfen</p>
+                <button class="admin-nav-btn" data-target="moderationSection" type="button">View Logs</button>
+              </article>
+              <article class="admin-tile">
+                <h4>Account Security</h4>
+                <p>Access-Codes verwalten</p>
+                <button class="admin-nav-btn" data-target="accessSection" type="button">Manage Sessions</button>
+              </article>
+            </div>
+          </div>
+
+          <div id="summarySection" class="stats-box">
             <h4>Übersicht</h4>
             <ul id="summaryList"></ul>
           </div>
 
-          <div id="commandBox" class="admin-box hidden">
+          <div id="commandSection" class="admin-box hidden">
             <h3>Channel Manager</h3>
             <p class="subtitle">Befehle: *ban, *unban, *mute, *unmute, *md</p>
             <label for="commandInput">Command</label>
@@ -45,12 +85,12 @@
             <p id="commandInfo" class="subtitle"></p>
           </div>
 
-          <div class="player-list-wrap">
+          <div id="memberSection" class="player-list-wrap">
             <h3>Mitglieder (Registriert & Aktivität)</h3>
             <ul id="memberList" class="player-list"></ul>
           </div>
 
-          <div class="player-list-wrap">
+          <div id="moderationSection" class="player-list-wrap">
             <h3>Moderation Log</h3>
             <ul id="moderationList" class="player-list"></ul>
           </div>
@@ -65,7 +105,7 @@
             <ul id="muteList" class="player-list"></ul>
           </div>
 
-          <div class="player-list-wrap">
+          <div id="matchSection" class="player-list-wrap">
             <h3>Zuletzt gespielte Matches</h3>
             <ul id="matchList" class="player-list"></ul>
           </div>

@@ -4,9 +4,11 @@ const screens = {
   impostors: document.getElementById("screenImpostors"),
   categories: document.getElementById("screenCategories"),
   reveal: document.getElementById("screenReveal"),
-  discussion: document.getElementById("screenDiscussion"),
-  result: document.getElementById("screenResult")
+  done: document.getElementById("screenDone")
 };
+
+const SPECY_WORDS_KEY = "impostor_specy_words_v1";
+const DEFAULT_SPICY_WORDS = ["Schwanz", "Fett", "Anna", "Jonas", "Mo", "Affe"];
 
 const state = {
   players: ["Hanno", "Elle", "Cristtine", "Fin", "Papa"],
@@ -43,20 +45,32 @@ const state = {
       words: ["Meta", "Hitbox", "Skill Ceiling", "Map Control", "Cooldown-Management", "Snowball-Effekt", "Nerf", "Buff", "Crosshair Placement", "Mindgame"]
     },
     {
+      id: "schwierig",
+      emoji: "🧠",
+      name: "Schwierige Wörter",
+      desc: "Nur schwere Begriffe.",
+      words: ["Ambivalenz", "Paradigma", "Kontextualisierung", "Interdependenz", "Resilienz", "Dissonanz", "Metaphysik", "Konsensbildung", "Ambiguität", "Kausalität"]
+    },
+    {
       id: "welt",
       emoji: "🌍",
       name: "Rund um die Welt",
       desc: "Geografie, Politik und globale Begriffe.",
       words: ["Geopolitik", "Demografie", "Infrastruktur", "Urbanisierung", "Rohstoffabhängigkeit", "Handelsroute", "Klimazone", "Topografie", "Migration", "Wasserknappheit"]
+    },
+    {
+      id: "spicy",
+      emoji: "✨",
+      name: "spicy",
+      desc: "Eigene Wörter von dir.",
+      words: []
     }
   ],
-  selectedCategoryIds: new Set(["trends", "alltag", "welt"]),
+  selectedCategoryIds: new Set(["trends", "alltag", "schwierig"]),
+  specyWords: [],
   roundCards: [],
   revealIndex: 0,
   revealed: false,
-  discussionSeconds: 5 * 60,
-  discussionLeft: 5 * 60,
-  discussionTimerId: null,
   moderation: {
     banned: false,
     banUntil: null,
@@ -83,6 +97,9 @@ const playerList = document.getElementById("playerList");
 const impostorOptionList = document.getElementById("impostorOptionList");
 const selectedCategories = document.getElementById("selectedCategories");
 const categoryList = document.getElementById("categoryList");
+const specyWordInput = document.getElementById("specyWordInput");
+const addSpecyWordBtn = document.getElementById("addSpecyWordBtn");
+const specyWordList = document.getElementById("specyWordList");
 
 const revealPlayerName = document.getElementById("revealPlayerName");
 const revealRoleLabel = document.getElementById("revealRoleLabel");
@@ -90,9 +107,6 @@ const revealWord = document.getElementById("revealWord");
 const revealBtn = document.getElementById("revealBtn");
 const nextPlayerBtn = document.getElementById("nextPlayerBtn");
 const moderationBanner = document.getElementById("impostorBanBanner");
-const discussionTitle = document.getElementById("discussionTitle");
-const discussionTimerText = document.getElementById("discussionTimerText");
-const resultTitle = document.getElementById("resultTitle");
 
 function getFingerprint() {
   let value = window.localStorage.getItem(FINGERPRINT_KEY);
@@ -173,64 +187,6 @@ function applyModerationStatus(payload = {}) {
   renderModerationBanner();
 }
 
-function formatSeconds(totalSeconds) {
-  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
-  const seconds = Math.max(0, totalSeconds) % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function stopDiscussionTimer() {
-  if (state.discussionTimerId) {
-    window.clearInterval(state.discussionTimerId);
-    state.discussionTimerId = null;
-  }
-}
-
-function renderDiscussion() {
-  const starter = state.roundCards[0]?.name || "Spieler";
-  discussionTitle.textContent = `${starter} beginnt!`;
-  if (!state.timerEnabled) {
-    discussionTimerText.textContent = "Für dieses Spiel gibt es keinen Timer. Deckt den Impostor auf, sobald ihr euch einig seid.";
-    return;
-  }
-  discussionTimerText.textContent = `Diskussionszeit läuft: ${formatSeconds(state.discussionLeft)}`;
-}
-
-function startDiscussionPhase() {
-  stopDiscussionTimer();
-  state.discussionLeft = state.discussionSeconds;
-  showScreen("discussion");
-  renderDiscussion();
-
-  if (!state.timerEnabled) {
-    applyInteractionLock();
-    return;
-  }
-
-  state.discussionTimerId = window.setInterval(() => {
-    if (state.discussionLeft <= 0) {
-      stopDiscussionTimer();
-      return;
-    }
-    state.discussionLeft -= 1;
-    renderDiscussion();
-  }, 1000);
-
-  applyInteractionLock();
-}
-
-function showResultPhase() {
-  stopDiscussionTimer();
-  const impostorNames = state.roundCards.filter((entry) => entry.isImpostor).map((entry) => entry.name);
-  if (impostorNames.length <= 1) {
-    resultTitle.textContent = `Der Impostor ist ${impostorNames[0] || "Unbekannt"}`;
-  } else {
-    resultTitle.textContent = `Die Impostor sind ${impostorNames.join(", ")}`;
-  }
-  showScreen("result");
-  applyInteractionLock();
-}
-
 async function fetchModerationStatus() {
   const fingerprint = getFingerprint();
   const response = await fetch(`/api/moderation/status?fingerprint=${encodeURIComponent(fingerprint)}`, {
@@ -304,10 +260,81 @@ function shuffle(list) {
   return cloned;
 }
 
+function loadSpecyWords() {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(SPECY_WORDS_KEY)
+      || window.localStorage.getItem("impostor_spicy_words_v1")
+      || "[]"
+    );
+    if (!Array.isArray(parsed)) return [];
+    const cleaned = parsed
+      .map((entry) => String(entry || "").trim().slice(0, 36))
+      .filter(Boolean)
+      .slice(0, 80);
+    return cleaned.length ? cleaned : [...DEFAULT_SPICY_WORDS];
+  } catch {
+    return [...DEFAULT_SPICY_WORDS];
+  }
+}
+
+function saveSpecyWords() {
+  window.localStorage.setItem(SPECY_WORDS_KEY, JSON.stringify(state.specyWords.slice(0, 80)));
+}
+
+function normalizeWord(value) {
+  return String(value || "").trim().slice(0, 36);
+}
+
 function getWordPool() {
   return state.categories
     .filter((category) => state.selectedCategoryIds.has(category.id))
-    .flatMap((category) => category.words);
+    .flatMap((category) => (category.id === "spicy" ? state.specyWords : category.words));
+}
+
+function renderSpecyWords() {
+  if (!specyWordList) return;
+  specyWordList.innerHTML = "";
+
+  if (!state.specyWords.length) {
+    const empty = document.createElement("p");
+    empty.className = "impostor-note";
+    empty.textContent = "Noch keine specy Wörter eingetragen.";
+    specyWordList.appendChild(empty);
+    return;
+  }
+
+  state.specyWords.forEach((word, index) => {
+    const chip = document.createElement("button");
+    chip.className = "impostor-chip";
+    chip.type = "button";
+    chip.textContent = `${word} ✕`;
+    chip.addEventListener("click", () => {
+      state.specyWords.splice(index, 1);
+      saveSpecyWords();
+      renderSpecyWords();
+      renderCategories();
+      renderMain();
+    });
+    specyWordList.appendChild(chip);
+  });
+}
+
+function addSpecyWord() {
+  if (!specyWordInput) return;
+  const word = normalizeWord(specyWordInput.value);
+  if (!word) return;
+
+  const duplicate = state.specyWords.some((entry) => entry.toLowerCase() === word.toLowerCase());
+  if (!duplicate) {
+    state.specyWords.push(word);
+    saveSpecyWords();
+  }
+
+  specyWordInput.value = "";
+  renderSpecyWords();
+  renderCategories();
+  renderMain();
 }
 
 function renderMain() {
@@ -411,11 +438,14 @@ function renderCategories() {
     const card = document.createElement("button");
     card.className = "impostor-category";
     const active = state.selectedCategoryIds.has(category.id);
+    const description = category.id === "spicy"
+      ? `${category.desc} (${state.specyWords.length} Wörter)`
+      : category.desc;
     card.innerHTML = `
       <div class="impostor-category-icon">${category.emoji}</div>
       <div class="impostor-category-copy">
         <h4>${category.name}</h4>
-        <p>${category.desc}</p>
+        <p>${description}</p>
       </div>
       <strong>${active ? "✓" : "+"}</strong>
     `;
@@ -432,13 +462,14 @@ function renderCategories() {
 
     categoryList.appendChild(card);
   });
+  renderSpecyWords();
   applyInteractionLock();
 }
 
 function buildRound() {
   const pool = getWordPool();
   if (pool.length < 1) {
-    return { ok: false, error: "Bitte mindestens eine Kategorie aktivieren." };
+    return { ok: false, error: "Keine Wörter verfügbar. Für spicy bitte eigene Wörter eintragen." };
   }
   if (state.players.length < 3) {
     return { ok: false, error: "Mindestens 3 Spieler sind nötig." };
@@ -470,7 +501,7 @@ function buildRound() {
 function renderReveal() {
   const card = state.roundCards[state.revealIndex];
   if (!card) {
-    startDiscussionPhase();
+    showScreen("done");
     return;
   }
 
@@ -485,6 +516,10 @@ function renderReveal() {
 }
 
 function bootstrap() {
+  state.specyWords = loadSpecyWords();
+  if (!window.localStorage.getItem(SPECY_WORDS_KEY) && !window.localStorage.getItem("impostor_spicy_words_v1")) {
+    saveSpecyWords();
+  }
   startModerationWatcher();
   renderMain();
   renderPlayers();
@@ -511,6 +546,17 @@ function bootstrap() {
   timerToggle.addEventListener("change", () => {
     state.timerEnabled = timerToggle.checked;
   });
+
+  if (addSpecyWordBtn) {
+    addSpecyWordBtn.addEventListener("click", addSpecyWord);
+  }
+  if (specyWordInput) {
+    specyWordInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addSpecyWord();
+    });
+  }
 
   document.getElementById("addPlayerBtn").addEventListener("click", () => {
     const next = window.prompt("Spielername hinzufügen", "Neuer Spieler");
@@ -543,23 +589,17 @@ function bootstrap() {
     state.revealed = false;
     state.revealIndex += 1;
     if (state.revealIndex >= state.roundCards.length) {
-      startDiscussionPhase();
+      showScreen("done");
       return;
     }
     renderReveal();
   });
 
-  document.getElementById("revealImpostorBtn").addEventListener("click", () => {
-    showResultPhase();
-  });
-
   document.getElementById("newRoundBtn").addEventListener("click", () => {
-    stopDiscussionTimer();
     showScreen("main");
     state.roundCards = [];
     state.revealIndex = 0;
     state.revealed = false;
-    state.discussionLeft = state.discussionSeconds;
     renderMain();
   });
 }
