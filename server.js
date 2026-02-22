@@ -70,6 +70,34 @@ function sendFile(res, filePath) {
 
 const server = http.createServer((req, res) => {
   const urlPath = (req.url || '/').split('?')[0];
+
+  if (urlPath === '/__health') {
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end('ok');
+    return;
+  }
+
+  if (urlPath === '/__version') {
+    const body = JSON.stringify(
+      {
+        commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null,
+        deployedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    );
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end(body);
+    return;
+  }
+
   const decoded = decodeURIComponent(urlPath);
   const requestPath = decoded === '/' ? '/index.html' : decoded;
 
