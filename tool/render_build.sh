@@ -15,6 +15,7 @@ flutter --version
 flutter config --enable-web
 
 flutter pub get
-flutter build web --release --pwa-strategy none
+# iOS Safari is more reliable with the HTML renderer.
+flutter build web --release --web-renderer html --dart-define=FLUTTER_WEB_USE_SKIA=false
 
 echo "OK: build/web is ready"
