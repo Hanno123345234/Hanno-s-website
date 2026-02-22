@@ -48,10 +48,21 @@ function sendFile(res, filePath) {
       ? 'no-cache, must-revalidate'
       : 'public, max-age=604800';
 
-    res.writeHead(200, {
+    /** @type {Record<string, string>} */
+    const headers = {
       'Content-Type': contentType,
       'Cache-Control': cacheControl,
-    });
+    };
+
+    // If users previously visited a different app on the same origin,
+    // an old Service Worker can keep serving stale content.
+    // Clear-Site-Data helps the browser drop SW/cache/storage when it receives
+    // this response from the network.
+    if (ext === '.html') {
+      headers['Clear-Site-Data'] = '"cache", "storage"';
+    }
+
+    res.writeHead(200, headers);
 
     fs.createReadStream(filePath).pipe(res);
   });
