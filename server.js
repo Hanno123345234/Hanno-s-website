@@ -799,7 +799,7 @@ const QUIZ_DUEL_QUESTIONS = [
   { q: "Welche Aussage ist richtig?", a: ["Das Mittelalter endet vor der Antike.", "Die Antike kommt vor dem Mittelalter.", "Die Neuzeit kommt vor dem Mittelalter.", "Es gibt keine Reihenfolge."], c: 1 },
   { q: "Wie viele Millimeter sind 3,2 Zentimeter?", a: ["0,32", "3,2", "32", "320"], c: 2 },
   { q: "Welche Aussage ist richtig?", a: ["Ein Halbtonschritt ist größer als ein Ganzton.", "In Musik ist ein Takt eine Zeiteinheit.", "Noten sind nur für Klavier.", "Rhythmus ist immer zufällig."], c: 1 },
-  { q: "Welche ist die richtige Reihenfolge der Planeten (von der Sonne aus)?", a: ["Mars, Erde, Venus", "Venus, Erde, Mars", "Erde, Venus, Mars", "Jupiter, Saturn, Uranus"], c: 1 },
+  { q: "Welche Reihenfolge ist richtig (von der Sonne aus)?", a: ["Merkur, Venus, Erde, Mars", "Venus, Merkur, Erde, Mars", "Merkur, Erde, Venus, Mars", "Mars, Erde, Venus, Merkur"], c: 0 },
   { q: "Welche Aussage zur EU ist richtig?", a: ["Alle Länder Europas sind automatisch in der EU.", "Die EU hat gemeinsame Regeln und Zusammenarbeit.", "Die EU ist ein einzelnes Land.", "Die EU hat keine eigenen Institutionen."], c: 1 }
 ];
 
@@ -841,7 +841,6 @@ function quizSendQuestion(room) {
     code: room.code,
     questionNumber: room.currentIndex + 1,
     totalQuestions: room.questionCount,
-    turnPlayerIndex: room.turnPlayerIndex,
     players: room.players.map((p) => p.name),
     scores: room.scores,
     question: {
@@ -2871,8 +2870,8 @@ io.on("connection", (socket) => {
       started: false,
       order: null,
       currentIndex: 0,
-      turnPlayerIndex: 0,
-      answered: false,
+      answers: [null, null],
+      revealed: false,
       cooldownTimer: null
     };
 
@@ -2936,8 +2935,8 @@ io.on("connection", (socket) => {
     // Start game automatically when 2nd player joins.
     room.started = true;
     room.currentIndex = 0;
-    room.turnPlayerIndex = 0;
-    room.answered = false;
+    room.answers = [null, null];
+    room.revealed = false;
     room.order = shuffleList([...Array(QUIZ_DUEL_QUESTIONS.length).keys()]).slice(0, room.questionCount);
     quizBroadcastRoom(room);
     quizSendQuestion(room);
@@ -2953,24 +2952,30 @@ io.on("connection", (socket) => {
     if (!room || !room.started) return;
     if (socket.data.quizRoomCode !== room.code) return;
 
-    const currentPlayer = room.players[room.turnPlayerIndex];
-    if (!currentPlayer || currentPlayer.id !== socket.id) return;
-    if (room.answered) return;
+    const playerIndex = Number(socket.data.quizPlayerIndex);
+    if (![0, 1].includes(playerIndex)) return;
+    if (room.revealed) return;
+    if (room.answers[playerIndex] !== null && room.answers[playerIndex] !== undefined) return;
 
     const idx = Math.max(0, Math.min(3, Math.round(Number(selectedIndex))));
-    const q = QUIZ_DUEL_QUESTIONS[room.order[room.currentIndex]];
-    const correctIndex = q.c;
-    const correct = idx === correctIndex;
-    if (correct) {
-      room.scores[room.turnPlayerIndex] += 1;
+    room.answers[playerIndex] = idx;
+
+    const bothAnswered = room.answers.every((value) => value !== null && value !== undefined);
+    if (!bothAnswered) {
+      return;
     }
 
-    room.answered = true;
+    const q = QUIZ_DUEL_QUESTIONS[room.order[room.currentIndex]];
+    const correctIndex = q.c;
+    const selections = [...room.answers];
+    if (selections[0] === correctIndex) room.scores[0] += 1;
+    if (selections[1] === correctIndex) room.scores[1] += 1;
+
+    room.revealed = true;
     io.to(room.code).emit("quiz_reveal", {
       code: room.code,
       correctIndex,
-      selectedIndex: idx,
-      correct,
+      selections,
       correctAnswer: q.a[correctIndex],
       scores: room.scores
     });
@@ -2983,8 +2988,8 @@ io.on("connection", (socket) => {
       if (!liveRoom) return;
 
       liveRoom.currentIndex += 1;
-      liveRoom.turnPlayerIndex = (liveRoom.turnPlayerIndex + 1) % 2;
-      liveRoom.answered = false;
+      liveRoom.answers = [null, null];
+      liveRoom.revealed = false;
 
       if (liveRoom.currentIndex >= liveRoom.questionCount) {
         io.to(liveRoom.code).emit("quiz_game_over", {

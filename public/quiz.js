@@ -88,7 +88,7 @@ const QUESTIONS = [
   { q: "Welche Aussage ist richtig?", a: ["Das Mittelalter endet vor der Antike.", "Die Antike kommt vor dem Mittelalter.", "Die Neuzeit kommt vor dem Mittelalter.", "Es gibt keine Reihenfolge."], c: 1 },
   { q: "Wie viele Millimeter sind 3,2 Zentimeter?", a: ["0,32", "3,2", "32", "320"], c: 2 },
   { q: "Welche Aussage ist richtig?", a: ["Ein Halbtonschritt ist größer als ein Ganzton.", "In Musik ist ein Takt eine Zeiteinheit.", "Noten sind nur für Klavier.", "Rhythmus ist immer zufällig."], c: 1 },
-  { q: "Welche ist die richtige Reihenfolge der Planeten (von der Sonne aus)?", a: ["Mars, Erde, Venus", "Venus, Erde, Mars", "Erde, Venus, Mars", "Jupiter, Saturn, Uranus"], c: 1 },
+  { q: "Welche Reihenfolge ist richtig (von der Sonne aus)?", a: ["Merkur, Venus, Erde, Mars", "Venus, Merkur, Erde, Mars", "Merkur, Erde, Venus, Mars", "Mars, Erde, Venus, Merkur"], c: 0 },
   { q: "Welche Aussage zur EU ist richtig?", a: ["Alle Länder Europas sind automatisch in der EU.", "Die EU hat gemeinsame Regeln und Zusammenarbeit.", "Die EU ist ein einzelnes Land.", "Die EU hat keine eigenen Institutionen."], c: 1 }
 ];
 
@@ -105,7 +105,6 @@ const online = {
   playerIndex: null,
   players: [],
   scores: [0, 0],
-  turnPlayerIndex: 0,
   questionNumber: 0,
   totalQuestions: 0,
   question: null,
@@ -469,7 +468,6 @@ async function ensureOnlineSocket() {
     online.roomCode = String(payload?.code || online.roomCode || "");
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
-    online.turnPlayerIndex = Number(payload?.turnPlayerIndex || 0);
     online.questionNumber = Number(payload?.questionNumber || 1);
     online.totalQuestions = Number(payload?.totalQuestions || online.totalQuestions || 0);
     online.question = payload?.question || null;
@@ -484,8 +482,7 @@ async function ensureOnlineSocket() {
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
     online.reveal = {
       correctIndex: Number(payload?.correctIndex),
-      selectedIndex: Number(payload?.selectedIndex),
-      correct: !!payload?.correct,
+      selections: Array.isArray(payload?.selections) ? payload.selections : null,
       correctAnswer: String(payload?.correctAnswer || "")
     };
     renderScore();
@@ -529,8 +526,7 @@ function renderOnlineQuestion() {
   const total = online.totalQuestions || 0;
   progressTitle.textContent = `Frage ${online.questionNumber}/${total || "?"}`;
 
-  const turnName = online.players[online.turnPlayerIndex] || "Spieler";
-  turnSubtitle.textContent = `Am Zug: ${turnName}`;
+  turnSubtitle.textContent = "Beide beantworten diese Frage.";
   roomSubtitle.textContent = online.roomCode ? `Online-Raum: ${online.roomCode}` : "Online";
 
   const q = online.question;
@@ -544,8 +540,8 @@ function renderOnlineQuestion() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = String(label);
-    const myTurn = online.playerIndex === online.turnPlayerIndex;
-    btn.disabled = !myTurn;
+    const canAnswer = [0, 1].includes(Number(online.playerIndex)) && !online.reveal;
+    btn.disabled = !canAnswer;
     btn.addEventListener("click", () => onOnlineAnswer(idx));
     answersEl.appendChild(btn);
   });
@@ -564,7 +560,12 @@ function renderOnlineReveal() {
     }
   });
 
-  feedbackEl.textContent = reveal.correct
+  const myIdx = Number(online.playerIndex);
+  const selections = Array.isArray(reveal.selections) ? reveal.selections : [];
+  const mySelection = selections[myIdx];
+  const isCorrect = mySelection === reveal.correctIndex;
+
+  feedbackEl.textContent = isCorrect
     ? "Richtig!"
     : `Falsch. Richtig ist: ${reveal.correctAnswer}`;
 }
@@ -572,7 +573,7 @@ function renderOnlineReveal() {
 function onOnlineAnswer(selectedIndex) {
   if (mode !== "online") return;
   if (!online.socket) return;
-  if (online.playerIndex !== online.turnPlayerIndex) return;
+  if (![0, 1].includes(Number(online.playerIndex))) return;
   if (online.reveal) return;
   if (!online.roomCode) return;
 
