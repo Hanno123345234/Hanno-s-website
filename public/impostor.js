@@ -9,7 +9,23 @@ const screens = {
 };
 
 const SPECY_WORDS_KEY = "impostor_specy_words_v1";
-const DEFAULT_SPICY_WORDS = ["Schwanz", "Fett", "Anna", "Jonas", "Mo", "Affe"];
+const DEFAULT_SPICY_WORDS = ["Pizza", "Banane", "Schule", "Anna", "Jonas", "Hund"];
+
+function normalizeWordEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === "string") {
+    const term = entry.trim();
+    if (!term) return null;
+    return { term, explain: null };
+  }
+  if (typeof entry === "object") {
+    const term = String(entry.term || "").trim();
+    const explain = entry.explain ? String(entry.explain).trim() : "";
+    if (!term) return null;
+    return { term, explain: explain || null };
+  }
+  return null;
+}
 
 const state = {
   players: ["Hanno", "Elle", "Cristtine", "Fin", "Papa"],
@@ -22,42 +38,53 @@ const state = {
       emoji: "🚀",
       name: "Trends",
       desc: "Memes, Internet-Phänomene und moderne Kultur.",
-      words: ["Algorithmus-Bubble", "Parasoziale Beziehung", "Creator Economy", "Shadowban", "FOMO", "Doomscrolling", "Microtrend", "Cancel Culture", "Prompt Engineering", "Deepfake"]
+      words: ["Meme", "Trend", "Hashtag", "Like", "Follower", "Viral", "Stream", "Emoji", "Chat", "Video"]
     },
     {
       id: "alltag",
       emoji: "⏰",
       name: "Alltag",
       desc: "Komplexere Begriffe aus Schule, Leben und Routinen.",
-      words: ["Prokrastination", "Mikromanagement", "Priorisierung", "Zeitmanagement", "Selbstdisziplin", "Kognitive Verzerrung", "Multitasking", "Reizüberflutung", "Routinenbruch", "Kontextwechsel"]
+      words: ["Wecker", "Hausaufgaben", "Bus", "Pause", "Mensa", "Wasser", "Handy", "Lehrer", "Freund", "Sport"]
     },
     {
       id: "filme",
       emoji: "🎬",
       name: "Filme & Serien",
       desc: "Begriffe aus Storytelling und Filmwelt.",
-      words: ["Plottwist", "Cliffhanger", "Charakterbogen", "Antagonist", "Foreshadowing", "Suspense", "Coming-of-Age", "Cold Open", "Mockumentary", "Retcon"]
+      words: ["Film", "Serie", "Held", "Bösewicht", "Finale", "Folge", "Kino", "Trailer", "Szene", "Soundtrack"]
     },
     {
       id: "games",
       emoji: "🎮",
       name: "Gaming",
       desc: "Strategie- und E-Sport-nahe Begriffe.",
-      words: ["Meta", "Hitbox", "Skill Ceiling", "Map Control", "Cooldown-Management", "Snowball-Effekt", "Nerf", "Buff", "Crosshair Placement", "Mindgame"]
+      words: ["Level", "Boss", "Quest", "Team", "Skin", "Loot", "Map", "Lobby", "Ping", "HP"]
     },
     {
       id: "schwierig",
       emoji: "🧠",
       name: "Schwierige Wörter",
       desc: "Nur schwere Begriffe.",
-      words: ["Ambivalenz", "Paradigma", "Kontextualisierung", "Interdependenz", "Resilienz", "Dissonanz", "Metaphysik", "Konsensbildung", "Ambiguität", "Kausalität"]
+      words: [
+        { term: "Ambivalenz", explain: "Zwei gegensätzliche Gefühle gleichzeitig." },
+        { term: "Resilienz", explain: "Wieder stark werden nach Stress/Problemen." },
+        { term: "Kausalität", explain: "Ursache und Wirkung hängen zusammen." },
+        { term: "Paradigma", explain: "Ein Denkmodell/eine Sichtweise." },
+        { term: "Dissonanz", explain: "Etwas passt nicht zusammen und stört." },
+        { term: "Interdependenz", explain: "Dinge hängen gegenseitig voneinander ab." },
+        { term: "Ambiguität", explain: "Etwas hat mehrere Bedeutungen." },
+        { term: "Kontextualisierung", explain: "Etwas im Zusammenhang erklären." },
+        { term: "Konsens", explain: "Alle sind sich einig." },
+        { term: "Metaphysik", explain: "Fragen über Dinge jenseits des Sichtbaren." }
+      ]
     },
     {
       id: "welt",
       emoji: "🌍",
       name: "Rund um die Welt",
       desc: "Geografie, Politik und globale Begriffe.",
-      words: ["Geopolitik", "Demografie", "Infrastruktur", "Urbanisierung", "Rohstoffabhängigkeit", "Handelsroute", "Klimazone", "Topografie", "Migration", "Wasserknappheit"]
+      words: ["Land", "Stadt", "Meer", "Berg", "Fluss", "Wüste", "Insel", "Grenze", "Wetter", "Karte"]
     },
     {
       id: "spicy",
@@ -108,6 +135,8 @@ const specyWordList = document.getElementById("specyWordList");
 const revealPlayerName = document.getElementById("revealPlayerName");
 const revealRoleLabel = document.getElementById("revealRoleLabel");
 const revealWord = document.getElementById("revealWord");
+const explainWordBtn = document.getElementById("explainWordBtn");
+const explainWordText = document.getElementById("explainWordText");
 const revealBtn = document.getElementById("revealBtn");
 const nextPlayerBtn = document.getElementById("nextPlayerBtn");
 const moderationBanner = document.getElementById("impostorBanBanner");
@@ -307,9 +336,20 @@ function stopDiscussionTimer() {
 }
 
 function getWordPool() {
-  return state.categories
+  const result = [];
+
+  state.categories
     .filter((category) => state.selectedCategoryIds.has(category.id))
-    .flatMap((category) => (category.id === "spicy" ? state.specyWords : category.words));
+    .forEach((category) => {
+      const rawList = category.id === "spicy" ? state.specyWords : category.words;
+      (rawList || []).forEach((entry) => {
+        const normalized = normalizeWordEntry(entry);
+        if (!normalized) return;
+        result.push(normalized);
+      });
+    });
+
+  return result;
 }
 
 function renderDiscussion() {
@@ -545,7 +585,9 @@ function buildRound() {
     return { ok: false, error: "Zu viele Impostor für die Spieleranzahl." };
   }
 
-  const secretWord = pool[Math.floor(Math.random() * pool.length)];
+  const secretEntry = pool[Math.floor(Math.random() * pool.length)];
+  const secretWord = secretEntry?.term || "";
+  const secretExplain = secretEntry?.explain || null;
   const shuffledPlayers = shuffle(state.players);
   const impostorSet = new Set(shuffledPlayers.slice(0, state.impostorCount));
 
@@ -556,6 +598,7 @@ function buildRound() {
       name,
       isImpostor,
       word: isImpostor ? "Du bist der Impostor" : secretWord,
+      explain: isImpostor ? null : secretExplain,
       hint
     };
   });
@@ -574,8 +617,20 @@ function renderReveal() {
 
   revealPlayerName.textContent = card.name;
   revealRoleLabel.textContent = state.revealed ? (card.isImpostor ? "👻 Impostor" : "✅ Normal") : "Bereit?";
-  revealWord.textContent = state.revealed ? `${card.word}${card.hint ? ` • ${card.hint}` : ""}` : "";
+  const visibleWord = state.revealed ? `${card.word}${card.hint ? ` • ${card.hint}` : ""}` : "";
+  revealWord.textContent = visibleWord;
   revealWord.classList.toggle("hidden", !state.revealed);
+
+  if (explainWordText) {
+    explainWordText.textContent = "";
+    explainWordText.classList.add("hidden");
+  }
+  if (explainWordBtn) {
+    const canExplain = state.revealed && !card.isImpostor && !!card.explain;
+    explainWordBtn.classList.toggle("hidden", !canExplain);
+    explainWordBtn.disabled = !canExplain;
+  }
+
   revealBtn.disabled = state.revealed;
   nextPlayerBtn.disabled = !state.revealed;
   nextPlayerBtn.textContent = state.revealIndex >= state.roundCards.length - 1 ? "Runde fertig" : "Weitergeben";
@@ -652,6 +707,15 @@ function bootstrap() {
     state.revealed = true;
     renderReveal();
   });
+
+  if (explainWordBtn && explainWordText) {
+    explainWordBtn.addEventListener("click", () => {
+      const card = state.roundCards[state.revealIndex];
+      if (!card || card.isImpostor || !card.explain || !state.revealed) return;
+      explainWordText.textContent = String(card.explain);
+      explainWordText.classList.toggle("hidden");
+    });
+  }
 
   nextPlayerBtn.addEventListener("click", () => {
     state.revealed = false;
