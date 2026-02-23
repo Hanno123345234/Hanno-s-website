@@ -849,18 +849,7 @@ function quizSendQuestion(room) {
     }
   });
 }
-
-function quizClearCountdown(room) {
-  if (!room) return;
-  if (room.cooldownTimer) {
-    clearTimeout(room.cooldownTimer);
-    room.cooldownTimer = null;
-  }
-  room.deadlineAt = null;
-}
-
 function quizAdvance(room) {
-  quizClearCountdown(room);
   room.currentIndex += 1;
   room.answers = [null, null];
   room.revealed = false;
@@ -2900,7 +2889,6 @@ io.on("connection", (socket) => {
       currentIndex: 0,
       answers: [null, null],
       revealed: false,
-      deadlineAt: null,
       cooldownTimer: null
     };
 
@@ -2966,7 +2954,6 @@ io.on("connection", (socket) => {
     room.currentIndex = 0;
     room.answers = [null, null];
     room.revealed = false;
-    room.deadlineAt = null;
     room.order = shuffleList([...Array(QUIZ_DUEL_QUESTIONS.length).keys()]).slice(0, room.questionCount);
     quizBroadcastRoom(room);
     quizSendQuestion(room);
@@ -2997,7 +2984,6 @@ io.on("connection", (socket) => {
     if (idx === correctIndex) {
       room.scores[playerIndex] += 1;
       room.revealed = true;
-      quizClearCountdown(room);
 
       io.to(room.code).emit("quiz_correct", {
         code: room.code,
@@ -3005,6 +2991,8 @@ io.on("connection", (socket) => {
         players: room.players.map((p) => p.name),
         scores: room.scores
       });
+
+      quizBroadcastRoom(room);
 
       const questionIndex = room.currentIndex;
       setTimeout(() => {
@@ -3014,25 +3002,6 @@ io.on("connection", (socket) => {
         quizAdvance(liveRoom);
       }, 200);
       return;
-    }
-
-    // First answer starts a 5s countdown visible for both.
-    if (!room.deadlineAt) {
-      room.deadlineAt = Date.now() + 5000;
-      io.to(room.code).emit("quiz_countdown", {
-        code: room.code,
-        endsAt: room.deadlineAt
-      });
-
-      const questionIndex = room.currentIndex;
-      room.cooldownTimer = setTimeout(() => {
-        const liveRoom = quizRooms.get(room.code);
-        if (!liveRoom) return;
-        if (liveRoom.currentIndex !== questionIndex) return;
-        if (liveRoom.revealed) return;
-        liveRoom.revealed = true;
-        quizAdvance(liveRoom);
-      }, 5000);
     }
 
     // If both answered and still nobody correct, continue immediately.

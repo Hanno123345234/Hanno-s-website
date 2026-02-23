@@ -42,9 +42,6 @@ const finalA = document.getElementById("finalA");
 const finalB = document.getElementById("finalB");
 const restartBtn = document.getElementById("restartBtn");
 
-const countdownOverlay = document.getElementById("countdownOverlay");
-const countdownBig = document.getElementById("countdownBig");
-
 const QUESTIONS = [
   { q: "Wie viele Minuten sind 2,5 Stunden?", a: ["120", "150", "180", "210"], c: 1 },
   { q: "Was ist die Lösung von 3(x − 2) = 15?", a: ["x = 3", "x = 5", "x = 7", "x = 9"], c: 2 },
@@ -112,8 +109,7 @@ const online = {
   totalQuestions: 0,
   question: null,
   reveal: null,
-  answeredThisQuestion: false,
-  countdownEndsAt: null
+  answeredThisQuestion: false
 };
 
 function showCard(card) {
@@ -140,36 +136,7 @@ function clearCooldown() {
   }
 }
 
-let onlineCountdownInterval = null;
-
-function hideCountdownOverlay() {
-  countdownOverlay.classList.remove("active");
-  countdownOverlay.setAttribute("aria-hidden", "true");
-  online.countdownEndsAt = null;
-  if (onlineCountdownInterval) {
-    clearInterval(onlineCountdownInterval);
-    onlineCountdownInterval = null;
-  }
-}
-
-function showCountdownOverlay(endsAt) {
-  online.countdownEndsAt = endsAt;
-  countdownOverlay.classList.add("active");
-  countdownOverlay.setAttribute("aria-hidden", "false");
-
-  const update = () => {
-    const leftMs = Math.max(0, Number(endsAt || 0) - Date.now());
-    const sec = Math.ceil(leftMs / 1000);
-    countdownBig.textContent = String(Math.max(0, sec));
-    if (sec <= 0) {
-      // Next question will arrive from server.
-    }
-  };
-
-  update();
-  if (onlineCountdownInterval) clearInterval(onlineCountdownInterval);
-  onlineCountdownInterval = setInterval(update, 120);
-}
+// Timer UI removed.
 
 function normalizeName(raw, fallback) {
   const name = String(raw || "").trim().slice(0, 24);
@@ -500,7 +467,6 @@ async function ensureOnlineSocket() {
   socket.on("quiz_question", (payload) => {
     mode = "online";
     clearCooldown();
-    hideCountdownOverlay();
 
     online.roomCode = String(payload?.code || online.roomCode || "");
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
@@ -531,16 +497,8 @@ async function ensureOnlineSocket() {
     });
   });
 
-  socket.on("quiz_countdown", (payload) => {
-    if (mode !== "online") return;
-    const endsAt = Number(payload?.endsAt || 0);
-    if (!Number.isFinite(endsAt) || endsAt <= Date.now()) return;
-    showCountdownOverlay(endsAt);
-  });
-
   socket.on("quiz_correct", (payload) => {
     if (mode !== "online") return;
-    hideCountdownOverlay();
 
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;

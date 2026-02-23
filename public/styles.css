@@ -238,41 +238,6 @@ button:disabled {
   gap: 8px;
 }
 
-.quiz-overlay {
-  position: fixed;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  background: color-mix(in oklab, black 55%, transparent);
-  z-index: 50;
-}
-
-.quiz-overlay.active {
-  display: flex;
-}
-
-.quiz-overlay-card {
-  width: min(520px, 100%);
-  text-align: center;
-  background: color-mix(in oklab, var(--card) 88%, black);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 22px;
-  padding: 22px;
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.quiz-countdown-number {
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  font-size: clamp(64px, 18vw, 170px);
-  line-height: 1;
-  margin: 6px 0 10px;
-}
-
 .lang-inline label {
   margin: 0;
   color: var(--muted);
