@@ -1,4 +1,9 @@
 const ADMIN_KEY_STORAGE = "admin_access_key_v1";
+const ADMIN_KEY_DRAFT_STORAGE = "admin_access_key_draft_v1";
+const ADMIN_COMMAND_DRAFT_STORAGE = "admin_command_draft_v1";
+const ADMIN_GRANT_LABEL_STORAGE = "admin_grant_label_v1";
+const ADMIN_GRANT_ROLE_STORAGE = "admin_grant_role_v1";
+const ADMIN_GRANT_HOURS_STORAGE = "admin_grant_hours_v1";
 
 const adminInfo = document.getElementById("adminInfo");
 const adminLoginBox = document.getElementById("adminLoginBox");
@@ -17,8 +22,16 @@ const commandInfo = document.getElementById("commandInfo");
 const moderationList = document.getElementById("moderationList");
 const commandInput = document.getElementById("commandInput");
 const navButtons = document.querySelectorAll(".admin-nav-btn");
+const grantLabelInput = document.getElementById("grantLabel");
+const grantRoleInput = document.getElementById("grantRole");
+const grantHoursInput = document.getElementById("grantHours");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
+const savedAdminKeyDraft = window.localStorage.getItem(ADMIN_KEY_DRAFT_STORAGE) || "";
+
+if (savedAdminKeyDraft) {
+  adminKey = savedAdminKeyDraft;
+}
 
 function setInfo(text) {
   adminInfo.textContent = text;
@@ -314,6 +327,7 @@ document.getElementById("adminLoginBtn").addEventListener("click", async () => {
     return;
   }
   window.localStorage.setItem(ADMIN_KEY_STORAGE, adminKey);
+  window.localStorage.setItem(ADMIN_KEY_DRAFT_STORAGE, adminKey);
   await loadAdmin();
 });
 
@@ -358,6 +372,55 @@ commandInput.addEventListener("keydown", async (event) => {
   event.preventDefault();
   document.getElementById("runCommandBtn").click();
 });
+
+adminKeyInput.addEventListener("input", () => {
+  const value = String(adminKeyInput.value || "");
+  window.localStorage.setItem(ADMIN_KEY_DRAFT_STORAGE, value);
+});
+
+if (commandInput) {
+  const commandDraft = window.localStorage.getItem(ADMIN_COMMAND_DRAFT_STORAGE);
+  if (commandDraft !== null) {
+    commandInput.value = commandDraft;
+  }
+
+  commandInput.addEventListener("input", () => {
+    window.localStorage.setItem(ADMIN_COMMAND_DRAFT_STORAGE, String(commandInput.value || ""));
+  });
+}
+
+if (grantLabelInput) {
+  const grantLabelDraft = window.localStorage.getItem(ADMIN_GRANT_LABEL_STORAGE);
+  if (grantLabelDraft !== null) {
+    grantLabelInput.value = grantLabelDraft;
+  }
+
+  grantLabelInput.addEventListener("input", () => {
+    window.localStorage.setItem(ADMIN_GRANT_LABEL_STORAGE, String(grantLabelInput.value || ""));
+  });
+}
+
+if (grantRoleInput) {
+  const savedRole = window.localStorage.getItem(ADMIN_GRANT_ROLE_STORAGE);
+  if (savedRole) {
+    grantRoleInput.value = savedRole;
+  }
+
+  grantRoleInput.addEventListener("change", () => {
+    window.localStorage.setItem(ADMIN_GRANT_ROLE_STORAGE, String(grantRoleInput.value || "viewer"));
+  });
+}
+
+if (grantHoursInput) {
+  const savedHours = window.localStorage.getItem(ADMIN_GRANT_HOURS_STORAGE);
+  if (savedHours) {
+    grantHoursInput.value = savedHours;
+  }
+
+  grantHoursInput.addEventListener("input", () => {
+    window.localStorage.setItem(ADMIN_GRANT_HOURS_STORAGE, String(grantHoursInput.value || ""));
+  });
+}
 
 if (adminKey) {
   adminKeyInput.value = adminKey;

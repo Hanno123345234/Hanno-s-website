@@ -110,3 +110,14 @@ Firestore entities suggestion:
 - `challenges/{challengeId}`
 - `challenges/{challengeId}/members/{uid}`
 - `challenges/{challengeId}/checkins/{uid_YYYYMMDD}`
+
+## Deploy (Render + GitHub)
+
+Für dieses Repo ist Deploy auf beide Plattformen vorbereitet:
+
+- **Render**: Node Web Service über `render.yaml` (`npm install` + `npm start`)
+- **GitHub Pages**: statisches Frontend aus `public/` via `.github/workflows/web-pages.yml`
+
+Setup und Schritte stehen in:
+
+- `docs/public_deploy.md`

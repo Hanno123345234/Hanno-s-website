@@ -1,4 +1,4 @@
-name: Web Deploy (GitHub Pages)
+name: Public Deploy (GitHub Pages)
 
 on:
   push:
@@ -22,31 +22,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Bootstrap (generate platform folders if missing)
+      - name: Prepare static site artifact
         run: |
-          flutter --version
-          if [ ! -d "web" ]; then
-            flutter config --enable-web
-            flutter create .
+          rm -rf dist
+          mkdir -p dist
+          cp -r public/. dist/
+          if [ -f dist/index.html ]; then
+            cp dist/index.html dist/404.html
           fi
-
-      - name: Pub get
-        run: flutter pub get
-
-      - name: Build web (release)
-        env:
-          REPO_NAME: ${{ github.event.repository.name }}
-        run: |
-          flutter build web --release --web-renderer html --dart-define=FLUTTER_WEB_USE_SKIA=false --base-href "/${REPO_NAME}/"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: dist
 
   deploy:
     needs: build

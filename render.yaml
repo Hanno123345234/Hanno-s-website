@@ -1,10 +1,11 @@
 services:
   - type: web
     name: hanno-s-website
-    runtime: node
+    env: node
     plan: free
     branch: main
-    autoDeployTrigger: commit
+    autoDeploy: true
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /
 

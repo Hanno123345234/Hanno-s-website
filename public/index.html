@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f1220" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <title>Spielauswahl</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -23,11 +23,9 @@
         </div>
 
         <div class="stack">
-          <a id="impostorLink" class="mode-link" href="/impostor.html">Impostor Pro</a>
-          <a id="amongLink" class="mode-link" href="/amongus.html">Among Us Modus</a>
-          <a class="mode-link" href="/stats.html">Stats Dashboard</a>
-          <a class="mode-link" href="/admin.html">Admin Dashboard</a>
-          <a class="mode-link" href="/join-logs.html">Join Logs</a>
+          <a id="impostorLink" class="mode-link" href="impostor.html">Impostor Pro</a>
+          <a class="mode-link" href="admin.html">Admin Dashboard</a>
+          <a class="mode-link" href="join-logs.html">Join Logs</a>
         </div>
       </section>
     </main>
@@ -41,8 +39,7 @@
           title: "Spiel wählen",
           subtitle: "Wähle deinen Modus",
           label: "Sprache",
-          impostor: "Impostor Pro",
-          among: "Among Us Modus"
+          impostor: "Impostor Pro"
         }
       };
 
@@ -51,15 +48,13 @@
       const langLabel = document.getElementById("langLabel");
       const langSelect = document.getElementById("langSelect");
       const impostorLink = document.getElementById("impostorLink");
-      const amongLink = document.getElementById("amongLink");
 
       function getInitialLang() {
         return "de";
       }
 
       function updateModeLinks(lang) {
-        impostorLink.href = `/impostor.html?lang=${encodeURIComponent(lang)}`;
-        amongLink.href = `/amongus.html?lang=${encodeURIComponent(lang)}`;
+        impostorLink.href = new URL(`impostor.html?lang=${encodeURIComponent(lang)}`, window.location.href).toString();
       }
 
       function applyLanguage(lang) {
@@ -68,7 +63,6 @@
         subtitleText.textContent = t.subtitle;
         langLabel.textContent = t.label;
         impostorLink.textContent = t.impostor;
-        amongLink.textContent = t.among;
         document.documentElement.lang = lang;
         langSelect.value = lang;
         window.localStorage.setItem(LANGUAGE_KEY, lang);

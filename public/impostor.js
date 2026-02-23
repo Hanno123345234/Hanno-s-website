@@ -588,11 +588,12 @@ function bootstrap() {
     saveSpecyWords();
   }
   startModerationWatcher();
+
+  showScreen("main");
   renderMain();
   renderPlayers();
   renderImpostorOptions();
   renderCategories();
-  renderReveal();
 
   document.getElementById("openPlayersBtn").addEventListener("click", () => showScreen("players"));
   document.getElementById("openImpostorsBtn").addEventListener("click", () => showScreen("impostors"));
