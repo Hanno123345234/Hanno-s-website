@@ -42,6 +42,9 @@ const finalA = document.getElementById("finalA");
 const finalB = document.getElementById("finalB");
 const restartBtn = document.getElementById("restartBtn");
 
+const countdownOverlay = document.getElementById("countdownOverlay");
+const countdownBig = document.getElementById("countdownBig");
+
 const QUESTIONS = [
   { q: "Wie viele Minuten sind 2,5 Stunden?", a: ["120", "150", "180", "210"], c: 1 },
   { q: "Was ist die Lösung von 3(x − 2) = 15?", a: ["x = 3", "x = 5", "x = 7", "x = 9"], c: 2 },
@@ -108,7 +111,9 @@ const online = {
   questionNumber: 0,
   totalQuestions: 0,
   question: null,
-  reveal: null
+  reveal: null,
+  answeredThisQuestion: false,
+  countdownEndsAt: null
 };
 
 function showCard(card) {
@@ -133,6 +138,37 @@ function clearCooldown() {
     clearInterval(cooldownInterval);
     cooldownInterval = null;
   }
+}
+
+let onlineCountdownInterval = null;
+
+function hideCountdownOverlay() {
+  countdownOverlay.classList.remove("active");
+  countdownOverlay.setAttribute("aria-hidden", "true");
+  online.countdownEndsAt = null;
+  if (onlineCountdownInterval) {
+    clearInterval(onlineCountdownInterval);
+    onlineCountdownInterval = null;
+  }
+}
+
+function showCountdownOverlay(endsAt) {
+  online.countdownEndsAt = endsAt;
+  countdownOverlay.classList.add("active");
+  countdownOverlay.setAttribute("aria-hidden", "false");
+
+  const update = () => {
+    const leftMs = Math.max(0, Number(endsAt || 0) - Date.now());
+    const sec = Math.ceil(leftMs / 1000);
+    countdownBig.textContent = String(Math.max(0, sec));
+    if (sec <= 0) {
+      // Next question will arrive from server.
+    }
+  };
+
+  update();
+  if (onlineCountdownInterval) clearInterval(onlineCountdownInterval);
+  onlineCountdownInterval = setInterval(update, 120);
 }
 
 function normalizeName(raw, fallback) {
@@ -464,6 +500,7 @@ async function ensureOnlineSocket() {
   socket.on("quiz_question", (payload) => {
     mode = "online";
     clearCooldown();
+    hideCountdownOverlay();
 
     online.roomCode = String(payload?.code || online.roomCode || "");
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
@@ -472,6 +509,7 @@ async function ensureOnlineSocket() {
     online.totalQuestions = Number(payload?.totalQuestions || online.totalQuestions || 0);
     online.question = payload?.question || null;
     online.reveal = null;
+    online.answeredThisQuestion = false;
 
     showCard(playCard);
     renderOnlineQuestion();
@@ -491,6 +529,27 @@ async function ensureOnlineSocket() {
     startCooldown(() => {
       // next question is pushed by server
     });
+  });
+
+  socket.on("quiz_countdown", (payload) => {
+    if (mode !== "online") return;
+    const endsAt = Number(payload?.endsAt || 0);
+    if (!Number.isFinite(endsAt) || endsAt <= Date.now()) return;
+    showCountdownOverlay(endsAt);
+  });
+
+  socket.on("quiz_correct", (payload) => {
+    if (mode !== "online") return;
+    hideCountdownOverlay();
+
+    online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
+    online.players = Array.isArray(payload?.players) ? payload.players : online.players;
+    renderScore();
+
+    const winnerIndex = Number(payload?.winnerIndex);
+    const winnerName = online.players[winnerIndex] || "Jemand";
+    const me = Number(online.playerIndex);
+    feedbackEl.textContent = winnerIndex === me ? "Richtig! +1 Punkt" : `${winnerName} war richtig!`;
   });
 
   socket.on("quiz_game_over", (payload) => {
@@ -526,7 +585,7 @@ function renderOnlineQuestion() {
   const total = online.totalQuestions || 0;
   progressTitle.textContent = `Frage ${online.questionNumber}/${total || "?"}`;
 
-  turnSubtitle.textContent = "Beide beantworten diese Frage.";
+  turnSubtitle.textContent = "Klick eine Antwort. Dann läuft der 5s Timer.";
   roomSubtitle.textContent = online.roomCode ? `Online-Raum: ${online.roomCode}` : "Online";
 
   const q = online.question;
@@ -540,7 +599,9 @@ function renderOnlineQuestion() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = String(label);
-    const canAnswer = [0, 1].includes(Number(online.playerIndex)) && !online.reveal;
+    const canAnswer = [0, 1].includes(Number(online.playerIndex))
+      && !online.reveal
+      && !online.answeredThisQuestion;
     btn.disabled = !canAnswer;
     btn.addEventListener("click", () => onOnlineAnswer(idx));
     answersEl.appendChild(btn);
@@ -577,9 +638,13 @@ function onOnlineAnswer(selectedIndex) {
   if (online.reveal) return;
   if (!online.roomCode) return;
 
+  if (online.answeredThisQuestion) return;
+  online.answeredThisQuestion = true;
+
   [...answersEl.querySelectorAll("button")].forEach((btn) => {
     btn.disabled = true;
   });
+  feedbackEl.textContent = "Antwort gesendet…";
   online.socket.emit("quiz_answer", { code: online.roomCode, selectedIndex });
 }
 

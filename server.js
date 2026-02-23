@@ -850,6 +850,34 @@ function quizSendQuestion(room) {
   });
 }
 
+function quizClearCountdown(room) {
+  if (!room) return;
+  if (room.cooldownTimer) {
+    clearTimeout(room.cooldownTimer);
+    room.cooldownTimer = null;
+  }
+  room.deadlineAt = null;
+}
+
+function quizAdvance(room) {
+  quizClearCountdown(room);
+  room.currentIndex += 1;
+  room.answers = [null, null];
+  room.revealed = false;
+
+  if (room.currentIndex >= room.questionCount) {
+    io.to(room.code).emit("quiz_game_over", {
+      code: room.code,
+      players: room.players.map((p) => p.name),
+      scores: room.scores
+    });
+    quizCleanupRoom(room);
+    return;
+  }
+
+  quizSendQuestion(room);
+}
+
 function quizCleanupRoom(room) {
   if (!room) return;
   if (room.cooldownTimer) {
@@ -2872,6 +2900,7 @@ io.on("connection", (socket) => {
       currentIndex: 0,
       answers: [null, null],
       revealed: false,
+      deadlineAt: null,
       cooldownTimer: null
     };
 
@@ -2937,6 +2966,7 @@ io.on("connection", (socket) => {
     room.currentIndex = 0;
     room.answers = [null, null];
     room.revealed = false;
+    room.deadlineAt = null;
     room.order = shuffleList([...Array(QUIZ_DUEL_QUESTIONS.length).keys()]).slice(0, room.questionCount);
     quizBroadcastRoom(room);
     quizSendQuestion(room);
@@ -2960,49 +2990,57 @@ io.on("connection", (socket) => {
     const idx = Math.max(0, Math.min(3, Math.round(Number(selectedIndex))));
     room.answers[playerIndex] = idx;
 
-    const bothAnswered = room.answers.every((value) => value !== null && value !== undefined);
-    if (!bothAnswered) {
+    const q = QUIZ_DUEL_QUESTIONS[room.order[room.currentIndex]];
+    const correctIndex = q.c;
+
+    // Correct => award point and immediately advance.
+    if (idx === correctIndex) {
+      room.scores[playerIndex] += 1;
+      room.revealed = true;
+      quizClearCountdown(room);
+
+      io.to(room.code).emit("quiz_correct", {
+        code: room.code,
+        winnerIndex: playerIndex,
+        players: room.players.map((p) => p.name),
+        scores: room.scores
+      });
+
+      const questionIndex = room.currentIndex;
+      setTimeout(() => {
+        const liveRoom = quizRooms.get(room.code);
+        if (!liveRoom) return;
+        if (liveRoom.currentIndex !== questionIndex) return;
+        quizAdvance(liveRoom);
+      }, 200);
       return;
     }
 
-    const q = QUIZ_DUEL_QUESTIONS[room.order[room.currentIndex]];
-    const correctIndex = q.c;
-    const selections = [...room.answers];
-    if (selections[0] === correctIndex) room.scores[0] += 1;
-    if (selections[1] === correctIndex) room.scores[1] += 1;
+    // First answer starts a 5s countdown visible for both.
+    if (!room.deadlineAt) {
+      room.deadlineAt = Date.now() + 5000;
+      io.to(room.code).emit("quiz_countdown", {
+        code: room.code,
+        endsAt: room.deadlineAt
+      });
 
-    room.revealed = true;
-    io.to(room.code).emit("quiz_reveal", {
-      code: room.code,
-      correctIndex,
-      selections,
-      correctAnswer: q.a[correctIndex],
-      scores: room.scores
-    });
-
-    if (room.cooldownTimer) {
-      clearTimeout(room.cooldownTimer);
+      const questionIndex = room.currentIndex;
+      room.cooldownTimer = setTimeout(() => {
+        const liveRoom = quizRooms.get(room.code);
+        if (!liveRoom) return;
+        if (liveRoom.currentIndex !== questionIndex) return;
+        if (liveRoom.revealed) return;
+        liveRoom.revealed = true;
+        quizAdvance(liveRoom);
+      }, 5000);
     }
-    room.cooldownTimer = setTimeout(() => {
-      const liveRoom = quizRooms.get(room.code);
-      if (!liveRoom) return;
 
-      liveRoom.currentIndex += 1;
-      liveRoom.answers = [null, null];
-      liveRoom.revealed = false;
-
-      if (liveRoom.currentIndex >= liveRoom.questionCount) {
-        io.to(liveRoom.code).emit("quiz_game_over", {
-          code: liveRoom.code,
-          players: liveRoom.players.map((p) => p.name),
-          scores: liveRoom.scores
-        });
-        quizCleanupRoom(liveRoom);
-        return;
-      }
-
-      quizSendQuestion(liveRoom);
-    }, 2000);
+    // If both answered and still nobody correct, continue immediately.
+    const bothAnswered = room.answers.every((value) => value !== null && value !== undefined);
+    if (bothAnswered && !room.revealed) {
+      room.revealed = true;
+      quizAdvance(room);
+    }
   });
 
   socket.on("quiz_leave_room", () => {
