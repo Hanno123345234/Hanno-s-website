@@ -27,6 +27,31 @@
         <label for="questionCount">Anzahl Fragen (gesamt)</label>
         <input id="questionCount" type="number" min="4" max="40" value="10" />
 
+        <div class="admin-box">
+          <h3>Online (mit Code)</h3>
+          <p class="subtitle">Host macht einen Code. Der andere joint mit Code.</p>
+
+          <label for="onlineName">Dein Name</label>
+          <input id="onlineName" type="text" maxlength="24" autocomplete="off" placeholder="Dein Name" />
+
+          <div class="stack">
+            <button id="hostOnlineBtn" type="button">Code erstellen (Host)</button>
+          </div>
+
+          <p id="hostCodeLine" class="subtitle" style="display: none;">
+            Dein Code: <strong id="hostCodeText"></strong>
+          </p>
+
+          <label for="roomCode">Code beitreten</label>
+          <input id="roomCode" type="text" maxlength="8" autocomplete="off" placeholder="z.B. A1B2C" />
+
+          <div class="stack">
+            <button id="joinOnlineBtn" type="button">Beitreten (Join)</button>
+          </div>
+
+          <p id="onlineStatus" class="subtitle"></p>
+        </div>
+
         <div class="stack">
           <button id="startQuizBtn" class="primary">Starten</button>
         </div>
@@ -42,13 +67,14 @@
 
         <h2 id="progressTitle">Frage</h2>
         <p id="turnSubtitle" class="subtitle"></p>
+        <p id="roomSubtitle" class="subtitle"></p>
 
         <div class="admin-box">
           <h3 id="questionText"></h3>
           <div id="answers" class="stack"></div>
           <p id="feedback" class="subtitle"></p>
           <div class="stack">
-            <button id="nextBtn" class="primary" disabled>Weiter</button>
+            <button id="nextBtn" class="primary" disabled>Nächste Frage…</button>
           </div>
         </div>
 
