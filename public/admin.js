@@ -33,10 +33,6 @@ if (savedAdminKeyDraft) {
   adminKey = savedAdminKeyDraft;
 }
 
-if (!adminKey) {
-  adminKey = "hanno123";
-}
-
 function setInfo(text) {
   adminInfo.textContent = text;
 }
@@ -354,7 +350,7 @@ document.getElementById("grantAccessBtn").addEventListener("click", async () => 
       role,
       expiresHours
     });
-    grantInfo.textContent = `Code: ${result.accessCode} • Rolle: ${result.role} • Ablauf: ${result.expiresHours}h`;
+    grantInfo.textContent = `Access erstellt • Rolle: ${result.role} • Ablauf: ${result.expiresHours}h`;
   } catch (error) {
     grantInfo.textContent = error.message || "Konnte Access nicht erstellen";
   }
