@@ -8,6 +8,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_OWNER_KEY = String(process.env.ADMIN_OWNER_KEY || process.env.ADMIN_KEY || "Anna").trim();
+const ADMIN_EDITOR_KEY = String(process.env.ADMIN_EDITOR_KEY || "hanno123").trim();
 const ADMIN_BOOTSTRAP_CODES = String(process.env.ADMIN_ACCESS_CODES || "").trim();
 
 app.use((req, res, next) => {
@@ -64,6 +65,10 @@ function resolveAdminAuth(req) {
 
   if (ADMIN_OWNER_KEY && key === ADMIN_OWNER_KEY) {
     return { ok: true, role: "owner", source: "owner-key" };
+  }
+
+  if (ADMIN_EDITOR_KEY && key === ADMIN_EDITOR_KEY) {
+    return { ok: true, role: "editor", source: "editor-key" };
   }
 
   const tokenEntry = adminAccessTokens.get(key);

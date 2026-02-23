@@ -33,6 +33,10 @@ if (savedAdminKeyDraft) {
   adminKey = savedAdminKeyDraft;
 }
 
+if (!adminKey) {
+  adminKey = "hanno123";
+}
+
 function setInfo(text) {
   adminInfo.textContent = text;
 }

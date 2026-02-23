@@ -7,7 +7,7 @@ const listEl = document.getElementById("joinLogsList");
 const keyInputEl = document.getElementById("joinLogsKeyInput");
 const refreshBtn = document.getElementById("refreshJoinLogsBtn");
 
-let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "Anna";
+let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "hanno123";
 const savedDraftKey = window.localStorage.getItem(JOIN_LOGS_KEY_DRAFT_STORAGE) || "";
 
 if (savedDraftKey) {
