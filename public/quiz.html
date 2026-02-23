@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1220" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <title>Quiz-Duell</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section id="setupCard" class="card active">
+        <div class="top-tools">
+          <a href="./" class="mini-link">← Zur Auswahl</a>
+        </div>
+
+        <h1>Quiz-Duell</h1>
+        <p class="subtitle">Kurze Fragen, abwechselnd beantworten. Wer mehr Punkte hat, gewinnt.</p>
+
+        <label for="playerA">Spieler 1</label>
+        <input id="playerA" type="text" maxlength="24" autocomplete="off" placeholder="Spieler 1" />
+
+        <label for="playerB">Spieler 2</label>
+        <input id="playerB" type="text" maxlength="24" autocomplete="off" placeholder="Spieler 2" />
+
+        <label for="questionCount">Anzahl Fragen (gesamt)</label>
+        <input id="questionCount" type="number" min="4" max="40" value="10" />
+
+        <div class="stack">
+          <button id="startQuizBtn" class="primary">Starten</button>
+        </div>
+
+        <p id="setupError" class="subtitle"></p>
+      </section>
+
+      <section id="playCard" class="card">
+        <div class="top-tools">
+          <a href="./" class="mini-link">← Zur Auswahl</a>
+          <button id="quitBtn" class="mini-btn" type="button">Abbrechen</button>
+        </div>
+
+        <h2 id="progressTitle">Frage</h2>
+        <p id="turnSubtitle" class="subtitle"></p>
+
+        <div class="admin-box">
+          <h3 id="questionText"></h3>
+          <div id="answers" class="stack"></div>
+          <p id="feedback" class="subtitle"></p>
+          <div class="stack">
+            <button id="nextBtn" class="primary" disabled>Weiter</button>
+          </div>
+        </div>
+
+        <div class="player-list-wrap">
+          <h3>Score</h3>
+          <ul class="player-list">
+            <li><strong id="scoreAName">Spieler 1</strong>: <span id="scoreA">0</span></li>
+            <li><strong id="scoreBName">Spieler 2</strong>: <span id="scoreB">0</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="resultCard" class="card">
+        <div class="top-tools">
+          <a href="./" class="mini-link">← Zur Auswahl</a>
+        </div>
+
+        <h1>Ergebnis</h1>
+        <p id="resultText" class="subtitle"></p>
+
+        <div class="player-list-wrap">
+          <h3>Endstand</h3>
+          <ul class="player-list">
+            <li><strong id="finalAName">Spieler 1</strong>: <span id="finalA">0</span></li>
+            <li><strong id="finalBName">Spieler 2</strong>: <span id="finalB">0</span></li>
+          </ul>
+        </div>
+
+        <div class="stack">
+          <button id="restartBtn" class="primary">Neue Runde</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="quiz.js"></script>
+  </body>
+</html>
