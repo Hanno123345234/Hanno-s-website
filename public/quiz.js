@@ -439,6 +439,16 @@ async function ensureOnlineSocket() {
     setOnlineStatus("Warte auf Spieler 2…");
   });
 
+  socket.on("quiz_joined", (payload) => {
+    mode = "online";
+    online.roomCode = String(payload?.code || online.roomCode || "");
+    online.playerIndex = Number(payload?.playerIndex);
+    online.players = Array.isArray(payload?.players) ? payload.players : online.players;
+    online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
+    setOnlineStatus("Beigetreten. Startet…");
+    renderScore();
+  });
+
   socket.on("quiz_room_update", (payload) => {
     if (mode !== "online") return;
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;

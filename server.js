@@ -2924,6 +2924,13 @@ io.on("connection", (socket) => {
     socket.data.quizRoomCode = room.code;
     socket.data.quizPlayerIndex = 1;
 
+    socket.emit("quiz_joined", {
+      code: room.code,
+      playerIndex: 1,
+      players: room.players.map((p) => p.name),
+      scores: room.scores
+    });
+
     quizBroadcastRoom(room);
 
     // Start game automatically when 2nd player joins.
