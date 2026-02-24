@@ -516,6 +516,7 @@ async function ensureOnlineSocket() {
     const correctIndex = Number(payload?.correctIndex);
     const correctAnswer = String(payload?.correctAnswer || "");
     const type = String(payload?.type || "");
+    const detail = String(payload?.detail || "");
     const winnerIndex = payload?.winnerIndex === null || payload?.winnerIndex === undefined
       ? null
       : Number(payload?.winnerIndex);
@@ -530,9 +531,15 @@ async function ensureOnlineSocket() {
     if (type === "correct" && winnerIndex !== null) {
       const winnerName = online.players[winnerIndex] || "Jemand";
       const me = Number(online.playerIndex);
-      feedbackEl.textContent = winnerIndex === me ? "Richtig! +1 Punkt" : `${winnerName} war richtig! +1 Punkt`;
+      const winnerLabel = winnerIndex === me ? "Du" : winnerName;
+
+      if (detail === "fastest") {
+        feedbackEl.textContent = `Beide richtig — ${winnerLabel} war schneller! +1 Punkt`;
+      } else {
+        feedbackEl.textContent = winnerIndex === me ? "Richtig! +1 Punkt" : `${winnerName} war richtig! +1 Punkt`;
+      }
     } else {
-      feedbackEl.textContent = `Beide falsch. Richtig ist: ${correctAnswer}`;
+      feedbackEl.textContent = `Niemand richtig. Richtig ist: ${correctAnswer}`;
     }
 
     // Next question comes from server after ~2s.
@@ -571,7 +578,7 @@ function renderOnlineQuestion() {
   const total = online.totalQuestions || 0;
   progressTitle.textContent = `Frage ${online.questionNumber}/${total || "?"}`;
 
-  turnSubtitle.textContent = "Beide beantworten. Bei richtig gibt es +1 Punkt.";
+  turnSubtitle.textContent = "Beide beantworten. Wenn beide richtig: schneller bekommt den Punkt.";
   roomSubtitle.textContent = online.roomCode ? `Online-Raum: ${online.roomCode}` : "Online";
 
   const q = online.question;
