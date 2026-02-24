@@ -151,6 +151,13 @@ button.primary {
   box-shadow: 0 6px 18px rgba(44, 139, 255, 0.35);
 }
 
+button.success {
+  background: rgba(100, 255, 150, 0.12);
+  border-color: rgba(142, 255, 179, 0.72);
+  color: #8effb3;
+  box-shadow: 0 6px 18px rgba(100, 255, 150, 0.18);
+}
+
 button:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(18, 31, 81, 0.45);

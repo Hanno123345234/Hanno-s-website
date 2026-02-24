@@ -800,7 +800,32 @@ const QUIZ_DUEL_QUESTIONS = [
   { q: "Wie viele Millimeter sind 3,2 Zentimeter?", a: ["0,32", "3,2", "32", "320"], c: 2 },
   { q: "Welche Aussage ist richtig?", a: ["Ein Halbtonschritt ist größer als ein Ganzton.", "In Musik ist ein Takt eine Zeiteinheit.", "Noten sind nur für Klavier.", "Rhythmus ist immer zufällig."], c: 1 },
   { q: "Welche Reihenfolge ist richtig (von der Sonne aus)?", a: ["Merkur, Venus, Erde, Mars", "Venus, Merkur, Erde, Mars", "Merkur, Erde, Venus, Mars", "Mars, Erde, Venus, Merkur"], c: 0 },
-  { q: "Welche Aussage zur EU ist richtig?", a: ["Alle Länder Europas sind automatisch in der EU.", "Die EU hat gemeinsame Regeln und Zusammenarbeit.", "Die EU ist ein einzelnes Land.", "Die EU hat keine eigenen Institutionen."], c: 1 }
+  { q: "Welche Aussage zur EU ist richtig?", a: ["Alle Länder Europas sind automatisch in der EU.", "Die EU hat gemeinsame Regeln und Zusammenarbeit.", "Die EU ist ein einzelnes Land.", "Die EU hat keine eigenen Institutionen."], c: 1 },
+  { q: "Wie viele Sekunden hat eine Stunde?", a: ["60", "600", "3600", "86400"], c: 2 },
+  { q: "Was ist √144?", a: ["10", "11", "12", "14"], c: 2 },
+  { q: "Welche Einheit hat die elektrische Stromstärke?", a: ["Ampere", "Volt", "Watt", "Ohm"], c: 0 },
+  { q: "Welches Element hat das chemische Zeichen 'Fe'?", a: ["Fluor", "Eisen", "Fermium", "Blei"], c: 1 },
+  { q: "Wie heißt die Hauptstadt von Japan?", a: ["Kyoto", "Osaka", "Tokio", "Sapporo"], c: 2 },
+  { q: "In welchem Jahr fiel die Berliner Mauer?", a: ["1979", "1989", "1999", "2009"], c: 1 },
+  { q: "Welche Aussage zum Satz des Pythagoras ist richtig?", a: ["Im rechtwinkligen Dreieck gilt: a² + b² = c² (c ist die Hypotenuse).", "Im Dreieck gilt immer: a² + b² = c².", "Im rechtwinkligen Dreieck gilt: a + b = c.", "Im rechtwinkligen Dreieck gilt: a² = b² + c²."], c: 0 },
+  { q: "Welche Zahl ist irrational?", a: ["√2", "0,25", "1/3", "-5"], c: 0 },
+  { q: "Welche der folgenden Größen ist eine Energieeinheit?", a: ["Joule", "Newton", "Pascal", "Ampere"], c: 0 },
+  { q: "Wie viel Prozent sind 3/4?", a: ["25%", "50%", "75%", "90%"], c: 2 },
+  { q: "Welche Wortart ist 'schnell' in 'ein schnelles Auto'?", a: ["Verb", "Adjektiv", "Nomen", "Artikel"], c: 1 },
+  { q: "Was ist das Ergebnis von 5! (Fakultät)?", a: ["20", "60", "120", "720"], c: 2 },
+  { q: "Welche Funktion haben Mitochondrien in Zellen am ehesten?", a: ["Energiegewinnung", "Fotosynthese", "Wassertransport", "Erbinformation speichern"], c: 0 },
+  { q: "Wie viele Bundesländer hat Deutschland?", a: ["14", "15", "16", "17"], c: 2 },
+  { q: "Welcher Fluss fließt durch Paris?", a: ["Themse", "Seine", "Tiber", "Donau"], c: 1 },
+  { q: "Welche Aussage zum pH-Wert ist richtig?", a: ["pH 7 ist sauer.", "pH 7 ist neutral.", "pH 7 ist basisch.", "pH kann nur ganze Zahlen sein."], c: 1 },
+  { q: "Wie heißt der Vorgang, wenn Wasserdampf zu Wasser wird?", a: ["Verdampfen", "Kondensieren", "Schmelzen", "Gefrieren"], c: 1 },
+  { q: "Welche der folgenden Zahlen ist durch 9 teilbar?", a: ["232", "234", "236", "238"], c: 1 },
+  { q: "Welcher Kontinent liegt am Südpol?", a: ["Afrika", "Europa", "Antarktis", "Asien"], c: 2 },
+  { q: "Welche Formel für Dichte ist richtig?", a: ["Dichte = Masse / Volumen", "Dichte = Masse · Volumen", "Dichte = Volumen / Masse", "Dichte = Kraft / Fläche"], c: 0 },
+  { q: "Welche Art Planet ist Jupiter?", a: ["Gesteinsplanet", "Gasriese", "Zwergplanet", "Komet"], c: 1 },
+  { q: "Welches Gas ist am häufigsten in der Luft?", a: ["Sauerstoff", "Stickstoff", "Kohlenstoffdioxid", "Argon"], c: 1 },
+  { q: "Wie groß ist ein Innenwinkel eines regelmäßigen Sechsecks?", a: ["90°", "120°", "135°", "150°"], c: 1 },
+  { q: "Was ist 0,2 als Bruch?", a: ["1/2", "1/5", "2/5", "1/20"], c: 1 },
+  { q: "Wie heißt die längste Seite in einem rechtwinkligen Dreieck?", a: ["Kathete", "Höhe", "Hypotenuse", "Mittellinie"], c: 2 }
 ];
 
 function createQuizCode() {
@@ -2985,9 +3010,13 @@ io.on("connection", (socket) => {
       room.scores[playerIndex] += 1;
       room.revealed = true;
 
-      io.to(room.code).emit("quiz_correct", {
+      io.to(room.code).emit("quiz_result", {
         code: room.code,
+        type: "correct",
         winnerIndex: playerIndex,
+        correctIndex,
+        correctAnswer: q.a[correctIndex],
+        selections: [...room.answers],
         players: room.players.map((p) => p.name),
         scores: room.scores
       });
@@ -3000,7 +3029,7 @@ io.on("connection", (socket) => {
         if (!liveRoom) return;
         if (liveRoom.currentIndex !== questionIndex) return;
         quizAdvance(liveRoom);
-      }, 200);
+      }, 2000);
       return;
     }
 
@@ -3008,7 +3037,25 @@ io.on("connection", (socket) => {
     const bothAnswered = room.answers.every((value) => value !== null && value !== undefined);
     if (bothAnswered && !room.revealed) {
       room.revealed = true;
-      quizAdvance(room);
+
+      io.to(room.code).emit("quiz_result", {
+        code: room.code,
+        type: "none",
+        winnerIndex: null,
+        correctIndex,
+        correctAnswer: q.a[correctIndex],
+        selections: [...room.answers],
+        players: room.players.map((p) => p.name),
+        scores: room.scores
+      });
+
+      const questionIndex = room.currentIndex;
+      setTimeout(() => {
+        const liveRoom = quizRooms.get(room.code);
+        if (!liveRoom) return;
+        if (liveRoom.currentIndex !== questionIndex) return;
+        quizAdvance(liveRoom);
+      }, 2000);
     }
   });
 
