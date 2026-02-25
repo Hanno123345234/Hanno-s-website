@@ -2,14 +2,19 @@ const STORAGE_NAMES = "quiz_duel_names_v1";
 const STORAGE_COUNT = "quiz_duel_count_v1";
 const STORAGE_ROOM = "quiz_duel_room_code_draft_v1";
 const STORAGE_ONLINE_NAME = "quiz_duel_online_name_v1";
+const STORAGE_CATEGORY = "quiz_duel_category_v1";
+const STORAGE_DIFFICULTY = "quiz_duel_difficulty_v1";
 
 const setupCard = document.getElementById("setupCard");
+const lobbyCard = document.getElementById("lobbyCard");
 const playCard = document.getElementById("playCard");
 const resultCard = document.getElementById("resultCard");
 
 const playerAInput = document.getElementById("playerA");
 const playerBInput = document.getElementById("playerB");
 const questionCountInput = document.getElementById("questionCount");
+const categorySelect = document.getElementById("category");
+const difficultySelect = document.getElementById("difficulty");
 const startQuizBtn = document.getElementById("startQuizBtn");
 const setupError = document.getElementById("setupError");
 
@@ -20,6 +25,15 @@ const onlineNameInput = document.getElementById("onlineName");
 const hostCodeLine = document.getElementById("hostCodeLine");
 const hostCodeText = document.getElementById("hostCodeText");
 const onlineStatus = document.getElementById("onlineStatus");
+
+const leaveLobbyBtn = document.getElementById("leaveLobbyBtn");
+const lobbyStatus = document.getElementById("lobbyStatus");
+const lobbyCodeText = document.getElementById("lobbyCodeText");
+const lobbyPlayers = document.getElementById("lobbyPlayers");
+const lobbyQuestionCountInput = document.getElementById("lobbyQuestionCount");
+const lobbyCategorySelect = document.getElementById("lobbyCategory");
+const lobbyDifficultySelect = document.getElementById("lobbyDifficulty");
+const readyBtn = document.getElementById("readyBtn");
 
 const progressTitle = document.getElementById("progressTitle");
 const turnSubtitle = document.getElementById("turnSubtitle");
@@ -42,80 +56,8 @@ const finalA = document.getElementById("finalA");
 const finalB = document.getElementById("finalB");
 const restartBtn = document.getElementById("restartBtn");
 
-const QUESTIONS = [
-  { q: "Wie viele Minuten sind 2,5 Stunden?", a: ["120", "150", "180", "210"], c: 1 },
-  { q: "Was ist die Lösung von 3(x − 2) = 15?", a: ["x = 3", "x = 5", "x = 7", "x = 9"], c: 2 },
-  { q: "Welche Zahl ist eine Primzahl?", a: ["21", "29", "33", "35"], c: 1 },
-  { q: "Wie heißt die Hauptstadt von Kanada?", a: ["Toronto", "Vancouver", "Ottawa", "Montreal"], c: 2 },
-  { q: "In welchem Jahr begann der Erste Weltkrieg?", a: ["1912", "1914", "1918", "1939"], c: 1 },
-  { q: "Welche Einheit hat elektrische Spannung?", a: ["Watt", "Volt", "Ohm", "Newton"], c: 1 },
-  { q: "Welches Gas entsteht bei der Photosynthese als Produkt?", a: ["Sauerstoff", "Stickstoff", "Kohlenstoffdioxid", "Wasserstoff"], c: 0 },
-  { q: "Welche Aussage ist richtig?", a: ["Die Erde ist der Sonne näher als die Venus.", "Der Mond leuchtet selbst.", "Die Erde rotiert in ca. 24 Stunden einmal.", "Jupiter ist kleiner als die Erde."], c: 2 },
-  { q: "Wie nennt man eine Zahl, die nur durch 1 und sich selbst teilbar ist?", a: ["gerade Zahl", "Primzahl", "Quadratzahl", "Bruch"], c: 1 },
-  { q: "Welche der folgenden Formen hat genau eine Symmetrieachse?", a: ["gleichseitiges Dreieck", "gleichschenkliges Dreieck", "Quadrat", "Kreis"], c: 1 },
-  { q: "Was ist 15% von 200?", a: ["15", "20", "30", "45"], c: 2 },
-  { q: "Wie viele Seiten hat ein regelmäßiges Sechseck?", a: ["5", "6", "7", "8"], c: 1 },
-  { q: "Welche Aussage beschreibt einen Akkusativ?", a: ["2. Fall", "3. Fall", "4. Fall", "5. Fall"], c: 2 },
-  { q: "Wer schrieb 'Faust'?", a: ["Goethe", "Schiller", "Kafka", "Brecht"], c: 0 },
-  { q: "Welche Stadt liegt an der Spree?", a: ["Hamburg", "Berlin", "Köln", "Dresden"], c: 1 },
-  { q: "Welche Zahl ist eine Quadratzahl?", a: ["18", "20", "25", "27"], c: 2 },
-  { q: "Welche Formel ist richtig?", a: ["Fläche Rechteck = a + b", "Umfang Kreis = 2πr", "Dichte = Masse · Volumen", "Kraft = Masse / Beschleunigung"], c: 1 },
-  { q: "Was ist die Hauptstadt von Australien?", a: ["Sydney", "Canberra", "Melbourne", "Perth"], c: 1 },
-  { q: "Was ist eine Metapher?", a: ["wörtliche Beschreibung", "Vergleich ohne 'wie'", "Reimform", "Aufzählung"], c: 1 },
-  { q: "Welcher Kontinent hat die meisten Länder?", a: ["Europa", "Afrika", "Asien", "Südamerika"], c: 1 },
-  { q: "Was ist die Lösung von 2^5?", a: ["16", "24", "32", "64"], c: 2 },
-  { q: "Welche ist eine chemische Formel für Wasser?", a: ["CO2", "H2O", "O2", "NaCl"], c: 1 },
-  { q: "Welche Aussage zur Demokratie passt am besten?", a: ["Eine Person entscheidet alles.", "Wahlen bestimmen Vertreter.", "Nur Könige bestimmen Gesetze.", "Es gibt keine Regeln."], c: 1 },
-  { q: "Welche Zahl ist am nächsten an 1/3?", a: ["0,25", "0,33", "0,5", "0,75"], c: 1 },
-  { q: "Was bedeutet 'Dreiviertel' als Dezimalzahl?", a: ["0,25", "0,5", "0,75", "1,25"], c: 2 },
-  { q: "Welche Aussage ist richtig?", a: ["Ein Quadrat ist immer auch ein Rechteck.", "Ein Rechteck ist immer ein Quadrat.", "Ein Dreieck hat vier Seiten.", "Ein Kreis hat Ecken."], c: 0 },
-  { q: "Welche Ebene trennt Nord- und Südhalbkugel?", a: ["Nullmeridian", "Äquator", "Wendekreis", "Polarkreis"], c: 1 },
-  { q: "Wie heißt die Hauptstadt von Italien?", a: ["Mailand", "Rom", "Neapel", "Florenz"], c: 1 },
-  { q: "Welche Größe misst man in Newton (N)?", a: ["Druck", "Energie", "Kraft", "Leistung"], c: 2 },
-  { q: "Was passiert bei einer Oxidation?", a: ["Elektronen werden aufgenommen", "Elektronen werden abgegeben", "Atome verschwinden", "Wasser wird zu Eis"], c: 1 },
-  { q: "Welche Aussage zu Klimazonen ist richtig?", a: ["Die Tropen liegen an den Polen.", "Die gemäßigte Zone liegt zwischen Tropen und Polarzone.", "Es gibt nur eine Klimazone.", "In der Polarzone ist es immer warm."], c: 1 },
-  { q: "Was ist die Summe der Innenwinkel in einem Dreieck?", a: ["90°", "120°", "180°", "360°"], c: 2 },
-  { q: "Welche Stadt ist Hauptstadt von Spanien?", a: ["Barcelona", "Madrid", "Sevilla", "Valencia"], c: 1 },
-  { q: "Welche Aussage ist richtig?", a: ["Prozent bedeutet 'von 100'.", "Prozent bedeutet 'von 10'.", "Prozent ist eine Längeneinheit.", "Prozent ist immer größer als 1."], c: 0 },
-  { q: "Wie heißt der Vorgang, wenn Wasser zu Dampf wird?", a: ["Kondensieren", "Schmelzen", "Verdampfen", "Gefrieren"], c: 2 },
-  { q: "Welche ist ein Beispiel für erneuerbare Energie?", a: ["Braunkohle", "Erdgas", "Windkraft", "Benzin"], c: 2 },
-  { q: "Welche Aussage ist richtig?", a: ["Ein Atom besteht nur aus Elektronen.", "Der Zellkern enthält DNA.", "Bakterien sind immer Pflanzen.", "Alle Viren sind Lebewesen."], c: 1 },
-  { q: "Wie nennt man die erste Zeile eines Gedichts oft?", a: ["Strophe", "Vers", "Refrain", "Kapitel"], c: 1 },
-  { q: "Welche Aussage ist richtig?", a: ["Nordsee ist ein See.", "Die Alpen sind ein Gebirge.", "Sahara ist ein Ozean.", "Der Rhein ist ein Gebirge."], c: 1 },
-  { q: "Wie viele Grad hat ein rechter Winkel?", a: ["45°", "60°", "90°", "180°"], c: 2 },
-  { q: "Wenn a = 4 und b = 7, was ist a·b?", a: ["11", "21", "24", "28"], c: 3 },
-  { q: "Was bedeutet 'These' in einem Text am ehesten?", a: ["Hauptaussage", "Beispiel", "Schlusswort", "Überschrift"], c: 0 },
-  { q: "Welche Aussage ist richtig?", a: ["Das Mittelalter endet vor der Antike.", "Die Antike kommt vor dem Mittelalter.", "Die Neuzeit kommt vor dem Mittelalter.", "Es gibt keine Reihenfolge."], c: 1 },
-  { q: "Wie viele Millimeter sind 3,2 Zentimeter?", a: ["0,32", "3,2", "32", "320"], c: 2 },
-  { q: "Welche Aussage ist richtig?", a: ["Ein Halbtonschritt ist größer als ein Ganzton.", "In Musik ist ein Takt eine Zeiteinheit.", "Noten sind nur für Klavier.", "Rhythmus ist immer zufällig."], c: 1 },
-  { q: "Welche Reihenfolge ist richtig (von der Sonne aus)?", a: ["Merkur, Venus, Erde, Mars", "Venus, Merkur, Erde, Mars", "Merkur, Erde, Venus, Mars", "Mars, Erde, Venus, Merkur"], c: 0 },
-  { q: "Welche Aussage zur EU ist richtig?", a: ["Alle Länder Europas sind automatisch in der EU.", "Die EU hat gemeinsame Regeln und Zusammenarbeit.", "Die EU ist ein einzelnes Land.", "Die EU hat keine eigenen Institutionen."], c: 1 },
-  { q: "Wie viele Sekunden hat eine Stunde?", a: ["60", "600", "3600", "86400"], c: 2 },
-  { q: "Was ist √144?", a: ["10", "11", "12", "14"], c: 2 },
-  { q: "Welche Einheit hat die elektrische Stromstärke?", a: ["Ampere", "Volt", "Watt", "Ohm"], c: 0 },
-  { q: "Welches Element hat das chemische Zeichen 'Fe'?", a: ["Fluor", "Eisen", "Fermium", "Blei"], c: 1 },
-  { q: "Wie heißt die Hauptstadt von Japan?", a: ["Kyoto", "Osaka", "Tokio", "Sapporo"], c: 2 },
-  { q: "In welchem Jahr fiel die Berliner Mauer?", a: ["1979", "1989", "1999", "2009"], c: 1 },
-  { q: "Welche Aussage zum Satz des Pythagoras ist richtig?", a: ["Im rechtwinkligen Dreieck gilt: a² + b² = c² (c ist die Hypotenuse).", "Im Dreieck gilt immer: a² + b² = c².", "Im rechtwinkligen Dreieck gilt: a + b = c.", "Im rechtwinkligen Dreieck gilt: a² = b² + c²."], c: 0 },
-  { q: "Welche Zahl ist irrational?", a: ["√2", "0,25", "1/3", "-5"], c: 0 },
-  { q: "Welche der folgenden Größen ist eine Energieeinheit?", a: ["Joule", "Newton", "Pascal", "Ampere"], c: 0 },
-  { q: "Wie viel Prozent sind 3/4?", a: ["25%", "50%", "75%", "90%"], c: 2 },
-  { q: "Welche Wortart ist 'schnell' in 'ein schnelles Auto'?", a: ["Verb", "Adjektiv", "Nomen", "Artikel"], c: 1 },
-  { q: "Was ist das Ergebnis von 5! (Fakultät)?", a: ["20", "60", "120", "720"], c: 2 },
-  { q: "Welche Funktion haben Mitochondrien in Zellen am ehesten?", a: ["Energiegewinnung", "Fotosynthese", "Wassertransport", "Erbinformation speichern"], c: 0 },
-  { q: "Wie viele Bundesländer hat Deutschland?", a: ["14", "15", "16", "17"], c: 2 },
-  { q: "Welcher Fluss fließt durch Paris?", a: ["Themse", "Seine", "Tiber", "Donau"], c: 1 },
-  { q: "Welche Aussage zum pH-Wert ist richtig?", a: ["pH 7 ist sauer.", "pH 7 ist neutral.", "pH 7 ist basisch.", "pH kann nur ganze Zahlen sein."], c: 1 },
-  { q: "Wie heißt der Vorgang, wenn Wasserdampf zu Wasser wird?", a: ["Verdampfen", "Kondensieren", "Schmelzen", "Gefrieren"], c: 1 },
-  { q: "Welche der folgenden Zahlen ist durch 9 teilbar?", a: ["232", "234", "236", "238"], c: 1 },
-  { q: "Welcher Kontinent liegt am Südpol?", a: ["Afrika", "Europa", "Antarktis", "Asien"], c: 2 },
-  { q: "Welche Formel für Dichte ist richtig?", a: ["Dichte = Masse / Volumen", "Dichte = Masse · Volumen", "Dichte = Volumen / Masse", "Dichte = Kraft / Fläche"], c: 0 },
-  { q: "Welche Art Planet ist Jupiter?", a: ["Gesteinsplanet", "Gasriese", "Zwergplanet", "Komet"], c: 1 },
-  { q: "Welches Gas ist am häufigsten in der Luft?", a: ["Sauerstoff", "Stickstoff", "Kohlenstoffdioxid", "Argon"], c: 1 },
-  { q: "Wie groß ist ein Innenwinkel eines regelmäßigen Sechsecks?", a: ["90°", "120°", "135°", "150°"], c: 1 },
-  { q: "Was ist 0,2 als Bruch?", a: ["1/2", "1/5", "2/5", "1/20"], c: 1 },
-  { q: "Wie heißt die längste Seite in einem rechtwinkligen Dreieck?", a: ["Kathete", "Höhe", "Hypotenuse", "Mittellinie"], c: 2 }
-];
+let questionBank = [];
+let questionBankLoaded = false;
 
 let game = null;
 let mode = "local";
@@ -134,11 +76,17 @@ const online = {
   totalQuestions: 0,
   question: null,
   reveal: null,
-  answeredThisQuestion: false
+  answeredThisQuestion: false,
+  ready: [false, false],
+  settings: {
+    questionCount: 10,
+    category: "",
+    difficulty: ""
+  }
 };
 
 function showCard(card) {
-  [setupCard, playCard, resultCard].forEach((el) => el.classList.remove("active"));
+  [setupCard, lobbyCard, playCard, resultCard].forEach((el) => el.classList.remove("active"));
   card.classList.add("active");
 }
 
@@ -148,6 +96,11 @@ function setSetupError(text) {
 
 function setOnlineStatus(text) {
   onlineStatus.textContent = String(text || "");
+}
+
+function setLobbyStatus(text) {
+  if (!lobbyStatus) return;
+  lobbyStatus.textContent = String(text || "");
 }
 
 function clearCooldown() {
@@ -177,6 +130,232 @@ function shuffle(list) {
   return cloned;
 }
 
+function normalizeCategory(raw) {
+  const value = String(raw || "").trim();
+  return value;
+}
+
+function normalizeDifficulty(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (["easy", "medium", "hard"].includes(value)) return value;
+  return "";
+}
+
+function getFilters() {
+  const category = normalizeCategory(categorySelect?.value);
+  const difficulty = normalizeDifficulty(difficultySelect?.value);
+  return { category, difficulty };
+}
+
+function getLobbyFilters() {
+  const category = normalizeCategory(lobbyCategorySelect?.value);
+  const difficulty = normalizeDifficulty(lobbyDifficultySelect?.value);
+  return { category, difficulty };
+}
+
+function filterQuestionBank(bank, filters) {
+  const category = filters?.category ? String(filters.category) : "";
+  const difficulty = filters?.difficulty ? String(filters.difficulty) : "";
+
+  return (Array.isArray(bank) ? bank : []).filter((q) => {
+    if (!q || typeof q.q !== "string") return false;
+    if (!Array.isArray(q.a) || q.a.length !== 4) return false;
+    if (!Number.isInteger(q.c) || q.c < 0 || q.c > 3) return false;
+
+    if (category && String(q.category || "") !== category) return false;
+    if (difficulty && String(q.difficulty || "").toLowerCase() !== difficulty) return false;
+    return true;
+  });
+}
+
+function shuffleQuestionAnswers(q) {
+  const order = shuffle([0, 1, 2, 3]);
+  const answers = order.map((idx) => String(q.a[idx]));
+  const correctIndex = order.indexOf(Number(q.c));
+  return {
+    id: String(q.id || ""),
+    text: String(q.q),
+    answers,
+    correctIndex
+  };
+}
+
+function setSelectOptions(selectEl, options, selectedValue) {
+  if (!selectEl) return;
+  selectEl.innerHTML = "";
+  options.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = String(value);
+    opt.textContent = String(label);
+    selectEl.appendChild(opt);
+  });
+
+  if (selectedValue !== undefined && selectedValue !== null) {
+    const value = String(selectedValue);
+    const exists = [...selectEl.options].some((o) => o.value === value);
+    selectEl.value = exists ? value : String(options?.[0]?.value ?? "");
+  }
+}
+
+function updateQuestionCountLimits() {
+  const filtered = filterQuestionBank(questionBank, getFilters());
+  const max = Math.max(4, Math.min(40, filtered.length || 4));
+  questionCountInput.max = String(max);
+  const current = Math.round(Number(questionCountInput.value || 10));
+  const clamped = Math.max(4, Math.min(max, Number.isFinite(current) ? current : 10));
+  questionCountInput.value = String(clamped);
+}
+
+function updateLobbyQuestionCountLimits() {
+  if (!lobbyQuestionCountInput) return;
+  const filtered = filterQuestionBank(questionBank, getLobbyFilters());
+  const max = Math.max(4, Math.min(40, filtered.length || 4));
+  lobbyQuestionCountInput.max = String(max);
+  const current = Math.round(Number(lobbyQuestionCountInput.value || 10));
+  const clamped = Math.max(4, Math.min(max, Number.isFinite(current) ? current : 10));
+  lobbyQuestionCountInput.value = String(clamped);
+}
+
+async function loadQuestionBank() {
+  try {
+    const resp = await fetch("./quiz_questions.json", { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!Array.isArray(data)) throw new Error("Invalid questions JSON");
+    questionBank = data;
+    questionBankLoaded = true;
+    return true;
+  } catch {
+    questionBank = [];
+    questionBankLoaded = false;
+    return false;
+  }
+}
+
+function populateFiltersFromBank() {
+  const categories = [...new Set((questionBank || []).map((q) => String(q?.category || "").trim()).filter(Boolean))].sort();
+  const difficulties = [...new Set((questionBank || []).map((q) => String(q?.difficulty || "").trim().toLowerCase()).filter(Boolean))]
+    .filter((d) => ["easy", "medium", "hard"].includes(d))
+    .sort((a, b) => {
+      const rank = { easy: 1, medium: 2, hard: 3 };
+      return (rank[a] || 99) - (rank[b] || 99);
+    });
+
+  const savedCategory = String(window.localStorage.getItem(STORAGE_CATEGORY) || "");
+  const savedDifficulty = normalizeDifficulty(window.localStorage.getItem(STORAGE_DIFFICULTY) || "");
+
+  setSelectOptions(
+    categorySelect,
+    [{ value: "", label: "Alle Kategorien" }, ...categories.map((c) => ({ value: c, label: c }))],
+    savedCategory
+  );
+
+  setSelectOptions(
+    difficultySelect,
+    [{ value: "", label: "Gemischt" }, ...difficulties.map((d) => ({ value: d, label: d === "easy" ? "Leicht" : d === "medium" ? "Mittel" : "Schwer" }))],
+    savedDifficulty
+  );
+
+  setSelectOptions(
+    lobbyCategorySelect,
+    [{ value: "", label: "Alle Kategorien" }, ...categories.map((c) => ({ value: c, label: c }))],
+    savedCategory
+  );
+
+  setSelectOptions(
+    lobbyDifficultySelect,
+    [{ value: "", label: "Gemischt" }, ...difficulties.map((d) => ({ value: d, label: d === "easy" ? "Leicht" : d === "medium" ? "Mittel" : "Schwer" }))],
+    savedDifficulty
+  );
+
+  updateQuestionCountLimits();
+  updateLobbyQuestionCountLimits();
+}
+
+function isHost() {
+  return Number(online.playerIndex) === 0;
+}
+
+function canReady() {
+  return mode === "online" && online.roomCode && Array.isArray(online.players) && online.players.length === 2;
+}
+
+function renderLobby() {
+  if (mode !== "online") return;
+  if (!lobbyCard) return;
+
+  showCard(lobbyCard);
+
+  if (lobbyCodeText) {
+    lobbyCodeText.textContent = String(online.roomCode || "");
+  }
+
+  const players = Array.isArray(online.players) ? online.players : [];
+  const ready = Array.isArray(online.ready) ? online.ready : [false, false];
+
+  if (lobbyPlayers) {
+    lobbyPlayers.innerHTML = "";
+    const list = [0, 1].map((idx) => {
+      const name = players[idx] || (idx === 0 ? "Spieler 1" : "Spieler 2");
+      const isReady = !!ready[idx];
+      const li = document.createElement("li");
+      li.textContent = `${name}${isReady ? " (bereit)" : ""}`;
+      return li;
+    });
+    list.forEach((li) => lobbyPlayers.appendChild(li));
+  }
+
+  const host = isHost();
+  if (lobbyQuestionCountInput) lobbyQuestionCountInput.disabled = !host;
+  if (lobbyCategorySelect) lobbyCategorySelect.disabled = !host;
+  if (lobbyDifficultySelect) lobbyDifficultySelect.disabled = !host;
+
+  // Fill controls from server settings if present.
+  const serverSettings = online.settings || {};
+  if (lobbyQuestionCountInput && Number.isFinite(Number(serverSettings.questionCount))) {
+    lobbyQuestionCountInput.value = String(serverSettings.questionCount);
+  }
+  if (lobbyCategorySelect) {
+    const cat = String(serverSettings.category || "");
+    if ([...lobbyCategorySelect.options].some((o) => o.value === cat)) lobbyCategorySelect.value = cat;
+  }
+  if (lobbyDifficultySelect) {
+    const diff = normalizeDifficulty(serverSettings.difficulty || "");
+    if ([...lobbyDifficultySelect.options].some((o) => o.value === diff)) lobbyDifficultySelect.value = diff;
+  }
+
+  updateLobbyQuestionCountLimits();
+
+  const me = Number(online.playerIndex);
+  const myReady = !!ready[me];
+  if (readyBtn) {
+    readyBtn.disabled = !canReady() || myReady;
+    readyBtn.textContent = myReady ? "Bereit ✓" : "Bereit";
+  }
+
+  if (players.length < 2) {
+    setLobbyStatus("Warte auf Spieler 2…");
+  } else {
+    setLobbyStatus("Beide da. Bitte beide auf „Bereit“ drücken.");
+  }
+}
+
+function emitOnlineSettingsUpdate() {
+  if (mode !== "online") return;
+  if (!online.socket) return;
+  if (!isHost()) return;
+  if (!online.roomCode) return;
+  const { category, difficulty } = getLobbyFilters();
+  const requested = Math.round(Number(lobbyQuestionCountInput?.value || questionCountInput.value || 10));
+
+  online.socket.emit("quiz_update_settings", {
+    code: online.roomCode,
+    questionCount: requested,
+    category,
+    difficulty
+  });
+}
+
 function saveSetupDraft() {
   const payload = {
     a: String(playerAInput.value || ""),
@@ -186,6 +365,8 @@ function saveSetupDraft() {
   window.localStorage.setItem(STORAGE_COUNT, String(questionCountInput.value || "10"));
   window.localStorage.setItem(STORAGE_ROOM, String(roomCodeInput.value || ""));
   window.localStorage.setItem(STORAGE_ONLINE_NAME, String(onlineNameInput.value || ""));
+  window.localStorage.setItem(STORAGE_CATEGORY, String(categorySelect?.value || ""));
+  window.localStorage.setItem(STORAGE_DIFFICULTY, String(difficultySelect?.value || ""));
 }
 
 function loadSetupDraft() {
@@ -211,18 +392,35 @@ function loadSetupDraft() {
   if (onlineName) {
     onlineNameInput.value = onlineName;
   }
+
+  const storedCategory = String(window.localStorage.getItem(STORAGE_CATEGORY) || "");
+  if (categorySelect && storedCategory) {
+    categorySelect.value = storedCategory;
+  }
+
+  const storedDifficulty = String(window.localStorage.getItem(STORAGE_DIFFICULTY) || "");
+  if (difficultySelect && storedDifficulty) {
+    difficultySelect.value = storedDifficulty;
+  }
 }
 
 function buildGame() {
+  if (!questionBankLoaded) {
+    return { ok: false, error: "Fragen konnten nicht geladen werden." };
+  }
+
   const nameA = normalizeName(playerAInput.value, "Spieler 1");
   const nameB = normalizeName(playerBInput.value, "Spieler 2");
 
-  const count = Math.max(4, Math.min(40, Math.round(Number(questionCountInput.value || 10))));
-  if (count > QUESTIONS.length) {
-    return { ok: false, error: `Zu wenig Fragen im Pool (${QUESTIONS.length}).` };
+  const filters = getFilters();
+  const filtered = filterQuestionBank(questionBank, filters);
+  const max = Math.max(4, Math.min(40, filtered.length || 4));
+  const count = Math.max(4, Math.min(max, Math.round(Number(questionCountInput.value || 10))));
+  if (count > filtered.length) {
+    return { ok: false, error: `Zu wenig Fragen im Pool (${filtered.length}).` };
   }
 
-  const order = shuffle([...Array(QUESTIONS.length).keys()]).slice(0, count);
+  const picked = shuffle(filtered).slice(0, count).map(shuffleQuestionAnswers);
 
   return {
     ok: true,
@@ -230,7 +428,7 @@ function buildGame() {
       players: [nameA, nameB],
       scores: [0, 0],
       turn: 0,
-      order,
+      questions: picked,
       answered: false
     }
   };
@@ -254,7 +452,7 @@ function renderScore() {
 function renderLocalQuestion() {
   clearCooldown();
   const currentIndex = game.turn;
-  const total = game.order.length;
+  const total = game.questions.length;
   const playerIndex = currentIndex % 2;
   const playerName = game.players[playerIndex];
 
@@ -262,15 +460,15 @@ function renderLocalQuestion() {
   turnSubtitle.textContent = `Am Zug: ${playerName}`;
   roomSubtitle.textContent = "";
 
-  const q = QUESTIONS[game.order[currentIndex]];
-  questionText.textContent = q.q;
+  const q = game.questions[currentIndex];
+  questionText.textContent = q.text;
 
   feedbackEl.textContent = "";
   nextBtn.disabled = true;
   game.answered = false;
 
   answersEl.innerHTML = "";
-  q.a.forEach((label, idx) => {
+  q.answers.forEach((label, idx) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = label;
@@ -307,21 +505,21 @@ function onLocalAnswer(selectedIndex) {
 
   const currentIndex = game.turn;
   const playerIndex = currentIndex % 2;
-  const q = QUESTIONS[game.order[currentIndex]];
+  const q = game.questions[currentIndex];
 
-  const correct = selectedIndex === q.c;
+  const correct = selectedIndex === q.correctIndex;
   if (correct) {
     game.scores[playerIndex] += 1;
   }
 
   [...answersEl.querySelectorAll("button")].forEach((btn, idx) => {
     btn.disabled = true;
-    if (idx === q.c) {
+    if (idx === q.correctIndex) {
       btn.classList.add("success");
     }
   });
 
-  feedbackEl.textContent = correct ? "Richtig! +1 Punkt" : `Falsch. Richtig ist: ${q.a[q.c]}`;
+  feedbackEl.textContent = correct ? "Richtig! +1 Punkt" : `Falsch. Richtig ist: ${q.answers[q.correctIndex]}`;
   nextBtn.disabled = true;
   renderScore();
 
@@ -331,7 +529,7 @@ function onLocalAnswer(selectedIndex) {
 function advanceLocal() {
   if (!game) return;
   game.turn += 1;
-  if (game.turn >= game.order.length) {
+  if (game.turn >= game.questions.length) {
     finishGame();
     return;
   }
@@ -399,19 +597,24 @@ function resetToSetup() {
   online.question = null;
   online.reveal = null;
   online.answeredThisQuestion = false;
+  online.ready = [false, false];
+  online.settings = { questionCount: 10, category: "", difficulty: "" };
 
   hostCodeLine.style.display = "none";
   hostCodeText.textContent = "";
   setOnlineStatus("");
+  setLobbyStatus("");
   showCard(setupCard);
 }
 
 async function loadSocketIoClient() {
   if (typeof window.io === "function") return;
 
+  const onlineOrigin = String(window.QUIZ_ONLINE_ORIGIN || "").trim() || window.location.origin;
+
   await new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `${window.location.origin}/socket.io/socket.io.js`;
+    script.src = `${onlineOrigin}/socket.io/socket.io.js`;
     script.async = true;
     script.onload = resolve;
     script.onerror = reject;
@@ -427,7 +630,10 @@ async function ensureOnlineSocket() {
     throw new Error("Socket.IO client not available");
   }
 
-  const socket = window.io({ transports: ["websocket", "polling"] });
+  const onlineOrigin = String(window.QUIZ_ONLINE_ORIGIN || "").trim();
+  const socket = onlineOrigin
+    ? window.io(onlineOrigin, { transports: ["websocket", "polling"] })
+    : window.io({ transports: ["websocket", "polling"] });
   online.socket = socket;
   setOnlineStatus("Verbinden…");
 
@@ -455,6 +661,8 @@ async function ensureOnlineSocket() {
     online.playerIndex = Number(payload?.playerIndex || 0);
     online.players = Array.isArray(payload?.players) ? payload.players : [];
     online.scores = Array.isArray(payload?.scores) ? payload.scores : [0, 0];
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : [false, false];
+    online.settings = payload?.settings || online.settings;
 
     if (online.roomCode) {
       hostCodeText.textContent = online.roomCode;
@@ -463,7 +671,9 @@ async function ensureOnlineSocket() {
       saveSetupDraft();
     }
 
-    setOnlineStatus("Warte auf Spieler 2…");
+    setOnlineStatus("Lobby geöffnet.");
+    renderScore();
+    renderLobby();
   });
 
   socket.on("quiz_joined", (payload) => {
@@ -472,20 +682,29 @@ async function ensureOnlineSocket() {
     online.playerIndex = Number(payload?.playerIndex);
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
-    setOnlineStatus("Beigetreten. Startet…");
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.ready;
+    online.settings = payload?.settings || online.settings;
+    setOnlineStatus("Beigetreten.");
     renderScore();
+    renderLobby();
   });
 
   socket.on("quiz_room_update", (payload) => {
     if (mode !== "online") return;
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.ready;
+    online.settings = payload?.settings || online.settings;
     renderScore();
+
+    if (!payload?.started) {
+      renderLobby();
+    }
 
     if ((online.players || []).length < 2) {
       setOnlineStatus("Warte auf Spieler 2…");
     } else {
-      setOnlineStatus("Spiel gefunden. Startet…");
+      setOnlineStatus("Beide Spieler da.");
     }
   });
 
@@ -626,11 +845,12 @@ async function hostOnline() {
 
   const name = getOnlineName();
   const count = Math.max(4, Math.min(40, Math.round(Number(questionCountInput.value || 10))));
+  const { category, difficulty } = getFilters();
 
   try {
     const socket = await ensureOnlineSocket();
     mode = "online";
-    socket.emit("quiz_create_room", { name, questionCount: count });
+    socket.emit("quiz_create_room", { name, questionCount: count, category, difficulty });
     setOnlineStatus("Raum wird erstellt…");
   } catch {
     setSetupError("Online geht hier nicht (Server/Socket.IO fehlt). Nutze Render oder localhost.");
@@ -674,14 +894,101 @@ restartBtn.addEventListener("click", () => {
   showCard(setupCard);
 });
 
+if (leaveLobbyBtn) {
+  leaveLobbyBtn.addEventListener("click", resetToSetup);
+}
+
+if (readyBtn) {
+  readyBtn.addEventListener("click", () => {
+    if (mode !== "online") return;
+    if (!online.socket) return;
+    if (!online.roomCode) return;
+    const me = Number(online.playerIndex);
+    if (![0, 1].includes(me)) return;
+    online.socket.emit("quiz_ready", { code: online.roomCode });
+  });
+}
+
 hostOnlineBtn.addEventListener("click", hostOnline);
 joinOnlineBtn.addEventListener("click", joinOnline);
 
-[playerAInput, playerBInput, questionCountInput].forEach((el) => {
-  el.addEventListener("input", saveSetupDraft);
-});
+[
+  playerAInput,
+  playerBInput,
+  questionCountInput,
+  categorySelect,
+  difficultySelect
+]
+  .filter(Boolean)
+  .forEach((el) => {
+    el.addEventListener("input", saveSetupDraft);
+  });
+
+if (categorySelect) {
+  categorySelect.addEventListener("change", () => {
+    updateQuestionCountLimits();
+    saveSetupDraft();
+  });
+}
+
+if (difficultySelect) {
+  difficultySelect.addEventListener("change", () => {
+    updateQuestionCountLimits();
+    saveSetupDraft();
+  });
+}
 
 roomCodeInput.addEventListener("input", saveSetupDraft);
 onlineNameInput.addEventListener("input", saveSetupDraft);
 
+if (lobbyQuestionCountInput) {
+  lobbyQuestionCountInput.addEventListener("input", () => {
+    // keep setup field in sync
+    questionCountInput.value = String(lobbyQuestionCountInput.value || questionCountInput.value || "10");
+    saveSetupDraft();
+    updateLobbyQuestionCountLimits();
+    emitOnlineSettingsUpdate();
+  });
+}
+
+if (lobbyCategorySelect) {
+  lobbyCategorySelect.addEventListener("change", () => {
+    // keep setup field in sync
+    if (categorySelect) categorySelect.value = String(lobbyCategorySelect.value || "");
+    saveSetupDraft();
+    updateLobbyQuestionCountLimits();
+    emitOnlineSettingsUpdate();
+  });
+}
+
+if (lobbyDifficultySelect) {
+  lobbyDifficultySelect.addEventListener("change", () => {
+    if (difficultySelect) difficultySelect.value = String(lobbyDifficultySelect.value || "");
+    saveSetupDraft();
+    updateLobbyQuestionCountLimits();
+    emitOnlineSettingsUpdate();
+  });
+}
+
 loadSetupDraft();
+
+(async () => {
+  const ok = await loadQuestionBank();
+  if (!ok) {
+    setSetupError("Fragen konnten nicht geladen werden (quiz_questions.json fehlt). Online kann trotzdem gehen.");
+    setSelectOptions(categorySelect, [{ value: "", label: "Alle Kategorien" }], "");
+    setSelectOptions(difficultySelect, [{ value: "", label: "Gemischt" }], "");
+    return;
+  }
+
+  populateFiltersFromBank();
+
+  // Apply any stored draft selection after options exist.
+  const storedCategory = String(window.localStorage.getItem(STORAGE_CATEGORY) || "");
+  if (storedCategory) categorySelect.value = storedCategory;
+  const storedDifficulty = normalizeDifficulty(window.localStorage.getItem(STORAGE_DIFFICULTY) || "");
+  if (storedDifficulty) difficultySelect.value = storedDifficulty;
+
+  updateQuestionCountLimits();
+  updateLobbyQuestionCountLimits();
+})();

@@ -27,6 +27,12 @@
         <label for="questionCount">Anzahl Fragen (gesamt)</label>
         <input id="questionCount" type="number" min="4" max="40" value="10" />
 
+        <label for="category">Kategorie</label>
+        <select id="category"></select>
+
+        <label for="difficulty">Schwierigkeit</label>
+        <select id="difficulty"></select>
+
         <div class="admin-box">
           <h3>Online (mit Code)</h3>
           <p class="subtitle">Host macht einen Code. Der andere joint mit Code.</p>
@@ -57,6 +63,41 @@
         </div>
 
         <p id="setupError" class="subtitle"></p>
+      </section>
+
+      <section id="lobbyCard" class="card">
+        <div class="top-tools">
+          <a href="./" class="mini-link">← Zur Auswahl</a>
+          <button id="leaveLobbyBtn" class="mini-btn" type="button">Verlassen</button>
+        </div>
+
+        <h1>Online-Lobby</h1>
+        <p id="lobbyStatus" class="subtitle"></p>
+
+        <div class="admin-box">
+          <h3>Raum</h3>
+          <p class="subtitle">Code: <strong id="lobbyCodeText"></strong></p>
+
+          <h3>Spieler</h3>
+          <ul id="lobbyPlayers" class="player-list"></ul>
+        </div>
+
+        <div class="admin-box">
+          <h3>Einstellungen</h3>
+
+          <label for="lobbyQuestionCount">Anzahl Fragen (gesamt)</label>
+          <input id="lobbyQuestionCount" type="number" min="4" max="40" value="10" />
+
+          <label for="lobbyCategory">Kategorie</label>
+          <select id="lobbyCategory"></select>
+
+          <label for="lobbyDifficulty">Schwierigkeit</label>
+          <select id="lobbyDifficulty"></select>
+        </div>
+
+        <div class="stack">
+          <button id="readyBtn" class="primary" type="button" disabled>Bereit</button>
+        </div>
       </section>
 
       <section id="playCard" class="card">
@@ -109,6 +150,7 @@
       </section>
     </main>
 
+    <script src="config.js"></script>
     <script src="quiz.js"></script>
   </body>
 </html>

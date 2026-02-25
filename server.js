@@ -1,10 +1,31 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+function parseSocketIoCorsOrigin(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return true; // reflect request origin
+  if (value === "*") return "*";
+  const list = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (list.length === 0) return true;
+  if (list.length === 1) return list[0];
+  return list;
+}
+
+const io = new Server(server, {
+  cors: {
+    origin: parseSocketIoCorsOrigin(process.env.SOCKET_IO_CORS_ORIGIN),
+    methods: ["GET", "POST"]
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_OWNER_KEY = String(process.env.ADMIN_OWNER_KEY || process.env.ADMIN_KEY || "Anna").trim();
@@ -755,80 +776,72 @@ const quizRooms = new Map();
 
 const QUIZ_ANSWER_WINDOW_MS = 3000;
 
-const QUIZ_DUEL_QUESTIONS = [
-  { q: "Wie viele Minuten sind 2,5 Stunden?", a: ["120", "150", "180", "210"], c: 1 },
-  { q: "Was ist die Lösung von 3(x - 2) = 15?", a: ["x = 3", "x = 5", "x = 7", "x = 9"], c: 2 },
-  { q: "Welche Zahl ist eine Primzahl?", a: ["21", "29", "33", "35"], c: 1 },
-  { q: "Wie heißt die Hauptstadt von Kanada?", a: ["Toronto", "Vancouver", "Ottawa", "Montreal"], c: 2 },
-  { q: "In welchem Jahr begann der Erste Weltkrieg?", a: ["1912", "1914", "1918", "1939"], c: 1 },
-  { q: "Welche Einheit hat elektrische Spannung?", a: ["Watt", "Volt", "Ohm", "Newton"], c: 1 },
-  { q: "Welches Gas entsteht bei der Photosynthese als Produkt?", a: ["Sauerstoff", "Stickstoff", "Kohlenstoffdioxid", "Wasserstoff"], c: 0 },
-  { q: "Welche Aussage ist richtig?", a: ["Die Erde ist der Sonne näher als die Venus.", "Der Mond leuchtet selbst.", "Die Erde rotiert in ca. 24 Stunden einmal.", "Jupiter ist kleiner als die Erde."], c: 2 },
-  { q: "Wie nennt man eine Zahl, die nur durch 1 und sich selbst teilbar ist?", a: ["gerade Zahl", "Primzahl", "Quadratzahl", "Bruch"], c: 1 },
-  { q: "Welche der folgenden Formen hat genau eine Symmetrieachse?", a: ["gleichseitiges Dreieck", "gleichschenkliges Dreieck", "Quadrat", "Kreis"], c: 1 },
-  { q: "Was ist 15% von 200?", a: ["15", "20", "30", "45"], c: 2 },
-  { q: "Wie viele Seiten hat ein regelmäßiges Sechseck?", a: ["5", "6", "7", "8"], c: 1 },
-  { q: "Welche Aussage beschreibt einen Akkusativ?", a: ["2. Fall", "3. Fall", "4. Fall", "5. Fall"], c: 2 },
-  { q: "Wer schrieb 'Faust'?", a: ["Goethe", "Schiller", "Kafka", "Brecht"], c: 0 },
-  { q: "Welche Stadt liegt an der Spree?", a: ["Hamburg", "Berlin", "Köln", "Dresden"], c: 1 },
-  { q: "Welche Zahl ist eine Quadratzahl?", a: ["18", "20", "25", "27"], c: 2 },
-  { q: "Welche Formel ist richtig?", a: ["Fläche Rechteck = a + b", "Umfang Kreis = 2πr", "Dichte = Masse · Volumen", "Kraft = Masse / Beschleunigung"], c: 1 },
-  { q: "Was ist die Hauptstadt von Australien?", a: ["Sydney", "Canberra", "Melbourne", "Perth"], c: 1 },
-  { q: "Was ist eine Metapher?", a: ["wörtliche Beschreibung", "Vergleich ohne 'wie'", "Reimform", "Aufzählung"], c: 1 },
-  { q: "Welcher Kontinent hat die meisten Länder?", a: ["Europa", "Afrika", "Asien", "Südamerika"], c: 1 },
-  { q: "Was ist die Lösung von 2^5?", a: ["16", "24", "32", "64"], c: 2 },
-  { q: "Welche ist eine chemische Formel für Wasser?", a: ["CO2", "H2O", "O2", "NaCl"], c: 1 },
-  { q: "Welche Aussage zur Demokratie passt am besten?", a: ["Eine Person entscheidet alles.", "Wahlen bestimmen Vertreter.", "Nur Könige bestimmen Gesetze.", "Es gibt keine Regeln."], c: 1 },
-  { q: "Welche Zahl ist am nächsten an 1/3?", a: ["0,25", "0,33", "0,5", "0,75"], c: 1 },
-  { q: "Was bedeutet 'Dreiviertel' als Dezimalzahl?", a: ["0,25", "0,5", "0,75", "1,25"], c: 2 },
-  { q: "Welche Aussage ist richtig?", a: ["Ein Quadrat ist immer auch ein Rechteck.", "Ein Rechteck ist immer ein Quadrat.", "Ein Dreieck hat vier Seiten.", "Ein Kreis hat Ecken."], c: 0 },
-  { q: "Welche Ebene trennt Nord- und Südhalbkugel?", a: ["Nullmeridian", "Äquator", "Wendekreis", "Polarkreis"], c: 1 },
-  { q: "Wie heißt die Hauptstadt von Italien?", a: ["Mailand", "Rom", "Neapel", "Florenz"], c: 1 },
-  { q: "Welche Größe misst man in Newton (N)?", a: ["Druck", "Energie", "Kraft", "Leistung"], c: 2 },
-  { q: "Was passiert bei einer Oxidation?", a: ["Elektronen werden aufgenommen", "Elektronen werden abgegeben", "Atome verschwinden", "Wasser wird zu Eis"], c: 1 },
-  { q: "Welche Aussage zu Klimazonen ist richtig?", a: ["Die Tropen liegen an den Polen.", "Die gemäßigte Zone liegt zwischen Tropen und Polarzone.", "Es gibt nur eine Klimazone.", "In der Polarzone ist es immer warm."], c: 1 },
-  { q: "Was ist die Summe der Innenwinkel in einem Dreieck?", a: ["90°", "120°", "180°", "360°"], c: 2 },
-  { q: "Welche Stadt ist Hauptstadt von Spanien?", a: ["Barcelona", "Madrid", "Sevilla", "Valencia"], c: 1 },
-  { q: "Welche Aussage ist richtig?", a: ["Prozent bedeutet 'von 100'.", "Prozent bedeutet 'von 10'.", "Prozent ist eine Längeneinheit.", "Prozent ist immer größer als 1."], c: 0 },
-  { q: "Wie heißt der Vorgang, wenn Wasser zu Dampf wird?", a: ["Kondensieren", "Schmelzen", "Verdampfen", "Gefrieren"], c: 2 },
-  { q: "Welche ist ein Beispiel für erneuerbare Energie?", a: ["Braunkohle", "Erdgas", "Windkraft", "Benzin"], c: 2 },
-  { q: "Welche Aussage ist richtig?", a: ["Ein Atom besteht nur aus Elektronen.", "Der Zellkern enthält DNA.", "Bakterien sind immer Pflanzen.", "Alle Viren sind Lebewesen."], c: 1 },
-  { q: "Wie nennt man die erste Zeile eines Gedichts oft?", a: ["Strophe", "Vers", "Refrain", "Kapitel"], c: 1 },
-  { q: "Welche Aussage ist richtig?", a: ["Nordsee ist ein See.", "Die Alpen sind ein Gebirge.", "Sahara ist ein Ozean.", "Der Rhein ist ein Gebirge."], c: 1 },
-  { q: "Wie viele Grad hat ein rechter Winkel?", a: ["45°", "60°", "90°", "180°"], c: 2 },
-  { q: "Wenn a = 4 und b = 7, was ist a·b?", a: ["11", "21", "24", "28"], c: 3 },
-  { q: "Was bedeutet 'These' in einem Text am ehesten?", a: ["Hauptaussage", "Beispiel", "Schlusswort", "Überschrift"], c: 0 },
-  { q: "Welche Aussage ist richtig?", a: ["Das Mittelalter endet vor der Antike.", "Die Antike kommt vor dem Mittelalter.", "Die Neuzeit kommt vor dem Mittelalter.", "Es gibt keine Reihenfolge."], c: 1 },
-  { q: "Wie viele Millimeter sind 3,2 Zentimeter?", a: ["0,32", "3,2", "32", "320"], c: 2 },
-  { q: "Welche Aussage ist richtig?", a: ["Ein Halbtonschritt ist größer als ein Ganzton.", "In Musik ist ein Takt eine Zeiteinheit.", "Noten sind nur für Klavier.", "Rhythmus ist immer zufällig."], c: 1 },
-  { q: "Welche Reihenfolge ist richtig (von der Sonne aus)?", a: ["Merkur, Venus, Erde, Mars", "Venus, Merkur, Erde, Mars", "Merkur, Erde, Venus, Mars", "Mars, Erde, Venus, Merkur"], c: 0 },
-  { q: "Welche Aussage zur EU ist richtig?", a: ["Alle Länder Europas sind automatisch in der EU.", "Die EU hat gemeinsame Regeln und Zusammenarbeit.", "Die EU ist ein einzelnes Land.", "Die EU hat keine eigenen Institutionen."], c: 1 },
-  { q: "Wie viele Sekunden hat eine Stunde?", a: ["60", "600", "3600", "86400"], c: 2 },
-  { q: "Was ist √144?", a: ["10", "11", "12", "14"], c: 2 },
-  { q: "Welche Einheit hat die elektrische Stromstärke?", a: ["Ampere", "Volt", "Watt", "Ohm"], c: 0 },
-  { q: "Welches Element hat das chemische Zeichen 'Fe'?", a: ["Fluor", "Eisen", "Fermium", "Blei"], c: 1 },
-  { q: "Wie heißt die Hauptstadt von Japan?", a: ["Kyoto", "Osaka", "Tokio", "Sapporo"], c: 2 },
-  { q: "In welchem Jahr fiel die Berliner Mauer?", a: ["1979", "1989", "1999", "2009"], c: 1 },
-  { q: "Welche Aussage zum Satz des Pythagoras ist richtig?", a: ["Im rechtwinkligen Dreieck gilt: a² + b² = c² (c ist die Hypotenuse).", "Im Dreieck gilt immer: a² + b² = c².", "Im rechtwinkligen Dreieck gilt: a + b = c.", "Im rechtwinkligen Dreieck gilt: a² = b² + c²."], c: 0 },
-  { q: "Welche Zahl ist irrational?", a: ["√2", "0,25", "1/3", "-5"], c: 0 },
-  { q: "Welche der folgenden Größen ist eine Energieeinheit?", a: ["Joule", "Newton", "Pascal", "Ampere"], c: 0 },
-  { q: "Wie viel Prozent sind 3/4?", a: ["25%", "50%", "75%", "90%"], c: 2 },
-  { q: "Welche Wortart ist 'schnell' in 'ein schnelles Auto'?", a: ["Verb", "Adjektiv", "Nomen", "Artikel"], c: 1 },
-  { q: "Was ist das Ergebnis von 5! (Fakultät)?", a: ["20", "60", "120", "720"], c: 2 },
-  { q: "Welche Funktion haben Mitochondrien in Zellen am ehesten?", a: ["Energiegewinnung", "Fotosynthese", "Wassertransport", "Erbinformation speichern"], c: 0 },
-  { q: "Wie viele Bundesländer hat Deutschland?", a: ["14", "15", "16", "17"], c: 2 },
-  { q: "Welcher Fluss fließt durch Paris?", a: ["Themse", "Seine", "Tiber", "Donau"], c: 1 },
-  { q: "Welche Aussage zum pH-Wert ist richtig?", a: ["pH 7 ist sauer.", "pH 7 ist neutral.", "pH 7 ist basisch.", "pH kann nur ganze Zahlen sein."], c: 1 },
-  { q: "Wie heißt der Vorgang, wenn Wasserdampf zu Wasser wird?", a: ["Verdampfen", "Kondensieren", "Schmelzen", "Gefrieren"], c: 1 },
-  { q: "Welche der folgenden Zahlen ist durch 9 teilbar?", a: ["232", "234", "236", "238"], c: 1 },
-  { q: "Welcher Kontinent liegt am Südpol?", a: ["Afrika", "Europa", "Antarktis", "Asien"], c: 2 },
-  { q: "Welche Formel für Dichte ist richtig?", a: ["Dichte = Masse / Volumen", "Dichte = Masse · Volumen", "Dichte = Volumen / Masse", "Dichte = Kraft / Fläche"], c: 0 },
-  { q: "Welche Art Planet ist Jupiter?", a: ["Gesteinsplanet", "Gasriese", "Zwergplanet", "Komet"], c: 1 },
-  { q: "Welches Gas ist am häufigsten in der Luft?", a: ["Sauerstoff", "Stickstoff", "Kohlenstoffdioxid", "Argon"], c: 1 },
-  { q: "Wie groß ist ein Innenwinkel eines regelmäßigen Sechsecks?", a: ["90°", "120°", "135°", "150°"], c: 1 },
-  { q: "Was ist 0,2 als Bruch?", a: ["1/2", "1/5", "2/5", "1/20"], c: 1 },
-  { q: "Wie heißt die längste Seite in einem rechtwinkligen Dreieck?", a: ["Kathete", "Höhe", "Hypotenuse", "Mittellinie"], c: 2 }
-];
+function shuffleList(list) {
+  const cloned = [...list];
+  for (let i = cloned.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
+  }
+  return cloned;
+}
+
+function loadQuizQuestionBank() {
+  try {
+    const filePath = path.join(__dirname, "public", "quiz_questions.json");
+    const raw = fs.readFileSync(filePath, "utf8");
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .filter((q) => q && typeof q.q === "string" && Array.isArray(q.a) && q.a.length === 4)
+      .map((q) => ({
+        id: String(q.id || ""),
+        category: String(q.category || ""),
+        difficulty: String(q.difficulty || "").trim().toLowerCase(),
+        q: String(q.q),
+        a: q.a.map((x) => String(x)),
+        c: Number(q.c)
+      }))
+      .filter((q) => Number.isInteger(q.c) && q.c >= 0 && q.c <= 3);
+  } catch {
+    return [];
+  }
+}
+
+let QUIZ_DUEL_QUESTIONS = loadQuizQuestionBank();
+
+function normalizeQuizDifficulty(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (["easy", "medium", "hard"].includes(value)) return value;
+  return "";
+}
+
+function normalizeQuizCategory(raw) {
+  return String(raw || "").trim();
+}
+
+function filterQuizQuestions(bank, { category, difficulty }) {
+  const cat = normalizeQuizCategory(category);
+  const diff = normalizeQuizDifficulty(difficulty);
+
+  return (Array.isArray(bank) ? bank : []).filter((q) => {
+    if (cat && String(q.category || "") !== cat) return false;
+    if (diff && String(q.difficulty || "").toLowerCase() !== diff) return false;
+    return true;
+  });
+}
+
+function shuffleQuizAnswers(question) {
+  const order = shuffleList([0, 1, 2, 3]);
+  const answers = order.map((idx) => String(question.a[idx]));
+  const correctIndex = order.indexOf(Number(question.c));
+  return {
+    id: String(question.id || ""),
+    text: String(question.q),
+    answers,
+    correctIndex
+  };
+}
 
 function createQuizCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -840,21 +853,18 @@ function createQuizCode() {
   return collision ? createQuizCode() : code;
 }
 
-function shuffleList(list) {
-  const cloned = [...list];
-  for (let i = cloned.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
-  }
-  return cloned;
-}
-
 function quizRoomView(room) {
   return {
     code: room.code,
     players: room.players.map((p) => p.name),
     scores: room.scores,
-    started: room.started
+    started: room.started,
+    ready: Array.isArray(room.ready) ? room.ready : [false, false],
+    settings: {
+      questionCount: room.questionCount,
+      category: room.category || "",
+      difficulty: room.difficulty || ""
+    }
   };
 }
 
@@ -862,8 +872,48 @@ function quizBroadcastRoom(room) {
   io.to(room.code).emit("quiz_room_update", quizRoomView(room));
 }
 
+function quizCanStart(room) {
+  if (!room) return false;
+  if (room.started) return false;
+  if (!Array.isArray(room.players) || room.players.length !== 2) return false;
+  if (!Array.isArray(room.ready) || room.ready.length !== 2) return false;
+  return room.ready.every(Boolean);
+}
+
+function quizStart(room) {
+  if (!room) return;
+  if (room.started) return;
+  if (!Array.isArray(QUIZ_DUEL_QUESTIONS) || QUIZ_DUEL_QUESTIONS.length < 4) {
+    io.to(room.code).emit("quiz_error", "Fragenpool nicht verfügbar.");
+    quizCleanupRoom(room);
+    return;
+  }
+
+  const pool = filterQuizQuestions(QUIZ_DUEL_QUESTIONS, { category: room.category, difficulty: room.difficulty });
+  if (room.questionCount > pool.length) {
+    io.to(room.code).emit("quiz_error", `Zu wenig Fragen im Pool (${pool.length}).`);
+    quizCleanupRoom(room);
+    return;
+  }
+
+  room.questions = shuffleList(pool).slice(0, room.questionCount).map(shuffleQuizAnswers);
+  room.started = true;
+  room.currentIndex = 0;
+  room.answers = [null, null];
+  room.answerTimes = [null, null];
+  room.revealed = false;
+  if (room.resolveTimer) {
+    clearTimeout(room.resolveTimer);
+    room.resolveTimer = null;
+  }
+
+  quizBroadcastRoom(room);
+  quizSendQuestion(room);
+}
+
 function quizSendQuestion(room) {
-  const q = QUIZ_DUEL_QUESTIONS[room.order[room.currentIndex]];
+  const q = room.questions?.[room.currentIndex];
+  if (!q) return;
   io.to(room.code).emit("quiz_question", {
     code: room.code,
     questionNumber: room.currentIndex + 1,
@@ -871,8 +921,8 @@ function quizSendQuestion(room) {
     players: room.players.map((p) => p.name),
     scores: room.scores,
     question: {
-      text: q.q,
-      answers: q.a
+      text: q.text,
+      answers: q.answers
     }
   });
 }
@@ -885,8 +935,9 @@ function quizResolveQuestion(room) {
     room.resolveTimer = null;
   }
 
-  const q = QUIZ_DUEL_QUESTIONS[room.order[room.currentIndex]];
-  const correctIndex = q.c;
+  const q = room.questions?.[room.currentIndex];
+  if (!q) return;
+  const correctIndex = Number(q.correctIndex);
 
   const selections = [...room.answers];
   const times = Array.isArray(room.answerTimes) ? [...room.answerTimes] : [null, null];
@@ -926,7 +977,7 @@ function quizResolveQuestion(room) {
     type: winnerIndex === null ? "none" : "correct",
     winnerIndex,
     correctIndex,
-    correctAnswer: q.a[correctIndex],
+    correctAnswer: q.answers[correctIndex],
     selections,
     players: room.players.map((p) => p.name),
     scores: room.scores,
@@ -2962,7 +3013,7 @@ io.on("connection", (socket) => {
   });
 
   // --- Quiz-Duell (2 players, online by room code) ---
-  socket.on("quiz_create_room", ({ name, questionCount }) => {
+  socket.on("quiz_create_room", ({ name, questionCount, category, difficulty }) => {
     if (isRateLimited(socket, "quiz_create_room", 900, "quiz_create_room")) {
       socket.emit("quiz_error", "Bitte kurz warten.");
       return;
@@ -2976,10 +3027,18 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (!Array.isArray(QUIZ_DUEL_QUESTIONS) || QUIZ_DUEL_QUESTIONS.length < 4) {
+      socket.emit("quiz_error", "Fragenpool nicht verfügbar.");
+      return;
+    }
+
     const requested = Math.round(Number(questionCount || 10));
     const count = Math.max(4, Math.min(40, Number.isFinite(requested) ? requested : 10));
-    if (count > QUIZ_DUEL_QUESTIONS.length) {
-      socket.emit("quiz_error", `Zu wenig Fragen im Pool (${QUIZ_DUEL_QUESTIONS.length}).`);
+    const cat = normalizeQuizCategory(category);
+    const diff = normalizeQuizDifficulty(difficulty);
+    const filteredPool = filterQuizQuestions(QUIZ_DUEL_QUESTIONS, { category: cat, difficulty: diff });
+    if (count > filteredPool.length) {
+      socket.emit("quiz_error", `Zu wenig Fragen im Pool (${filteredPool.length}).`);
       return;
     }
 
@@ -2989,8 +3048,11 @@ io.on("connection", (socket) => {
       players: [{ id: socket.id, name: trimmedName }],
       scores: [0, 0],
       questionCount: count,
+      category: cat,
+      difficulty: diff,
       started: false,
-      order: null,
+      ready: [false, false],
+      questions: null,
       currentIndex: 0,
       answers: [null, null],
       answerTimes: [null, null],
@@ -3005,10 +3067,8 @@ io.on("connection", (socket) => {
     socket.data.quizPlayerIndex = 0;
 
     socket.emit("quiz_room_created", {
-      code,
-      playerIndex: 0,
-      players: room.players.map((p) => p.name),
-      scores: room.scores
+      ...quizRoomView(room),
+      playerIndex: 0
     });
     quizBroadcastRoom(room);
   });
@@ -3043,32 +3103,82 @@ io.on("connection", (socket) => {
     }
 
     room.players.push({ id: socket.id, name: trimmedName });
+    if (!Array.isArray(room.ready) || room.ready.length !== 2) {
+      room.ready = [false, false];
+    }
+    room.ready[1] = false;
     socket.join(room.code);
     socket.data.quizRoomCode = room.code;
     socket.data.quizPlayerIndex = 1;
 
     socket.emit("quiz_joined", {
-      code: room.code,
-      playerIndex: 1,
-      players: room.players.map((p) => p.name),
-      scores: room.scores
+      ...quizRoomView(room),
+      playerIndex: 1
     });
 
     quizBroadcastRoom(room);
+  });
 
-    // Start game automatically when 2nd player joins.
-    room.started = true;
-    room.currentIndex = 0;
-    room.answers = [null, null];
-    room.answerTimes = [null, null];
-    room.revealed = false;
-    if (room.resolveTimer) {
-      clearTimeout(room.resolveTimer);
-      room.resolveTimer = null;
+  socket.on("quiz_update_settings", ({ code, questionCount, category, difficulty }) => {
+    if (isRateLimited(socket, "quiz_update_settings", 250, "quiz_update_settings")) {
+      return;
     }
-    room.order = shuffleList([...Array(QUIZ_DUEL_QUESTIONS.length).keys()]).slice(0, room.questionCount);
+
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const room = quizRooms.get(normalizedCode);
+    if (!room) return;
+    if (room.started) {
+      socket.emit("quiz_error", "Spiel läuft schon.");
+      return;
+    }
+    if (socket.data.quizRoomCode !== room.code) return;
+
+    const playerIndex = Number(socket.data.quizPlayerIndex);
+    if (playerIndex !== 0) return; // host only
+
+    const requested = Math.round(Number(questionCount || room.questionCount || 10));
+    const count = Math.max(4, Math.min(40, Number.isFinite(requested) ? requested : 10));
+    const cat = normalizeQuizCategory(category);
+    const diff = normalizeQuizDifficulty(difficulty);
+    const filteredPool = filterQuizQuestions(QUIZ_DUEL_QUESTIONS, { category: cat, difficulty: diff });
+    if (count > filteredPool.length) {
+      socket.emit("quiz_error", `Zu wenig Fragen im Pool (${filteredPool.length}).`);
+      return;
+    }
+
+    room.questionCount = count;
+    room.category = cat;
+    room.difficulty = diff;
+    room.questions = null;
+
+    // Changing settings resets readiness.
+    room.ready = [false, false];
     quizBroadcastRoom(room);
-    quizSendQuestion(room);
+  });
+
+  socket.on("quiz_ready", ({ code }) => {
+    if (isRateLimited(socket, "quiz_ready", 200, "quiz_ready")) {
+      return;
+    }
+
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const room = quizRooms.get(normalizedCode);
+    if (!room) return;
+    if (room.started) return;
+    if (socket.data.quizRoomCode !== room.code) return;
+
+    const playerIndex = Number(socket.data.quizPlayerIndex);
+    if (![0, 1].includes(playerIndex)) return;
+
+    if (!Array.isArray(room.ready) || room.ready.length !== 2) {
+      room.ready = [false, false];
+    }
+    room.ready[playerIndex] = true;
+    quizBroadcastRoom(room);
+
+    if (quizCanStart(room)) {
+      quizStart(room);
+    }
   });
 
   socket.on("quiz_answer", ({ code, selectedIndex }) => {
