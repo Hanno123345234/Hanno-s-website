@@ -775,6 +775,9 @@ function createPin() {
 const quizRooms = new Map();
 
 const QUIZ_ANSWER_WINDOW_MS = 3000;
+const QUIZ_MIN_PLAYERS = 2;
+const QUIZ_MAX_PLAYERS = 8;
+const QUIZ_RECONNECT_GRACE_MS = 30000;
 
 function shuffleList(list) {
   const cloned = [...list];
@@ -820,6 +823,19 @@ function normalizeQuizCategory(raw) {
   return String(raw || "").trim();
 }
 
+function normalizeQuizPlayerKey(raw, fallback = null) {
+  const value = String(raw || "").trim().slice(0, 80);
+  if (value) return value;
+  if (fallback) return fallback;
+  return `qp_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+}
+
+function normalizeQuizMaxPlayers(raw) {
+  const value = Math.round(Number(raw));
+  if ([4, 6, 8].includes(value)) return value;
+  return QUIZ_MAX_PLAYERS;
+}
+
 function filterQuizQuestions(bank, { category, difficulty }) {
   const cat = normalizeQuizCategory(category);
   const diff = normalizeQuizDifficulty(difficulty);
@@ -853,18 +869,113 @@ function createQuizCode() {
   return collision ? createQuizCode() : code;
 }
 
+function quizHostIndex(room) {
+  if (!room?.hostPlayerKey) return -1;
+  return room.players.findIndex((player) => player.playerKey === room.hostPlayerKey);
+}
+
+function quizSyncSocketData(room) {
+  if (!room || !Array.isArray(room.players)) return;
+  room.players.forEach((player, index) => {
+    if (!player?.id) return;
+    const liveSocket = io.sockets.sockets.get(player.id);
+    if (!liveSocket) return;
+    liveSocket.data.quizRoomCode = room.code;
+    liveSocket.data.quizPlayerIndex = index;
+    liveSocket.data.quizPlayerKey = player.playerKey;
+  });
+}
+
+function quizEnsureHost(room) {
+  if (!room || !Array.isArray(room.players)) return;
+  if (room.players.length === 0) {
+    room.hostPlayerKey = null;
+    return;
+  }
+  const hostExists = room.players.some((player) => player.playerKey === room.hostPlayerKey);
+  if (hostExists) return;
+
+  const nextHost = room.players.find((player) => player.connected !== false) || room.players[0];
+  room.hostPlayerKey = nextHost.playerKey;
+}
+
+function quizClearReconnectTimer(player) {
+  if (!player) return;
+  if (player.reconnectTimer) {
+    clearTimeout(player.reconnectTimer);
+    player.reconnectTimer = null;
+  }
+}
+
+function quizRemovePlayerByKey(room, playerKey, reason = "leave") {
+  if (!room || !playerKey) return;
+  const playerIndex = room.players.findIndex((player) => player.playerKey === playerKey);
+  if (playerIndex < 0) return;
+
+  const [removedPlayer] = room.players.splice(playerIndex, 1);
+  quizClearReconnectTimer(removedPlayer);
+
+  if (Array.isArray(room.scores)) room.scores.splice(playerIndex, 1);
+  if (Array.isArray(room.ready)) room.ready.splice(playerIndex, 1);
+  if (Array.isArray(room.answers)) room.answers.splice(playerIndex, 1);
+  if (Array.isArray(room.answerTimes)) room.answerTimes.splice(playerIndex, 1);
+
+  quizEnsureHost(room);
+  quizSyncSocketData(room);
+
+  if (room.players.length === 0) {
+    quizCleanupRoom(room);
+    return;
+  }
+
+  if (room.players.length < QUIZ_MIN_PLAYERS) {
+    io.to(room.code).emit("quiz_opponent_left", {
+      reason,
+      reconnectGraceMs: QUIZ_RECONNECT_GRACE_MS
+    });
+    quizCleanupRoom(room);
+    return;
+  }
+
+  if (!room.started) {
+    room.ready = room.players.map(() => false);
+  }
+
+  quizBroadcastRoom(room);
+}
+
+function quizScheduleReconnectTimeout(room, playerKey) {
+  if (!room || !playerKey) return;
+  const player = room.players.find((entry) => entry.playerKey === playerKey);
+  if (!player) return;
+
+  quizClearReconnectTimer(player);
+  player.reconnectTimer = setTimeout(() => {
+    const liveRoom = quizRooms.get(room.code);
+    if (!liveRoom) return;
+    const livePlayer = liveRoom.players.find((entry) => entry.playerKey === playerKey);
+    if (!livePlayer || livePlayer.connected !== false) return;
+    quizRemovePlayerByKey(liveRoom, playerKey, "disconnect_timeout");
+  }, QUIZ_RECONNECT_GRACE_MS);
+}
+
 function quizRoomView(room) {
   return {
     code: room.code,
     players: room.players.map((p) => p.name),
+    connected: room.players.map((p) => p.connected !== false),
     scores: room.scores,
+    hostIndex: quizHostIndex(room),
     started: room.started,
-    ready: Array.isArray(room.ready) ? room.ready : [false, false],
+    ready: Array.isArray(room.ready) ? room.ready : room.players.map(() => false),
+    maxPlayers: room.maxPlayers || QUIZ_MAX_PLAYERS,
     settings: {
       questionCount: room.questionCount,
       category: room.category || "",
-      difficulty: room.difficulty || ""
-    }
+      difficulty: room.difficulty || "",
+      maxPlayers: room.maxPlayers || QUIZ_MAX_PLAYERS
+    },
+    reconnectGraceMs: QUIZ_RECONNECT_GRACE_MS
   };
 }
 
@@ -875,8 +986,8 @@ function quizBroadcastRoom(room) {
 function quizCanStart(room) {
   if (!room) return false;
   if (room.started) return false;
-  if (!Array.isArray(room.players) || room.players.length !== 2) return false;
-  if (!Array.isArray(room.ready) || room.ready.length !== 2) return false;
+  if (!Array.isArray(room.players) || room.players.length < QUIZ_MIN_PLAYERS) return false;
+  if (!Array.isArray(room.ready) || room.ready.length !== room.players.length) return false;
   return room.ready.every(Boolean);
 }
 
@@ -899,8 +1010,8 @@ function quizStart(room) {
   room.questions = shuffleList(pool).slice(0, room.questionCount).map(shuffleQuizAnswers);
   room.started = true;
   room.currentIndex = 0;
-  room.answers = [null, null];
-  room.answerTimes = [null, null];
+  room.answers = room.players.map(() => null);
+  room.answerTimes = room.players.map(() => null);
   room.revealed = false;
   if (room.resolveTimer) {
     clearTimeout(room.resolveTimer);
@@ -939,31 +1050,34 @@ function quizResolveQuestion(room) {
   if (!q) return;
   const correctIndex = Number(q.correctIndex);
 
-  const selections = [...room.answers];
-  const times = Array.isArray(room.answerTimes) ? [...room.answerTimes] : [null, null];
-
-  const correct0 = selections[0] === correctIndex;
-  const correct1 = selections[1] === correctIndex;
+  const selections = Array.isArray(room.answers) ? [...room.answers] : room.players.map(() => null);
+  const times = Array.isArray(room.answerTimes) ? [...room.answerTimes] : room.players.map(() => null);
 
   let winnerIndex = null;
   let detail = "none";
 
-  if (correct0 && correct1) {
+  const correctPlayers = selections
+    .map((selection, index) => ({ index, correct: selection === correctIndex }))
+    .filter((entry) => entry.correct)
+    .map((entry) => entry.index);
+
+  if (correctPlayers.length > 1) {
     detail = "fastest";
-    const t0 = Number(times[0]);
-    const t1 = Number(times[1]);
-    if (Number.isFinite(t0) && Number.isFinite(t1)) {
-      winnerIndex = t0 <= t1 ? 0 : 1;
-    } else if (Number.isFinite(t0)) {
-      winnerIndex = 0;
-    } else if (Number.isFinite(t1)) {
-      winnerIndex = 1;
-    } else {
-      winnerIndex = 0;
-    }
-  } else if (correct0 || correct1) {
+    let bestTime = Number.POSITIVE_INFINITY;
+    let bestIndex = correctPlayers[0];
+
+    correctPlayers.forEach((index) => {
+      const value = Number(times[index]);
+      if (Number.isFinite(value) && value < bestTime) {
+        bestTime = value;
+        bestIndex = index;
+      }
+    });
+
+    winnerIndex = bestIndex;
+  } else if (correctPlayers.length === 1) {
     detail = "only";
-    winnerIndex = correct0 ? 0 : 1;
+    winnerIndex = correctPlayers[0];
   }
 
   if (winnerIndex !== null) {
@@ -997,8 +1111,8 @@ function quizResolveQuestion(room) {
 
 function quizAdvance(room) {
   room.currentIndex += 1;
-  room.answers = [null, null];
-  room.answerTimes = [null, null];
+  room.answers = room.players.map(() => null);
+  room.answerTimes = room.players.map(() => null);
   room.revealed = false;
 
   if (room.resolveTimer) {
@@ -1021,6 +1135,11 @@ function quizAdvance(room) {
 
 function quizCleanupRoom(room) {
   if (!room) return;
+  if (Array.isArray(room.players)) {
+    room.players.forEach((player) => {
+      quizClearReconnectTimer(player);
+    });
+  }
   if (room.cooldownTimer) {
     clearTimeout(room.cooldownTimer);
     room.cooldownTimer = null;
@@ -1038,18 +1157,40 @@ function quizLeaveSocket(socket) {
   socket.leave(code);
   socket.data.quizRoomCode = null;
   socket.data.quizPlayerIndex = null;
+  socket.data.quizPlayerKey = null;
 
   const room = quizRooms.get(code);
   if (!room) return;
 
-  room.players = room.players.filter((p) => p.id !== socket.id);
-  if (room.players.length === 0) {
-    quizCleanupRoom(room);
-    return;
+  const player = room.players.find((entry) => entry.id === socket.id);
+  if (!player) return;
+  quizRemovePlayerByKey(room, player.playerKey, "leave");
+}
+
+function quizHandleDisconnect(socket) {
+  const code = socket.data.quizRoomCode;
+  if (!code) return;
+
+  const room = quizRooms.get(code);
+  socket.data.quizRoomCode = null;
+  socket.data.quizPlayerIndex = null;
+  socket.data.quizPlayerKey = null;
+  if (!room) return;
+
+  const player = room.players.find((entry) => entry.id === socket.id);
+  if (!player) return;
+
+  player.id = null;
+  player.connected = false;
+  player.lastSeenAt = Date.now();
+
+  if (!room.started && Array.isArray(room.ready)) {
+    const playerIndex = room.players.findIndex((entry) => entry.playerKey === player.playerKey);
+    if (playerIndex >= 0) room.ready[playerIndex] = false;
   }
 
-  io.to(code).emit("quiz_opponent_left");
-  quizCleanupRoom(room);
+  quizScheduleReconnectTimeout(room, player.playerKey);
+  quizBroadcastRoom(room);
 }
 
 function validName(value) {
@@ -3012,8 +3153,8 @@ io.on("connection", (socket) => {
     socket.emit("among_left");
   });
 
-  // --- Quiz-Duell (2 players, online by room code) ---
-  socket.on("quiz_create_room", ({ name, questionCount, category, difficulty }) => {
+  // --- Quiz-Duell (multiplayer, online by room code) ---
+  socket.on("quiz_create_room", ({ name, questionCount, category, difficulty, maxPlayers, playerKey }) => {
     if (isRateLimited(socket, "quiz_create_room", 900, "quiz_create_room")) {
       socket.emit("quiz_error", "Bitte kurz warten.");
       return;
@@ -3036,6 +3177,8 @@ io.on("connection", (socket) => {
     const count = Math.max(4, Math.min(40, Number.isFinite(requested) ? requested : 10));
     const cat = normalizeQuizCategory(category);
     const diff = normalizeQuizDifficulty(difficulty);
+    const roomMaxPlayers = normalizeQuizMaxPlayers(maxPlayers);
+    const stablePlayerKey = normalizeQuizPlayerKey(playerKey);
     const filteredPool = filterQuizQuestions(QUIZ_DUEL_QUESTIONS, { category: cat, difficulty: diff });
     if (count > filteredPool.length) {
       socket.emit("quiz_error", `Zu wenig Fragen im Pool (${filteredPool.length}).`);
@@ -3045,17 +3188,19 @@ io.on("connection", (socket) => {
     const code = createQuizCode();
     const room = {
       code,
-      players: [{ id: socket.id, name: trimmedName }],
-      scores: [0, 0],
+      players: [{ id: socket.id, name: trimmedName, playerKey: stablePlayerKey, connected: true, reconnectTimer: null }],
+      hostPlayerKey: stablePlayerKey,
+      scores: [0],
+      maxPlayers: roomMaxPlayers,
       questionCount: count,
       category: cat,
       difficulty: diff,
       started: false,
-      ready: [false, false],
+      ready: [false],
       questions: null,
       currentIndex: 0,
-      answers: [null, null],
-      answerTimes: [null, null],
+      answers: [null],
+      answerTimes: [null],
       revealed: false,
       cooldownTimer: null,
       resolveTimer: null
@@ -3065,6 +3210,7 @@ io.on("connection", (socket) => {
     socket.join(code);
     socket.data.quizRoomCode = code;
     socket.data.quizPlayerIndex = 0;
+    socket.data.quizPlayerKey = stablePlayerKey;
 
     socket.emit("quiz_room_created", {
       ...quizRoomView(room),
@@ -3073,7 +3219,7 @@ io.on("connection", (socket) => {
     quizBroadcastRoom(room);
   });
 
-  socket.on("quiz_join_room", ({ name, code }) => {
+  socket.on("quiz_join_room", ({ name, code, playerKey }) => {
     if (isRateLimited(socket, "quiz_join_room", 800, "quiz_join_room")) {
       socket.emit("quiz_error", "Bitte kurz warten.");
       return;
@@ -3097,29 +3243,107 @@ io.on("connection", (socket) => {
       socket.emit("quiz_error", "Spiel läuft schon.");
       return;
     }
-    if (room.players.length >= 2) {
+    if (room.players.length >= (room.maxPlayers || QUIZ_MAX_PLAYERS)) {
       socket.emit("quiz_error", "Raum ist voll.");
       return;
     }
 
-    room.players.push({ id: socket.id, name: trimmedName });
-    if (!Array.isArray(room.ready) || room.ready.length !== 2) {
-      room.ready = [false, false];
+    const stablePlayerKey = normalizeQuizPlayerKey(playerKey);
+    const duplicateKey = room.players.some((entry) => entry.playerKey === stablePlayerKey);
+    if (duplicateKey) {
+      socket.emit("quiz_error", "Spieler-Schlüssel bereits vergeben. Bitte neu verbinden.");
+      return;
     }
-    room.ready[1] = false;
+
+    room.players.push({
+      id: socket.id,
+      name: trimmedName,
+      playerKey: stablePlayerKey,
+      connected: true,
+      reconnectTimer: null
+    });
+    room.scores.push(0);
+    room.ready = room.players.map(() => false);
     socket.join(room.code);
     socket.data.quizRoomCode = room.code;
-    socket.data.quizPlayerIndex = 1;
+    socket.data.quizPlayerIndex = room.players.length - 1;
+    socket.data.quizPlayerKey = stablePlayerKey;
 
     socket.emit("quiz_joined", {
       ...quizRoomView(room),
-      playerIndex: 1
+      playerIndex: room.players.length - 1
     });
 
     quizBroadcastRoom(room);
   });
 
-  socket.on("quiz_update_settings", ({ code, questionCount, category, difficulty }) => {
+  socket.on("quiz_reconnect", ({ code, playerKey, name }) => {
+    if (isRateLimited(socket, "quiz_reconnect", 600, "quiz_reconnect")) {
+      return;
+    }
+
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const stablePlayerKey = normalizeQuizPlayerKey(playerKey, null);
+    if (!normalizedCode || !stablePlayerKey) return;
+
+    const room = quizRooms.get(normalizedCode);
+    if (!room) return;
+
+    const playerIndex = room.players.findIndex((entry) => entry.playerKey === stablePlayerKey);
+    if (playerIndex < 0) return;
+
+    const player = room.players[playerIndex];
+    const trimmedName = validName(name);
+
+    if (player.id && player.id !== socket.id) {
+      const oldSocket = io.sockets.sockets.get(player.id);
+      if (oldSocket) {
+        oldSocket.leave(room.code);
+        oldSocket.data.quizRoomCode = null;
+        oldSocket.data.quizPlayerIndex = null;
+        oldSocket.data.quizPlayerKey = null;
+      }
+    }
+
+    quizClearReconnectTimer(player);
+    player.id = socket.id;
+    player.connected = true;
+    player.lastSeenAt = Date.now();
+    if (trimmedName) player.name = trimmedName;
+
+    socket.join(room.code);
+    socket.data.quizRoomCode = room.code;
+    socket.data.quizPlayerIndex = playerIndex;
+    socket.data.quizPlayerKey = stablePlayerKey;
+
+    quizSyncSocketData(room);
+
+    socket.emit("quiz_reconnected", {
+      ...quizRoomView(room),
+      playerIndex
+    });
+
+    if (room.started) {
+      const q = room.questions?.[room.currentIndex];
+      if (q) {
+        io.to(socket.id).emit("quiz_question", {
+          code: room.code,
+          questionNumber: room.currentIndex + 1,
+          totalQuestions: room.questionCount,
+          players: room.players.map((p) => p.name),
+          scores: room.scores,
+          question: {
+            text: q.text,
+            answers: q.answers
+          }
+        });
+      }
+    }
+
+    quizBroadcastRoom(room);
+  });
+
+  socket.on("quiz_update_settings", ({ code, questionCount, category, difficulty, maxPlayers }) => {
     if (isRateLimited(socket, "quiz_update_settings", 250, "quiz_update_settings")) {
       return;
     }
@@ -3134,12 +3358,18 @@ io.on("connection", (socket) => {
     if (socket.data.quizRoomCode !== room.code) return;
 
     const playerIndex = Number(socket.data.quizPlayerIndex);
-    if (playerIndex !== 0) return; // host only
+    const hostIndex = quizHostIndex(room);
+    if (playerIndex !== hostIndex) return; // host only
 
     const requested = Math.round(Number(questionCount || room.questionCount || 10));
     const count = Math.max(4, Math.min(40, Number.isFinite(requested) ? requested : 10));
     const cat = normalizeQuizCategory(category);
     const diff = normalizeQuizDifficulty(difficulty);
+    const maxPlayersNormalized = normalizeQuizMaxPlayers(maxPlayers || room.maxPlayers || QUIZ_MAX_PLAYERS);
+    if (maxPlayersNormalized < room.players.length) {
+      socket.emit("quiz_error", `Max-Spieler (${maxPlayersNormalized}) ist kleiner als aktuelle Spielerzahl (${room.players.length}).`);
+      return;
+    }
     const filteredPool = filterQuizQuestions(QUIZ_DUEL_QUESTIONS, { category: cat, difficulty: diff });
     if (count > filteredPool.length) {
       socket.emit("quiz_error", `Zu wenig Fragen im Pool (${filteredPool.length}).`);
@@ -3149,10 +3379,11 @@ io.on("connection", (socket) => {
     room.questionCount = count;
     room.category = cat;
     room.difficulty = diff;
+    room.maxPlayers = maxPlayersNormalized;
     room.questions = null;
 
     // Changing settings resets readiness.
-    room.ready = [false, false];
+    room.ready = room.players.map(() => false);
     quizBroadcastRoom(room);
   });
 
@@ -3168,10 +3399,10 @@ io.on("connection", (socket) => {
     if (socket.data.quizRoomCode !== room.code) return;
 
     const playerIndex = Number(socket.data.quizPlayerIndex);
-    if (![0, 1].includes(playerIndex)) return;
+    if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= room.players.length) return;
 
-    if (!Array.isArray(room.ready) || room.ready.length !== 2) {
-      room.ready = [false, false];
+    if (!Array.isArray(room.ready) || room.ready.length !== room.players.length) {
+      room.ready = room.players.map(() => false);
     }
     room.ready[playerIndex] = true;
     quizBroadcastRoom(room);
@@ -3192,8 +3423,14 @@ io.on("connection", (socket) => {
     if (socket.data.quizRoomCode !== room.code) return;
 
     const playerIndex = Number(socket.data.quizPlayerIndex);
-    if (![0, 1].includes(playerIndex)) return;
+    if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= room.players.length) return;
     if (room.revealed) return;
+    if (!Array.isArray(room.answers) || room.answers.length !== room.players.length) {
+      room.answers = room.players.map(() => null);
+    }
+    if (!Array.isArray(room.answerTimes) || room.answerTimes.length !== room.players.length) {
+      room.answerTimes = room.players.map(() => null);
+    }
     if (room.answers[playerIndex] !== null && room.answers[playerIndex] !== undefined) return;
 
     const idx = Math.max(0, Math.min(3, Math.round(Number(selectedIndex))));
@@ -3727,7 +3964,7 @@ io.on("connection", (socket) => {
     amongRemoveSocket(socket, "disconnect");
     io.emit("among_queue_update", amongQueueView());
     removeParticipantFromRoom(socket, "disconnect");
-    quizLeaveSocket(socket);
+    quizHandleDisconnect(socket);
   });
 });
 

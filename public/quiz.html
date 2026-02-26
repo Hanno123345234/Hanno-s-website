@@ -16,7 +16,7 @@
         </div>
 
         <h1>Quiz-Duell</h1>
-        <p class="subtitle">Kurze Fragen, abwechselnd beantworten. Wer mehr Punkte hat, gewinnt.</p>
+        <p class="subtitle">Kurze Fragen, alle antworten gleichzeitig. Wer schneller richtig ist, sammelt Punkte.</p>
 
         <label for="playerA">Spieler 1</label>
         <input id="playerA" type="text" maxlength="24" autocomplete="off" placeholder="Spieler 1" />
@@ -35,10 +35,17 @@
 
         <div class="admin-box">
           <h3>Online (mit Code)</h3>
-          <p class="subtitle">Host macht einen Code. Der andere joint mit Code.</p>
+          <p class="subtitle">Host erstellt einen Code. Mehrere Spieler können mit dem Code beitreten.</p>
 
           <label for="onlineName">Dein Name</label>
           <input id="onlineName" type="text" maxlength="24" autocomplete="off" placeholder="Dein Name" />
+
+          <label for="maxPlayers">Maximale Spieler</label>
+          <select id="maxPlayers">
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8" selected>8</option>
+          </select>
 
           <div class="stack">
             <button id="hostOnlineBtn" type="button">Code erstellen (Host)</button>
@@ -93,6 +100,13 @@
 
           <label for="lobbyDifficulty">Schwierigkeit</label>
           <select id="lobbyDifficulty"></select>
+
+          <label for="lobbyMaxPlayers">Maximale Spieler</label>
+          <select id="lobbyMaxPlayers">
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8" selected>8</option>
+          </select>
         </div>
 
         <div class="stack">
@@ -121,10 +135,7 @@
 
         <div class="player-list-wrap">
           <h3>Score</h3>
-          <ul class="player-list">
-            <li><strong id="scoreAName">Spieler 1</strong>: <span id="scoreA">0</span></li>
-            <li><strong id="scoreBName">Spieler 2</strong>: <span id="scoreB">0</span></li>
-          </ul>
+          <ul id="scoreList" class="player-list"></ul>
         </div>
       </section>
 
@@ -138,10 +149,7 @@
 
         <div class="player-list-wrap">
           <h3>Endstand</h3>
-          <ul class="player-list">
-            <li><strong id="finalAName">Spieler 1</strong>: <span id="finalA">0</span></li>
-            <li><strong id="finalBName">Spieler 2</strong>: <span id="finalB">0</span></li>
-          </ul>
+          <ul id="finalScoreList" class="player-list"></ul>
         </div>
 
         <div class="stack">

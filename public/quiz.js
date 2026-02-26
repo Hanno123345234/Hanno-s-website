@@ -4,6 +4,9 @@ const STORAGE_ROOM = "quiz_duel_room_code_draft_v1";
 const STORAGE_ONLINE_NAME = "quiz_duel_online_name_v1";
 const STORAGE_CATEGORY = "quiz_duel_category_v1";
 const STORAGE_DIFFICULTY = "quiz_duel_difficulty_v1";
+const STORAGE_MAX_PLAYERS = "quiz_duel_max_players_v1";
+const STORAGE_ONLINE_PLAYER_KEY = "quiz_duel_online_player_key_v1";
+const STORAGE_ONLINE_SESSION = "quiz_duel_online_session_v1";
 
 const setupCard = document.getElementById("setupCard");
 const lobbyCard = document.getElementById("lobbyCard");
@@ -25,6 +28,7 @@ const onlineNameInput = document.getElementById("onlineName");
 const hostCodeLine = document.getElementById("hostCodeLine");
 const hostCodeText = document.getElementById("hostCodeText");
 const onlineStatus = document.getElementById("onlineStatus");
+const maxPlayersSelect = document.getElementById("maxPlayers");
 
 const leaveLobbyBtn = document.getElementById("leaveLobbyBtn");
 const lobbyStatus = document.getElementById("lobbyStatus");
@@ -33,6 +37,7 @@ const lobbyPlayers = document.getElementById("lobbyPlayers");
 const lobbyQuestionCountInput = document.getElementById("lobbyQuestionCount");
 const lobbyCategorySelect = document.getElementById("lobbyCategory");
 const lobbyDifficultySelect = document.getElementById("lobbyDifficulty");
+const lobbyMaxPlayersSelect = document.getElementById("lobbyMaxPlayers");
 const readyBtn = document.getElementById("readyBtn");
 
 const progressTitle = document.getElementById("progressTitle");
@@ -44,16 +49,10 @@ const feedbackEl = document.getElementById("feedback");
 const nextBtn = document.getElementById("nextBtn");
 const quitBtn = document.getElementById("quitBtn");
 
-const scoreAName = document.getElementById("scoreAName");
-const scoreBName = document.getElementById("scoreBName");
-const scoreA = document.getElementById("scoreA");
-const scoreB = document.getElementById("scoreB");
+const scoreListEl = document.getElementById("scoreList");
 
 const resultText = document.getElementById("resultText");
-const finalAName = document.getElementById("finalAName");
-const finalBName = document.getElementById("finalBName");
-const finalA = document.getElementById("finalA");
-const finalB = document.getElementById("finalB");
+const finalScoreListEl = document.getElementById("finalScoreList");
 const restartBtn = document.getElementById("restartBtn");
 
 let questionBank = [];
@@ -70,20 +69,65 @@ const online = {
   connected: false,
   roomCode: null,
   playerIndex: null,
+  hostIndex: null,
   players: [],
-  scores: [0, 0],
+  connectedPlayers: [],
+  scores: [],
   questionNumber: 0,
   totalQuestions: 0,
   question: null,
   reveal: null,
   answeredThisQuestion: false,
-  ready: [false, false],
+  ready: [],
   settings: {
     questionCount: 10,
     category: "",
-    difficulty: ""
+    difficulty: "",
+    maxPlayers: 8
   }
 };
+
+function getOnlinePlayerKey() {
+  const saved = String(window.localStorage.getItem(STORAGE_ONLINE_PLAYER_KEY) || "").trim();
+  if (saved) return saved;
+  const generated = `qp_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+  window.localStorage.setItem(STORAGE_ONLINE_PLAYER_KEY, generated);
+  return generated;
+}
+
+function loadOnlineSession() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_ONLINE_SESSION) || "";
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const code = String(parsed.code || "").trim().toUpperCase();
+    const playerKey = String(parsed.playerKey || "").trim();
+    const name = String(parsed.name || "").trim().slice(0, 24);
+    if (!code || !playerKey) return null;
+    return { code, playerKey, name };
+  } catch {
+    return null;
+  }
+}
+
+function persistOnlineSession() {
+  const code = String(online.roomCode || "").trim().toUpperCase();
+  if (!code) return;
+  const playerKey = getOnlinePlayerKey();
+  const name = getOnlineName();
+  window.localStorage.setItem(STORAGE_ONLINE_SESSION, JSON.stringify({ code, playerKey, name }));
+}
+
+function clearOnlineSession() {
+  window.localStorage.removeItem(STORAGE_ONLINE_SESSION);
+}
+
+function normalizeMaxPlayers(raw) {
+  const value = Math.round(Number(raw));
+  if ([4, 6, 8].includes(value)) return value;
+  return 8;
+}
 
 function showCard(card) {
   [setupCard, lobbyCard, playCard, resultCard].forEach((el) => el.classList.remove("active"));
@@ -273,11 +317,33 @@ function populateFiltersFromBank() {
 }
 
 function isHost() {
-  return Number(online.playerIndex) === 0;
+  return Number(online.playerIndex) === Number(online.hostIndex);
 }
 
 function canReady() {
-  return mode === "online" && online.roomCode && Array.isArray(online.players) && online.players.length === 2;
+  return mode === "online" && online.roomCode && Array.isArray(online.players) && online.players.length >= 2;
+}
+
+function renderPlayerScoreList(targetEl, players, scores) {
+  if (!targetEl) return;
+  targetEl.innerHTML = "";
+
+  const names = Array.isArray(players) ? players : [];
+  const values = Array.isArray(scores) ? scores : [];
+  const count = Math.max(names.length, values.length, 0);
+
+  for (let index = 0; index < count; index += 1) {
+    const li = document.createElement("li");
+    const label = names[index] || `Spieler ${index + 1}`;
+    const points = Number(values[index] || 0);
+
+    const nameStrong = document.createElement("strong");
+    nameStrong.textContent = label;
+
+    li.appendChild(nameStrong);
+    li.appendChild(document.createTextNode(`: ${points}`));
+    targetEl.appendChild(li);
+  }
 }
 
 function renderLobby() {
@@ -291,15 +357,20 @@ function renderLobby() {
   }
 
   const players = Array.isArray(online.players) ? online.players : [];
+  const connected = Array.isArray(online.connectedPlayers) ? online.connectedPlayers : players.map(() => true);
   const ready = Array.isArray(online.ready) ? online.ready : [false, false];
 
   if (lobbyPlayers) {
     lobbyPlayers.innerHTML = "";
-    const list = [0, 1].map((idx) => {
-      const name = players[idx] || (idx === 0 ? "Spieler 1" : "Spieler 2");
+    const list = players.map((_, idx) => {
+      const name = players[idx] || `Spieler ${idx + 1}`;
       const isReady = !!ready[idx];
+      const isConnected = connected[idx] !== false;
       const li = document.createElement("li");
-      li.textContent = `${name}${isReady ? " (bereit)" : ""}`;
+      const statusBits = [];
+      if (!isConnected) statusBits.push("offline");
+      if (isReady) statusBits.push("bereit");
+      li.textContent = statusBits.length > 0 ? `${name} (${statusBits.join(", ")})` : name;
       return li;
     });
     list.forEach((li) => lobbyPlayers.appendChild(li));
@@ -309,6 +380,7 @@ function renderLobby() {
   if (lobbyQuestionCountInput) lobbyQuestionCountInput.disabled = !host;
   if (lobbyCategorySelect) lobbyCategorySelect.disabled = !host;
   if (lobbyDifficultySelect) lobbyDifficultySelect.disabled = !host;
+  if (lobbyMaxPlayersSelect) lobbyMaxPlayersSelect.disabled = !host;
 
   // Fill controls from server settings if present.
   const serverSettings = online.settings || {};
@@ -323,6 +395,13 @@ function renderLobby() {
     const diff = normalizeDifficulty(serverSettings.difficulty || "");
     if ([...lobbyDifficultySelect.options].some((o) => o.value === diff)) lobbyDifficultySelect.value = diff;
   }
+  if (lobbyMaxPlayersSelect) {
+    const maxPlayers = normalizeMaxPlayers(serverSettings.maxPlayers || 8);
+    if ([...lobbyMaxPlayersSelect.options].some((o) => Number(o.value) === maxPlayers)) {
+      lobbyMaxPlayersSelect.value = String(maxPlayers);
+    }
+    if (maxPlayersSelect) maxPlayersSelect.value = String(maxPlayers);
+  }
 
   updateLobbyQuestionCountLimits();
 
@@ -334,9 +413,15 @@ function renderLobby() {
   }
 
   if (players.length < 2) {
-    setLobbyStatus("Warte auf Spieler 2…");
+    setLobbyStatus("Warte auf weitere Spieler…");
   } else {
-    setLobbyStatus("Beide da. Bitte beide auf „Bereit“ drücken.");
+    const readyCount = ready.filter(Boolean).length;
+    const missing = Math.max(0, players.length - readyCount);
+    if (missing === 0) {
+      setLobbyStatus("Alle sind bereit. Spiel startet…");
+    } else {
+      setLobbyStatus(`${readyCount}/${players.length} bereit – warte auf ${missing}.`);
+    }
   }
 }
 
@@ -347,12 +432,14 @@ function emitOnlineSettingsUpdate() {
   if (!online.roomCode) return;
   const { category, difficulty } = getLobbyFilters();
   const requested = Math.round(Number(lobbyQuestionCountInput?.value || questionCountInput.value || 10));
+  const maxPlayers = normalizeMaxPlayers(lobbyMaxPlayersSelect?.value || maxPlayersSelect?.value || 8);
 
   online.socket.emit("quiz_update_settings", {
     code: online.roomCode,
     questionCount: requested,
     category,
-    difficulty
+    difficulty,
+    maxPlayers
   });
 }
 
@@ -367,6 +454,7 @@ function saveSetupDraft() {
   window.localStorage.setItem(STORAGE_ONLINE_NAME, String(onlineNameInput.value || ""));
   window.localStorage.setItem(STORAGE_CATEGORY, String(categorySelect?.value || ""));
   window.localStorage.setItem(STORAGE_DIFFICULTY, String(difficultySelect?.value || ""));
+  window.localStorage.setItem(STORAGE_MAX_PLAYERS, String(normalizeMaxPlayers(maxPlayersSelect?.value || lobbyMaxPlayersSelect?.value || 8)));
 }
 
 function loadSetupDraft() {
@@ -402,6 +490,10 @@ function loadSetupDraft() {
   if (difficultySelect && storedDifficulty) {
     difficultySelect.value = storedDifficulty;
   }
+
+  const storedMaxPlayers = normalizeMaxPlayers(window.localStorage.getItem(STORAGE_MAX_PLAYERS) || 8);
+  if (maxPlayersSelect) maxPlayersSelect.value = String(storedMaxPlayers);
+  if (lobbyMaxPlayersSelect) lobbyMaxPlayersSelect.value = String(storedMaxPlayers);
 }
 
 function buildGame() {
@@ -436,17 +528,11 @@ function buildGame() {
 
 function renderScore() {
   if (mode === "online") {
-    scoreAName.textContent = online.players[0] || "Spieler 1";
-    scoreBName.textContent = online.players[1] || "Spieler 2";
-    scoreA.textContent = String(online.scores[0] || 0);
-    scoreB.textContent = String(online.scores[1] || 0);
+    renderPlayerScoreList(scoreListEl, online.players, online.scores);
     return;
   }
 
-  scoreAName.textContent = game.players[0];
-  scoreBName.textContent = game.players[1];
-  scoreA.textContent = String(game.scores[0]);
-  scoreB.textContent = String(game.scores[1]);
+  renderPlayerScoreList(scoreListEl, game.players, game.scores);
 }
 
 function renderLocalQuestion() {
@@ -540,18 +626,22 @@ function finishGame() {
   const players = mode === "online" ? online.players : game.players;
   const scores = mode === "online" ? online.scores : game.scores;
 
-  finalAName.textContent = players[0] || "Spieler 1";
-  finalBName.textContent = players[1] || "Spieler 2";
-  finalA.textContent = String(scores[0] || 0);
-  finalB.textContent = String(scores[1] || 0);
+  renderPlayerScoreList(finalScoreListEl, players, scores);
 
-  const a = scores[0] || 0;
-  const b = scores[1] || 0;
-  if (a === b) {
+  const numericScores = (Array.isArray(scores) ? scores : []).map((value) => Number(value || 0));
+  const maxScore = numericScores.length ? Math.max(...numericScores) : 0;
+  const winnerIndices = numericScores
+    .map((value, index) => ({ value, index }))
+    .filter((entry) => entry.value === maxScore)
+    .map((entry) => entry.index);
+
+  if (winnerIndices.length <= 0 || winnerIndices.length === numericScores.length) {
     resultText.textContent = "Unentschieden!";
+  } else if (winnerIndices.length === 1) {
+    resultText.textContent = `${players[winnerIndices[0]] || "Jemand"} gewinnt!`;
   } else {
-    const winner = a > b ? players[0] : players[1];
-    resultText.textContent = `${winner} gewinnt!`;
+    const labels = winnerIndices.map((index) => players[index] || `Spieler ${index + 1}`);
+    resultText.textContent = `Unentschieden zwischen ${labels.join(", ")}.`;
   }
 
   showCard(resultCard);
@@ -590,15 +680,18 @@ function resetToSetup() {
   online.connected = false;
   online.roomCode = null;
   online.playerIndex = null;
+  online.hostIndex = null;
   online.players = [];
-  online.scores = [0, 0];
+  online.connectedPlayers = [];
+  online.scores = [];
   online.questionNumber = 0;
   online.totalQuestions = 0;
   online.question = null;
   online.reveal = null;
   online.answeredThisQuestion = false;
-  online.ready = [false, false];
-  online.settings = { questionCount: 10, category: "", difficulty: "" };
+  online.ready = [];
+  online.settings = { questionCount: 10, category: "", difficulty: "", maxPlayers: 8 };
+  clearOnlineSession();
 
   hostCodeLine.style.display = "none";
   hostCodeText.textContent = "";
@@ -640,6 +733,18 @@ async function ensureOnlineSocket() {
   socket.on("connect", () => {
     online.connected = true;
     setOnlineStatus("Verbunden.");
+
+    if (!online.roomCode) {
+      const session = loadOnlineSession();
+      if (session?.code && session?.playerKey) {
+        socket.emit("quiz_reconnect", {
+          code: session.code,
+          playerKey: session.playerKey,
+          name: session.name || getOnlineName()
+        });
+        setOnlineStatus("Verbindung wiederherstellen…");
+      }
+    }
   });
 
   socket.on("disconnect", () => {
@@ -659,10 +764,13 @@ async function ensureOnlineSocket() {
     mode = "online";
     online.roomCode = String(payload?.code || "");
     online.playerIndex = Number(payload?.playerIndex || 0);
+    online.hostIndex = Number(payload?.hostIndex ?? 0);
     online.players = Array.isArray(payload?.players) ? payload.players : [];
-    online.scores = Array.isArray(payload?.scores) ? payload.scores : [0, 0];
-    online.ready = Array.isArray(payload?.ready) ? payload.ready : [false, false];
+    online.connectedPlayers = Array.isArray(payload?.connected) ? payload.connected : online.players.map(() => true);
+    online.scores = Array.isArray(payload?.scores) ? payload.scores : [];
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.players.map(() => false);
     online.settings = payload?.settings || online.settings;
+    online.settings.maxPlayers = normalizeMaxPlayers(online.settings.maxPlayers || 8);
 
     if (online.roomCode) {
       hostCodeText.textContent = online.roomCode;
@@ -672,6 +780,7 @@ async function ensureOnlineSocket() {
     }
 
     setOnlineStatus("Lobby geöffnet.");
+    persistOnlineSession();
     renderScore();
     renderLobby();
   });
@@ -680,11 +789,32 @@ async function ensureOnlineSocket() {
     mode = "online";
     online.roomCode = String(payload?.code || online.roomCode || "");
     online.playerIndex = Number(payload?.playerIndex);
+    online.hostIndex = Number(payload?.hostIndex ?? online.hostIndex ?? 0);
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
+    online.connectedPlayers = Array.isArray(payload?.connected) ? payload.connected : online.players.map(() => true);
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
-    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.ready;
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.players.map(() => false);
     online.settings = payload?.settings || online.settings;
+    online.settings.maxPlayers = normalizeMaxPlayers(online.settings.maxPlayers || 8);
     setOnlineStatus("Beigetreten.");
+    persistOnlineSession();
+    renderScore();
+    renderLobby();
+  });
+
+  socket.on("quiz_reconnected", (payload) => {
+    mode = "online";
+    online.roomCode = String(payload?.code || online.roomCode || "");
+    online.playerIndex = Number(payload?.playerIndex ?? online.playerIndex ?? 0);
+    online.hostIndex = Number(payload?.hostIndex ?? online.hostIndex ?? 0);
+    online.players = Array.isArray(payload?.players) ? payload.players : online.players;
+    online.connectedPlayers = Array.isArray(payload?.connected) ? payload.connected : online.players.map(() => true);
+    online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.players.map(() => false);
+    online.settings = payload?.settings || online.settings;
+    online.settings.maxPlayers = normalizeMaxPlayers(online.settings.maxPlayers || 8);
+    setOnlineStatus("Wieder verbunden.");
+    persistOnlineSession();
     renderScore();
     renderLobby();
   });
@@ -692,9 +822,12 @@ async function ensureOnlineSocket() {
   socket.on("quiz_room_update", (payload) => {
     if (mode !== "online") return;
     online.players = Array.isArray(payload?.players) ? payload.players : online.players;
+    online.connectedPlayers = Array.isArray(payload?.connected) ? payload.connected : online.players.map(() => true);
+    online.hostIndex = Number(payload?.hostIndex ?? online.hostIndex ?? 0);
     online.scores = Array.isArray(payload?.scores) ? payload.scores : online.scores;
-    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.ready;
+    online.ready = Array.isArray(payload?.ready) ? payload.ready : online.players.map(() => false);
     online.settings = payload?.settings || online.settings;
+    online.settings.maxPlayers = normalizeMaxPlayers(online.settings.maxPlayers || 8);
     renderScore();
 
     if (!payload?.started) {
@@ -702,9 +835,9 @@ async function ensureOnlineSocket() {
     }
 
     if ((online.players || []).length < 2) {
-      setOnlineStatus("Warte auf Spieler 2…");
+      setOnlineStatus("Warte auf weitere Spieler…");
     } else {
-      setOnlineStatus("Beide Spieler da.");
+      setOnlineStatus("Spieler verbunden.");
     }
   });
 
@@ -773,7 +906,7 @@ async function ensureOnlineSocket() {
 
   socket.on("quiz_opponent_left", () => {
     if (mode !== "online") return;
-    setSetupError("Gegner hat verlassen.");
+    setSetupError("Ein Spieler hat den Raum verlassen.");
     resetToSetup();
   });
 
@@ -811,7 +944,9 @@ function renderOnlineQuestion() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = String(label);
-    const canAnswer = [0, 1].includes(Number(online.playerIndex))
+    const canAnswer = Number.isInteger(Number(online.playerIndex))
+      && Number(online.playerIndex) >= 0
+      && Number(online.playerIndex) < online.players.length
       && !online.answeredThisQuestion;
     btn.disabled = !canAnswer;
     btn.addEventListener("click", () => onOnlineAnswer(idx));
@@ -824,7 +959,8 @@ function renderOnlineQuestion() {
 function onOnlineAnswer(selectedIndex) {
   if (mode !== "online") return;
   if (!online.socket) return;
-  if (![0, 1].includes(Number(online.playerIndex))) return;
+  if (!Number.isInteger(Number(online.playerIndex))) return;
+  if (Number(online.playerIndex) < 0 || Number(online.playerIndex) >= online.players.length) return;
   if (!online.roomCode) return;
 
   if (online.answeredThisQuestion) return;
@@ -846,11 +982,13 @@ async function hostOnline() {
   const name = getOnlineName();
   const count = Math.max(4, Math.min(40, Math.round(Number(questionCountInput.value || 10))));
   const { category, difficulty } = getFilters();
+  const maxPlayers = normalizeMaxPlayers(maxPlayersSelect?.value || 8);
+  const playerKey = getOnlinePlayerKey();
 
   try {
     const socket = await ensureOnlineSocket();
     mode = "online";
-    socket.emit("quiz_create_room", { name, questionCount: count, category, difficulty });
+    socket.emit("quiz_create_room", { name, questionCount: count, category, difficulty, maxPlayers, playerKey });
     setOnlineStatus("Raum wird erstellt…");
   } catch {
     setSetupError("Online geht hier nicht (Server/Socket.IO fehlt). Nutze Render oder localhost.");
@@ -865,6 +1003,7 @@ async function joinOnline() {
 
   const name = getOnlineName();
   const code = normalizeRoomCode(roomCodeInput.value);
+  const playerKey = getOnlinePlayerKey();
   roomCodeInput.value = code;
   saveSetupDraft();
 
@@ -877,7 +1016,7 @@ async function joinOnline() {
     const socket = await ensureOnlineSocket();
     mode = "online";
     online.roomCode = code;
-    socket.emit("quiz_join_room", { name, code });
+    socket.emit("quiz_join_room", { name, code, playerKey });
     setOnlineStatus("Beitreten…");
   } catch {
     setSetupError("Online geht hier nicht (Server/Socket.IO fehlt). Nutze Render oder localhost.");
@@ -904,7 +1043,7 @@ if (readyBtn) {
     if (!online.socket) return;
     if (!online.roomCode) return;
     const me = Number(online.playerIndex);
-    if (![0, 1].includes(me)) return;
+    if (!Number.isInteger(me) || me < 0 || me >= online.players.length) return;
     online.socket.emit("quiz_ready", { code: online.roomCode });
   });
 }
@@ -917,7 +1056,8 @@ joinOnlineBtn.addEventListener("click", joinOnline);
   playerBInput,
   questionCountInput,
   categorySelect,
-  difficultySelect
+  difficultySelect,
+  maxPlayersSelect
 ]
   .filter(Boolean)
   .forEach((el) => {
@@ -934,6 +1074,13 @@ if (categorySelect) {
 if (difficultySelect) {
   difficultySelect.addEventListener("change", () => {
     updateQuestionCountLimits();
+    saveSetupDraft();
+  });
+}
+
+if (maxPlayersSelect) {
+  maxPlayersSelect.addEventListener("change", () => {
+    if (lobbyMaxPlayersSelect) lobbyMaxPlayersSelect.value = String(maxPlayersSelect.value || "8");
     saveSetupDraft();
   });
 }
@@ -966,6 +1113,14 @@ if (lobbyDifficultySelect) {
     if (difficultySelect) difficultySelect.value = String(lobbyDifficultySelect.value || "");
     saveSetupDraft();
     updateLobbyQuestionCountLimits();
+    emitOnlineSettingsUpdate();
+  });
+}
+
+if (lobbyMaxPlayersSelect) {
+  lobbyMaxPlayersSelect.addEventListener("change", () => {
+    if (maxPlayersSelect) maxPlayersSelect.value = String(lobbyMaxPlayersSelect.value || "8");
+    saveSetupDraft();
     emitOnlineSettingsUpdate();
   });
 }
