@@ -107,6 +107,7 @@ label {
 }
 
 input,
+textarea,
 button,
 select {
   width: 100%;
@@ -123,7 +124,22 @@ input {
   outline: none;
 }
 
+textarea {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 72px;
+  font: inherit;
+}
+
 input:focus {
+  border-color: rgba(93, 123, 255, 0.75);
+  box-shadow: 0 0 0 3px rgba(93, 123, 255, 0.16);
+}
+
+textarea:focus {
   border-color: rgba(93, 123, 255, 0.75);
   box-shadow: 0 0 0 3px rgba(93, 123, 255, 0.16);
 }
@@ -425,6 +441,18 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.ai-chat-row {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.ai-chat-row label {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 #aiHelpStatus,

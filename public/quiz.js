@@ -48,6 +48,8 @@ const answersEl = document.getElementById("answers");
 const feedbackEl = document.getElementById("feedback");
 const aiHintBtn = document.getElementById("aiHintBtn");
 const aiExplainBtn = document.getElementById("aiExplainBtn");
+const aiAskInput = document.getElementById("aiAskInput");
+const aiAskBtn = document.getElementById("aiAskBtn");
 const aiHelpStatusEl = document.getElementById("aiHelpStatus");
 const aiHelpTextEl = document.getElementById("aiHelpText");
 const nextBtn = document.getElementById("nextBtn");
@@ -229,6 +231,7 @@ function updateAiButtons() {
   const hasQuestion = !!getCurrentQuestion();
   if (aiHintBtn) aiHintBtn.disabled = aiState.loading || !hasQuestion;
   if (aiExplainBtn) aiExplainBtn.disabled = aiState.loading || !hasQuestion || !canExplainCurrentQuestion();
+  if (aiAskBtn) aiAskBtn.disabled = aiState.loading || !hasQuestion;
 }
 
 function resetAiHelpForQuestion() {
@@ -294,6 +297,59 @@ async function requestAiHelp(modeType) {
 
     setAiHelpText(String(payload?.text || ""));
     setAiHelpStatus(modeType === "hint" ? "KI-Tipp bereit." : "KI-Erklaerung bereit.");
+  } catch (error) {
+    setAiHelpStatus(`KI nicht verfuegbar: ${String(error?.message || "Unbekannter Fehler")}`);
+  } finally {
+    aiState.loading = false;
+    updateAiButtons();
+  }
+}
+
+async function requestAiChat() {
+  const q = getCurrentQuestion();
+  if (!q) {
+    setAiHelpStatus("Keine aktive Frage.");
+    return;
+  }
+
+  const userMessage = String(aiAskInput?.value || "").trim().slice(0, 280);
+  if (!userMessage) {
+    setAiHelpStatus("Bitte erst eine Frage an die KI eingeben.");
+    return;
+  }
+
+  aiState.loading = true;
+  updateAiButtons();
+  setAiHelpStatus("KI antwortet...");
+
+  const category = mode === "online"
+    ? String(online.settings?.category || "")
+    : String(categorySelect?.value || "");
+  const difficulty = mode === "online"
+    ? String(online.settings?.difficulty || "")
+    : String(difficultySelect?.value || "");
+
+  try {
+    const response = await fetch(`${getQuizApiBaseOrigin()}/api/quiz/ai-help`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "chat",
+        userMessage,
+        question: String(q?.text || ""),
+        answers: Array.isArray(q?.answers) ? q.answers : [],
+        category,
+        difficulty
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || `HTTP ${response.status}`));
+    }
+
+    setAiHelpText(String(payload?.text || ""));
+    setAiHelpStatus("KI-Antwort bereit.");
   } catch (error) {
     setAiHelpStatus(`KI nicht verfuegbar: ${String(error?.message || "Unbekannter Fehler")}`);
   } finally {
@@ -1192,6 +1248,21 @@ if (aiHintBtn) {
 if (aiExplainBtn) {
   aiExplainBtn.addEventListener("click", () => {
     requestAiHelp("explain");
+  });
+}
+
+if (aiAskBtn) {
+  aiAskBtn.addEventListener("click", () => {
+    requestAiChat();
+  });
+}
+
+if (aiAskInput) {
+  aiAskInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      requestAiChat();
+    }
   });
 }
 

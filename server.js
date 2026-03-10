@@ -108,7 +108,9 @@ app.post("/api/quiz/ai-help", async (req, res) => {
     return;
   }
 
-  const mode = String(req.body?.mode || "hint").trim().toLowerCase() === "explain" ? "explain" : "hint";
+  const modeRaw = String(req.body?.mode || "hint").trim().toLowerCase();
+  const mode = ["hint", "explain", "chat"].includes(modeRaw) ? modeRaw : "hint";
+  const userMessage = sanitizeQuizPromptText(req.body?.userMessage, 280);
   const question = sanitizeQuizPromptText(req.body?.question, 420);
   const answers = Array.isArray(req.body?.answers)
     ? req.body.answers.map((entry) => sanitizeQuizPromptText(entry, 120)).filter(Boolean).slice(0, 6)
@@ -125,6 +127,11 @@ app.post("/api/quiz/ai-help", async (req, res) => {
     return;
   }
 
+  if (mode === "chat" && !userMessage) {
+    res.status(400).json({ error: "Bitte eine Frage an die KI senden." });
+    return;
+  }
+
   const numberedAnswers = answers.map((answer, index) => `${index + 1}) ${answer}`).join("\n");
   const promptSections = [
     `Modus: ${mode === "hint" ? "Tipp" : "Erklaerung"}`,
@@ -138,10 +145,14 @@ app.post("/api/quiz/ai-help", async (req, res) => {
     promptSections.push(`Richtige Antwort: ${correctIndex + 1}) ${answers[correctIndex]}`);
   }
 
-  const userPrompt = promptSections.join("\n\n");
+  const userPrompt = mode === "chat"
+    ? `${promptSections.join("\n\n")}\n\nNutzerfrage: ${userMessage}`
+    : promptSections.join("\n\n");
   const systemPrompt = mode === "hint"
     ? "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Gib einen kurzen Denkanstoss in 2 bis 4 Saetzen. Verrate nicht direkt die richtige Antwort und nenne keinen Antwortindex. Schreibe klar und freundlich auf Deutsch."
-    : "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Erklaere in 2 bis 5 Saetzen, warum die Loesung richtig ist. Wenn die richtige Antwort bekannt ist, nenne sie klar. Schreibe einfaches Deutsch.";
+    : mode === "explain"
+      ? "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Erklaere in 2 bis 5 Saetzen, warum die Loesung richtig ist. Wenn die richtige Antwort bekannt ist, nenne sie klar. Schreibe einfaches Deutsch."
+      : "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Beantworte die Nutzerfrage zur aktuellen Frage klar in einfachem Deutsch (maximal 5 kurze Saetze). Gib Hilfe zum Verstehen. Verrate die exakte Loesung nur, wenn der Nutzer explizit danach fragt.";
 
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
