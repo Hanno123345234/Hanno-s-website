@@ -197,6 +197,70 @@ app.post("/api/quiz/ai-help", async (req, res) => {
   }
 });
 
+app.post("/api/ai/chat", async (req, res) => {
+  const limiter = consumeQuizAiRateLimit(req.ip);
+  if (limiter.blocked) {
+    res.set("Retry-After", String(limiter.retryAfterSec));
+    res.status(429).json({ error: "Zu viele KI-Anfragen. Bitte kurz warten." });
+    return;
+  }
+
+  if (!OPENAI_API_KEY) {
+    res.status(503).json({ error: "KI ist noch nicht aktiviert (OPENAI_API_KEY fehlt)." });
+    return;
+  }
+
+  const message = sanitizeQuizPromptText(req.body?.message, 320);
+  if (!message) {
+    res.status(400).json({ error: "Bitte eine Frage eingeben." });
+    return;
+  }
+
+  const systemPrompt = "Du bist ein freundlicher Lern- und Website-Assistent fuer ein Schulquiz-Projekt. Antworte auf Deutsch, kurz, klar und hilfreich in maximal 5 Saetzen.";
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: QUIZ_AI_MODEL,
+        temperature: 0.5,
+        max_output_tokens: 240,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: systemPrompt }]
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: message }]
+          }
+        ]
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const apiError = String(payload?.error?.message || payload?.error || "OpenAI request failed");
+      res.status(502).json({ error: `KI-Fehler: ${apiError}` });
+      return;
+    }
+
+    const text = sanitizeQuizPromptText(extractOpenAiText(payload), 1200);
+    if (!text) {
+      res.status(502).json({ error: "Leere KI-Antwort erhalten." });
+      return;
+    }
+
+    res.json({ text, model: QUIZ_AI_MODEL });
+  } catch (error) {
+    res.status(500).json({ error: `KI-Anfrage fehlgeschlagen: ${String(error?.message || "unknown")}` });
+  }
+});
+
 function randomAdminToken() {
   return `${Math.random().toString(36).slice(2, 8)}${Math.random().toString(36).slice(2, 8)}`;
 }

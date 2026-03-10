@@ -429,6 +429,27 @@ button:disabled {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.home-ai-box {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.home-ai-box h3 {
+  margin: 0 0 8px;
+}
+
+#homeAiStatus,
+#homeAiAnswer {
+  margin: 10px 0 0;
+}
+
+#homeAiAnswer {
+  color: #d8e2ff;
+}
+
 .ai-help {
   margin-top: 12px;
   padding: 10px;
