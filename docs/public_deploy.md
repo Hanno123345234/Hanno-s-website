@@ -37,6 +37,26 @@ läuft Socket.IO auf Render und die Webseite verbindet sich cross-origin.
 - `ADMIN_OWNER_KEY` (empfohlen setzen)
 - `ADMIN_ACCESS_CODES` (optional)
 
+### KI aktivieren (Render)
+
+Fuer die neuen Buttons `KI-Tipp` und `KI-Erklaerung` braucht dein Render-Service einen API-Key.
+
+Pflicht:
+
+- `OPENAI_API_KEY` = dein OpenAI API Key
+
+Optional:
+
+- `QUIZ_AI_MODEL` = Modellname (Standard: `gpt-4o-mini`)
+- `SOCKET_IO_CORS_ORIGIN` = erlaubte Origins (optional, z. B. deine GitHub Pages URL)
+
+In Render:
+
+1. Service oeffnen
+2. **Environment**
+3. Variablen eintragen
+4. **Save Changes** -> Render startet automatisch einen neuen Deploy
+
 Wenn `ADMIN_OWNER_KEY` nicht gesetzt ist, nutzt der Server den internen Fallback.
 
 ## 2) GitHub Pages (statisches Frontend)
@@ -72,3 +92,17 @@ Danach reicht ein Push auf `main`.
 4. Render deployed den Web Service
 
 So sind beide Ziele immer gleichzeitig aktuell.
+
+## 4) GitHub -> Render + Pages (konkret)
+
+1. Lokale Aenderungen committen und auf `main` pushen.
+2. Render deployed automatisch den Node-Service (Backend + KI-API + Socket.IO).
+3. GitHub Actions deployed automatisch `public/` nach GitHub Pages.
+4. Frontend nutzt `public/config.js` und verbindet sich mit deiner Render-URL.
+
+Schnelltest danach:
+
+1. `https://<dein-user>.github.io/<repo>/quiz.html` oeffnen
+2. Frage starten
+3. `KI-Tipp` klicken
+4. Wenn kein Key gesetzt ist, siehst du eine klare Fehlermeldung; mit Key kommt die KI-Antwort

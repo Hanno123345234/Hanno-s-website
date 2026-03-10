@@ -8,4 +8,15 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: QUIZ_AI_MODEL
+        value: gpt-4o-mini
+      - key: ADMIN_OWNER_KEY
+        sync: false
+      - key: ADMIN_EDITOR_KEY
+        sync: false
+      - key: SOCKET_IO_CORS_ORIGIN
+        value: ""
 

@@ -31,6 +31,8 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_OWNER_KEY = String(process.env.ADMIN_OWNER_KEY || process.env.ADMIN_KEY || "Anna").trim();
 const ADMIN_EDITOR_KEY = String(process.env.ADMIN_EDITOR_KEY || "hanno123").trim();
 const ADMIN_BOOTSTRAP_CODES = String(process.env.ADMIN_ACCESS_CODES || "").trim();
+const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
+const QUIZ_AI_MODEL = String(process.env.QUIZ_AI_MODEL || "gpt-4o-mini").trim();
 
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -43,6 +45,146 @@ app.use((req, res, next) => {
 
 app.use(express.static("public"));
 app.use(express.json());
+
+const quizAiRateLimitByIp = new Map();
+
+function sanitizeQuizPromptText(raw, maxLength = 320) {
+  return String(raw || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function extractOpenAiText(payload) {
+  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const output = Array.isArray(payload?.output) ? payload.output : [];
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const block of content) {
+      if (typeof block?.text === "string" && block.text.trim()) {
+        return block.text.trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+function consumeQuizAiRateLimit(ipAddress) {
+  const now = Date.now();
+  const key = String(ipAddress || "unknown").trim() || "unknown";
+  const windowMs = 60 * 1000;
+  const maxRequests = 18;
+  const entry = quizAiRateLimitByIp.get(key) || { count: 0, resetAt: now + windowMs };
+
+  if (entry.resetAt <= now) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+
+  entry.count += 1;
+  quizAiRateLimitByIp.set(key, entry);
+
+  if (entry.count > maxRequests) {
+    return {
+      blocked: true,
+      retryAfterSec: Math.max(1, Math.ceil((entry.resetAt - now) / 1000))
+    };
+  }
+
+  return { blocked: false, retryAfterSec: 0 };
+}
+
+app.post("/api/quiz/ai-help", async (req, res) => {
+  const limiter = consumeQuizAiRateLimit(req.ip);
+  if (limiter.blocked) {
+    res.set("Retry-After", String(limiter.retryAfterSec));
+    res.status(429).json({ error: "Zu viele KI-Anfragen. Bitte kurz warten." });
+    return;
+  }
+
+  if (!OPENAI_API_KEY) {
+    res.status(503).json({ error: "KI ist noch nicht aktiviert (OPENAI_API_KEY fehlt)." });
+    return;
+  }
+
+  const mode = String(req.body?.mode || "hint").trim().toLowerCase() === "explain" ? "explain" : "hint";
+  const question = sanitizeQuizPromptText(req.body?.question, 420);
+  const answers = Array.isArray(req.body?.answers)
+    ? req.body.answers.map((entry) => sanitizeQuizPromptText(entry, 120)).filter(Boolean).slice(0, 6)
+    : [];
+  const category = sanitizeQuizPromptText(req.body?.category, 40);
+  const difficulty = sanitizeQuizPromptText(req.body?.difficulty, 20);
+  const correctIndexRaw = Number(req.body?.correctIndex);
+  const correctIndex = Number.isInteger(correctIndexRaw) && correctIndexRaw >= 0 && correctIndexRaw < answers.length
+    ? correctIndexRaw
+    : null;
+
+  if (!question || answers.length < 2) {
+    res.status(400).json({ error: "Frage oder Antworten fehlen." });
+    return;
+  }
+
+  const numberedAnswers = answers.map((answer, index) => `${index + 1}) ${answer}`).join("\n");
+  const promptSections = [
+    `Modus: ${mode === "hint" ? "Tipp" : "Erklaerung"}`,
+    category ? `Kategorie: ${category}` : "",
+    difficulty ? `Schwierigkeit: ${difficulty}` : "",
+    `Frage: ${question}`,
+    `Antwortoptionen:\n${numberedAnswers}`
+  ].filter(Boolean);
+
+  if (mode === "explain" && correctIndex !== null) {
+    promptSections.push(`Richtige Antwort: ${correctIndex + 1}) ${answers[correctIndex]}`);
+  }
+
+  const userPrompt = promptSections.join("\n\n");
+  const systemPrompt = mode === "hint"
+    ? "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Gib einen kurzen Denkanstoss in 2 bis 4 Saetzen. Verrate nicht direkt die richtige Antwort und nenne keinen Antwortindex. Schreibe klar und freundlich auf Deutsch."
+    : "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Erklaere in 2 bis 5 Saetzen, warum die Loesung richtig ist. Wenn die richtige Antwort bekannt ist, nenne sie klar. Schreibe einfaches Deutsch.";
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: QUIZ_AI_MODEL,
+        temperature: 0.4,
+        max_output_tokens: 220,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: systemPrompt }]
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: userPrompt }]
+          }
+        ]
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const apiError = String(payload?.error?.message || payload?.error || "OpenAI request failed");
+      res.status(502).json({ error: `KI-Fehler: ${apiError}` });
+      return;
+    }
+
+    const text = sanitizeQuizPromptText(extractOpenAiText(payload), 1000);
+    if (!text) {
+      res.status(502).json({ error: "Leere KI-Antwort erhalten." });
+      return;
+    }
+
+    res.json({ text, mode, model: QUIZ_AI_MODEL });
+  } catch (error) {
+    res.status(500).json({ error: `KI-Anfrage fehlgeschlagen: ${String(error?.message || "unknown")}` });
+  }
+});
 
 function randomAdminToken() {
   return `${Math.random().toString(36).slice(2, 8)}${Math.random().toString(36).slice(2, 8)}`;

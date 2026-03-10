@@ -46,6 +46,10 @@ const roomSubtitle = document.getElementById("roomSubtitle");
 const questionText = document.getElementById("questionText");
 const answersEl = document.getElementById("answers");
 const feedbackEl = document.getElementById("feedback");
+const aiHintBtn = document.getElementById("aiHintBtn");
+const aiExplainBtn = document.getElementById("aiExplainBtn");
+const aiHelpStatusEl = document.getElementById("aiHelpStatus");
+const aiHelpTextEl = document.getElementById("aiHelpText");
 const nextBtn = document.getElementById("nextBtn");
 const quitBtn = document.getElementById("quitBtn");
 
@@ -63,6 +67,11 @@ let mode = "local";
 
 let cooldownTimeout = null;
 let cooldownInterval = null;
+
+const aiState = {
+  loading: false,
+  lastQuestionKey: ""
+};
 
 const online = {
   socket: null,
@@ -183,6 +192,114 @@ function normalizeDifficulty(raw) {
   const value = String(raw || "").trim().toLowerCase();
   if (["easy", "medium", "hard"].includes(value)) return value;
   return "";
+}
+
+function getQuizApiBaseOrigin() {
+  const base = String(window.QUIZ_ONLINE_ORIGIN || "").trim();
+  return base || window.location.origin;
+}
+
+function getCurrentQuestion() {
+  if (mode === "online") {
+    return online.question || null;
+  }
+  if (!game || !Array.isArray(game.questions)) return null;
+  if (!Number.isInteger(game.turn) || game.turn < 0 || game.turn >= game.questions.length) return null;
+  return game.questions[game.turn] || null;
+}
+
+function canExplainCurrentQuestion() {
+  if (mode === "online") {
+    return !!online.reveal;
+  }
+  return !!game?.answered;
+}
+
+function setAiHelpStatus(text) {
+  if (!aiHelpStatusEl) return;
+  aiHelpStatusEl.textContent = String(text || "");
+}
+
+function setAiHelpText(text) {
+  if (!aiHelpTextEl) return;
+  aiHelpTextEl.textContent = String(text || "");
+}
+
+function updateAiButtons() {
+  const hasQuestion = !!getCurrentQuestion();
+  if (aiHintBtn) aiHintBtn.disabled = aiState.loading || !hasQuestion;
+  if (aiExplainBtn) aiExplainBtn.disabled = aiState.loading || !hasQuestion || !canExplainCurrentQuestion();
+}
+
+function resetAiHelpForQuestion() {
+  const q = getCurrentQuestion();
+  aiState.lastQuestionKey = q?.id || q?.text || "";
+  setAiHelpStatus("");
+  setAiHelpText("");
+  updateAiButtons();
+}
+
+async function requestAiHelp(modeType) {
+  const q = getCurrentQuestion();
+  if (!q) {
+    setAiHelpStatus("Keine aktive Frage.");
+    return;
+  }
+
+  if (modeType === "explain" && !canExplainCurrentQuestion()) {
+    setAiHelpStatus("Erklaerung kommt nach der Aufloesung.");
+    return;
+  }
+
+  aiState.loading = true;
+  updateAiButtons();
+  setAiHelpStatus("KI denkt...");
+
+  const category = mode === "online"
+    ? String(online.settings?.category || "")
+    : String(categorySelect?.value || "");
+  const difficulty = mode === "online"
+    ? String(online.settings?.difficulty || "")
+    : String(difficultySelect?.value || "");
+
+  let correctIndex = null;
+  if (modeType === "explain") {
+    if (mode === "online") {
+      const revealIndex = Number(online.reveal?.correctIndex);
+      correctIndex = Number.isInteger(revealIndex) ? revealIndex : null;
+    } else {
+      const localIndex = Number(q?.correctIndex);
+      correctIndex = Number.isInteger(localIndex) ? localIndex : null;
+    }
+  }
+
+  try {
+    const response = await fetch(`${getQuizApiBaseOrigin()}/api/quiz/ai-help`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: modeType,
+        question: String(q?.text || ""),
+        answers: Array.isArray(q?.answers) ? q.answers : [],
+        correctIndex,
+        category,
+        difficulty
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || `HTTP ${response.status}`));
+    }
+
+    setAiHelpText(String(payload?.text || ""));
+    setAiHelpStatus(modeType === "hint" ? "KI-Tipp bereit." : "KI-Erklaerung bereit.");
+  } catch (error) {
+    setAiHelpStatus(`KI nicht verfuegbar: ${String(error?.message || "Unbekannter Fehler")}`);
+  } finally {
+    aiState.loading = false;
+    updateAiButtons();
+  }
 }
 
 function getFilters() {
@@ -562,6 +679,7 @@ function renderLocalQuestion() {
     answersEl.appendChild(btn);
   });
 
+  resetAiHelpForQuestion();
   renderScore();
 }
 
@@ -607,6 +725,7 @@ function onLocalAnswer(selectedIndex) {
 
   feedbackEl.textContent = correct ? "Richtig! +1 Punkt" : `Falsch. Richtig ist: ${q.answers[q.correctIndex]}`;
   nextBtn.disabled = true;
+  updateAiButtons();
   renderScore();
 
   startCooldown(() => advanceLocal());
@@ -697,6 +816,9 @@ function resetToSetup() {
   hostCodeText.textContent = "";
   setOnlineStatus("");
   setLobbyStatus("");
+  setAiHelpStatus("");
+  setAiHelpText("");
+  updateAiButtons();
   showCard(setupCard);
 }
 
@@ -872,6 +994,13 @@ async function ensureOnlineSocket() {
     const winnerIndex = payload?.winnerIndex === null || payload?.winnerIndex === undefined
       ? null
       : Number(payload?.winnerIndex);
+    online.reveal = {
+      correctIndex,
+      correctAnswer,
+      type,
+      detail,
+      winnerIndex
+    };
 
     [...answersEl.querySelectorAll("button")].forEach((btn, idx) => {
       btn.disabled = true;
@@ -893,6 +1022,8 @@ async function ensureOnlineSocket() {
     } else {
       feedbackEl.textContent = `Niemand richtig. Richtig ist: ${correctAnswer}`;
     }
+
+    updateAiButtons();
 
     // Next question comes from server after ~2s.
   });
@@ -953,6 +1084,7 @@ function renderOnlineQuestion() {
     answersEl.appendChild(btn);
   });
 
+  resetAiHelpForQuestion();
   renderScore();
 }
 
@@ -1051,6 +1183,18 @@ if (readyBtn) {
 hostOnlineBtn.addEventListener("click", hostOnline);
 joinOnlineBtn.addEventListener("click", joinOnline);
 
+if (aiHintBtn) {
+  aiHintBtn.addEventListener("click", () => {
+    requestAiHelp("hint");
+  });
+}
+
+if (aiExplainBtn) {
+  aiExplainBtn.addEventListener("click", () => {
+    requestAiHelp("explain");
+  });
+}
+
 [
   playerAInput,
   playerBInput,
@@ -1128,6 +1272,8 @@ if (lobbyMaxPlayersSelect) {
 loadSetupDraft();
 
 (async () => {
+  updateAiButtons();
+
   const ok = await loadQuestionBank();
   if (!ok) {
     setSetupError("Fragen konnten nicht geladen werden (quiz_questions.json fehlt). Online kann trotzdem gehen.");

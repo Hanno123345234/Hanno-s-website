@@ -413,6 +413,29 @@ button:disabled {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.ai-help {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(11, 25, 48, 0.5);
+}
+
+.ai-help-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#aiHelpStatus,
+#aiHelpText {
+  margin: 10px 0 0;
+}
+
+#aiHelpText {
+  color: #d8e2ff;
+}
+
 #inviteInfo {
   min-height: 18px;
   margin: 10px 0 0;
