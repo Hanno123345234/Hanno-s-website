@@ -37,7 +37,8 @@ const OPENAI_MODEL = String(process.env.QUIZ_AI_MODEL || process.env.OPENAI_MODE
 const GITHUB_TOKEN = String(process.env.GITHUB_TOKEN || process.env.GITHUB_MODELS_TOKEN || "").trim();
 const GITHUB_MODEL = String(process.env.GITHUB_MODEL || "microsoft/Phi-3.5-mini-instruct").trim();
 const GITHUB_MODEL_FALLBACKS = String(
-  process.env.GITHUB_MODEL_FALLBACKS || "meta/Llama-3.2-3B-Instruct,microsoft/Phi-3.5-mini-instruct,microsoft/phi-3.5-mini-instruct"
+  process.env.GITHUB_MODEL_FALLBACKS
+    || "gpt-4o-mini,openai/gpt-4o-mini,gpt-4.1-mini,openai/gpt-4.1-mini,meta/Llama-3.2-3B-Instruct,microsoft/Phi-3.5-mini-instruct,microsoft/phi-3.5-mini-instruct"
 )
   .split(",")
   .map((entry) => entry.trim())
@@ -108,9 +109,25 @@ function isAiConfigured() {
   return !!OPENAI_API_KEY;
 }
 
+function expandGitHubModelCandidates(rawModels) {
+  const expanded = [];
+  for (const raw of rawModels) {
+    const model = String(raw || "").trim();
+    if (!model) continue;
+    expanded.push(model);
+
+    // Some endpoints accept short IDs without provider prefix.
+    if (model.includes("/")) {
+      const shortId = model.split("/").pop();
+      if (shortId) expanded.push(shortId);
+    }
+  }
+  return expanded;
+}
+
 async function generateAiText({ systemPrompt, userPrompt, temperature, maxTokens }) {
   if (AI_PROVIDER === "github") {
-    const attempts = [GITHUB_MODEL, ...GITHUB_MODEL_FALLBACKS].filter(Boolean);
+    const attempts = expandGitHubModelCandidates([GITHUB_MODEL, ...GITHUB_MODEL_FALLBACKS]);
     const seen = new Set();
     const modelsToTry = attempts.filter((model) => {
       const key = model.toLowerCase();
