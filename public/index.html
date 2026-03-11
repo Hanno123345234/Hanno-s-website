@@ -32,13 +32,15 @@
         <div class="home-ai-box">
           <h3>KI Assistent</h3>
           <p class="subtitle">Stelle direkt hier eine Frage zur Website oder zum Lernen.</p>
+          <div id="homeAiChat" class="home-ai-chat" aria-live="polite">
+            <div class="home-ai-bubble home-ai-bubble-ai">Hi! Ich helfe dir beim Lernen und bei Fragen zur Website.</div>
+          </div>
           <label for="homeAiInput">Deine Frage</label>
           <textarea id="homeAiInput" rows="2" maxlength="300" placeholder="z. B. Wie lerne ich Mathe schneller?"></textarea>
           <div class="stack">
             <button id="homeAiAskBtn" type="button" class="primary">KI fragen</button>
           </div>
           <p id="homeAiStatus" class="subtitle"></p>
-          <p id="homeAiAnswer" class="subtitle"></p>
         </div>
       </section>
     </main>
@@ -65,7 +67,7 @@
       const homeAiInput = document.getElementById("homeAiInput");
       const homeAiAskBtn = document.getElementById("homeAiAskBtn");
       const homeAiStatus = document.getElementById("homeAiStatus");
-      const homeAiAnswer = document.getElementById("homeAiAnswer");
+      const homeAiChat = document.getElementById("homeAiChat");
 
       let homeAiLoading = false;
 
@@ -102,8 +104,16 @@
         homeAiStatus.textContent = String(text || "");
       }
 
-      function setHomeAiAnswer(text) {
-        homeAiAnswer.textContent = String(text || "");
+      function appendChatBubble(kind, text) {
+        if (!homeAiChat) return;
+        const bubble = document.createElement("div");
+        bubble.className = kind === "user" ? "home-ai-bubble home-ai-bubble-user" : "home-ai-bubble home-ai-bubble-ai";
+        bubble.textContent = String(text || "");
+        homeAiChat.appendChild(bubble);
+        while (homeAiChat.children.length > 18) {
+          homeAiChat.removeChild(homeAiChat.firstElementChild);
+        }
+        homeAiChat.scrollTop = homeAiChat.scrollHeight;
       }
 
       function updateHomeAiButton() {
@@ -121,6 +131,8 @@
         homeAiLoading = true;
         updateHomeAiButton();
         setHomeAiStatus("KI denkt...");
+        appendChatBubble("user", message);
+        if (homeAiInput) homeAiInput.value = "";
 
         try {
           const response = await fetch(`${getAiApiBase()}/api/ai/chat`, {
@@ -134,7 +146,7 @@
             throw new Error(String(payload?.error || `HTTP ${response.status}`));
           }
 
-          setHomeAiAnswer(String(payload?.text || ""));
+          appendChatBubble("ai", String(payload?.text || ""));
           setHomeAiStatus("Antwort bereit.");
         } catch (error) {
           setHomeAiStatus(`KI nicht verfügbar: ${String(error?.message || "Fehler")}`);

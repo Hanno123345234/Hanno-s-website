@@ -441,13 +441,41 @@ button:disabled {
   margin: 0 0 8px;
 }
 
-#homeAiStatus,
-#homeAiAnswer {
-  margin: 10px 0 0;
+.home-ai-chat {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(7, 14, 36, 0.7);
+  padding: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
 }
 
-#homeAiAnswer {
-  color: #d8e2ff;
+.home-ai-bubble {
+  max-width: 92%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  line-height: 1.4;
+  font-size: 0.94rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.home-ai-bubble-ai {
+  justify-self: start;
+  background: rgba(90, 130, 255, 0.18);
+  color: #e8eeff;
+}
+
+.home-ai-bubble-user {
+  justify-self: end;
+  background: rgba(123, 87, 255, 0.26);
+  color: #f4eefe;
+}
+
+#homeAiStatus {
+  margin: 10px 0 0;
 }
 
 .ai-help {
