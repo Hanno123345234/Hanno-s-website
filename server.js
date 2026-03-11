@@ -31,8 +31,14 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_OWNER_KEY = String(process.env.ADMIN_OWNER_KEY || process.env.ADMIN_KEY || "Anna").trim();
 const ADMIN_EDITOR_KEY = String(process.env.ADMIN_EDITOR_KEY || "hanno123").trim();
 const ADMIN_BOOTSTRAP_CODES = String(process.env.ADMIN_ACCESS_CODES || "").trim();
+const AI_PROVIDER = String(process.env.AI_PROVIDER || "github").trim().toLowerCase();
 const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
-const QUIZ_AI_MODEL = String(process.env.QUIZ_AI_MODEL || "gpt-4o-mini").trim();
+const OPENAI_MODEL = String(process.env.QUIZ_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+const GITHUB_TOKEN = String(process.env.GITHUB_TOKEN || process.env.GITHUB_MODELS_TOKEN || "").trim();
+const GITHUB_MODEL = String(process.env.GITHUB_MODEL || "microsoft/Phi-3.5-mini-instruct").trim();
+const GITHUB_MODELS_ENDPOINT = String(
+  process.env.GITHUB_MODELS_ENDPOINT || "https://models.inference.ai.azure.com/chat/completions"
+).trim();
 
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -70,6 +76,103 @@ function extractOpenAiText(payload) {
   return "";
 }
 
+function extractChatCompletionsText(payload) {
+  const text = payload?.choices?.[0]?.message?.content;
+  if (typeof text === "string" && text.trim()) return text.trim();
+
+  if (Array.isArray(text)) {
+    const joined = text
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (typeof entry?.text === "string") return entry.text;
+        return "";
+      })
+      .join("\n")
+      .trim();
+    if (joined) return joined;
+  }
+
+  return "";
+}
+
+function isAiConfigured() {
+  if (AI_PROVIDER === "github") {
+    return !!GITHUB_TOKEN;
+  }
+  return !!OPENAI_API_KEY;
+}
+
+async function generateAiText({ systemPrompt, userPrompt, temperature, maxTokens }) {
+  if (AI_PROVIDER === "github") {
+    const response = await fetch(GITHUB_MODELS_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        "api-key": GITHUB_TOKEN,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: GITHUB_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature,
+        max_tokens: maxTokens
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const apiError = String(payload?.error?.message || payload?.error || "GitHub Models request failed");
+      throw new Error(apiError);
+    }
+
+    const text = sanitizeQuizPromptText(extractChatCompletionsText(payload), 1400);
+    if (!text) {
+      throw new Error("Leere KI-Antwort erhalten.");
+    }
+
+    return { text, model: GITHUB_MODEL, provider: "github" };
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      temperature,
+      max_output_tokens: maxTokens,
+      input: [
+        {
+          role: "system",
+          content: [{ type: "input_text", text: systemPrompt }]
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: userPrompt }]
+        }
+      ]
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const apiError = String(payload?.error?.message || payload?.error || "OpenAI request failed");
+    throw new Error(apiError);
+  }
+
+  const text = sanitizeQuizPromptText(extractOpenAiText(payload), 1400);
+  if (!text) {
+    throw new Error("Leere KI-Antwort erhalten.");
+  }
+
+  return { text, model: OPENAI_MODEL, provider: "openai" };
+}
+
 function consumeQuizAiRateLimit(ipAddress) {
   const now = Date.now();
   const key = String(ipAddress || "unknown").trim() || "unknown";
@@ -103,8 +206,9 @@ app.post("/api/quiz/ai-help", async (req, res) => {
     return;
   }
 
-  if (!OPENAI_API_KEY) {
-    res.status(503).json({ error: "KI ist noch nicht aktiviert (OPENAI_API_KEY fehlt)." });
+  if (!isAiConfigured()) {
+    const missing = AI_PROVIDER === "github" ? "GITHUB_TOKEN" : "OPENAI_API_KEY";
+    res.status(503).json({ error: `KI ist noch nicht aktiviert (${missing} fehlt).` });
     return;
   }
 
@@ -155,45 +259,15 @@ app.post("/api/quiz/ai-help", async (req, res) => {
       : "Du bist ein Lerncoach fuer ein deutsches Schulquiz. Beantworte die Nutzerfrage zur aktuellen Frage klar in einfachem Deutsch (maximal 5 kurze Saetze). Gib Hilfe zum Verstehen. Verrate die exakte Loesung nur, wenn der Nutzer explizit danach fragt.";
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: QUIZ_AI_MODEL,
-        temperature: 0.4,
-        max_output_tokens: 220,
-        input: [
-          {
-            role: "system",
-            content: [{ type: "input_text", text: systemPrompt }]
-          },
-          {
-            role: "user",
-            content: [{ type: "input_text", text: userPrompt }]
-          }
-        ]
-      })
+    const result = await generateAiText({
+      systemPrompt,
+      userPrompt,
+      temperature: 0.4,
+      maxTokens: 220
     });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const apiError = String(payload?.error?.message || payload?.error || "OpenAI request failed");
-      res.status(502).json({ error: `KI-Fehler: ${apiError}` });
-      return;
-    }
-
-    const text = sanitizeQuizPromptText(extractOpenAiText(payload), 1000);
-    if (!text) {
-      res.status(502).json({ error: "Leere KI-Antwort erhalten." });
-      return;
-    }
-
-    res.json({ text, mode, model: QUIZ_AI_MODEL });
+    res.json({ text: result.text, mode, model: result.model, provider: result.provider });
   } catch (error) {
-    res.status(500).json({ error: `KI-Anfrage fehlgeschlagen: ${String(error?.message || "unknown")}` });
+    res.status(502).json({ error: `KI-Fehler: ${String(error?.message || "unknown")}` });
   }
 });
 
@@ -205,8 +279,9 @@ app.post("/api/ai/chat", async (req, res) => {
     return;
   }
 
-  if (!OPENAI_API_KEY) {
-    res.status(503).json({ error: "KI ist noch nicht aktiviert (OPENAI_API_KEY fehlt)." });
+  if (!isAiConfigured()) {
+    const missing = AI_PROVIDER === "github" ? "GITHUB_TOKEN" : "OPENAI_API_KEY";
+    res.status(503).json({ error: `KI ist noch nicht aktiviert (${missing} fehlt).` });
     return;
   }
 
@@ -219,45 +294,15 @@ app.post("/api/ai/chat", async (req, res) => {
   const systemPrompt = "Du bist ein freundlicher Lern- und Website-Assistent fuer ein Schulquiz-Projekt. Antworte auf Deutsch, kurz, klar und hilfreich in maximal 5 Saetzen.";
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: QUIZ_AI_MODEL,
-        temperature: 0.5,
-        max_output_tokens: 240,
-        input: [
-          {
-            role: "system",
-            content: [{ type: "input_text", text: systemPrompt }]
-          },
-          {
-            role: "user",
-            content: [{ type: "input_text", text: message }]
-          }
-        ]
-      })
+    const result = await generateAiText({
+      systemPrompt,
+      userPrompt: message,
+      temperature: 0.5,
+      maxTokens: 240
     });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const apiError = String(payload?.error?.message || payload?.error || "OpenAI request failed");
-      res.status(502).json({ error: `KI-Fehler: ${apiError}` });
-      return;
-    }
-
-    const text = sanitizeQuizPromptText(extractOpenAiText(payload), 1200);
-    if (!text) {
-      res.status(502).json({ error: "Leere KI-Antwort erhalten." });
-      return;
-    }
-
-    res.json({ text, model: QUIZ_AI_MODEL });
+    res.json({ text: result.text, model: result.model, provider: result.provider });
   } catch (error) {
-    res.status(500).json({ error: `KI-Anfrage fehlgeschlagen: ${String(error?.message || "unknown")}` });
+    res.status(502).json({ error: `KI-Fehler: ${String(error?.message || "unknown")}` });
   }
 });
 

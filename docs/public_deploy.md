@@ -37,18 +37,22 @@ läuft Socket.IO auf Render und die Webseite verbindet sich cross-origin.
 - `ADMIN_OWNER_KEY` (empfohlen setzen)
 - `ADMIN_ACCESS_CODES` (optional)
 
-### KI aktivieren (Render)
+### KI aktivieren (Render) - GitHub kostenlos (empfohlen)
 
-Fuer die neuen Buttons `KI-Tipp` und `KI-Erklaerung` braucht dein Render-Service einen API-Key.
+Der Server unterstuetzt zwei Provider: `github` (Standard) und `openai`.
 
-Pflicht:
+Fuer die kostenlose GitHub-Variante:
 
-- `OPENAI_API_KEY` = dein OpenAI API Key
+- `AI_PROVIDER=github`
+- `GITHUB_TOKEN=<dein GitHub Token mit Models-Zugriff>`
+- `GITHUB_MODEL=microsoft/Phi-3.5-mini-instruct` (kostenfreundlicher Standard)
+- `GITHUB_MODELS_ENDPOINT=https://models.inference.ai.azure.com/chat/completions`
 
-Optional:
+Optional weiter nutzbar:
 
-- `QUIZ_AI_MODEL` = Modellname (Standard: `gpt-4o-mini`)
-- `SOCKET_IO_CORS_ORIGIN` = erlaubte Origins (optional, z. B. deine GitHub Pages URL)
+- `OPENAI_API_KEY` (nur noetig, wenn `AI_PROVIDER=openai`)
+- `QUIZ_AI_MODEL` (OpenAI-Modellname)
+- `SOCKET_IO_CORS_ORIGIN` (optional, z. B. deine GitHub Pages URL)
 
 In Render:
 

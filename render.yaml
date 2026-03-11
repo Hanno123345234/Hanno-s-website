@@ -9,6 +9,14 @@ services:
     startCommand: npm start
     healthCheckPath: /
     envVars:
+      - key: AI_PROVIDER
+        value: github
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_MODEL
+        value: microsoft/Phi-3.5-mini-instruct
+      - key: GITHUB_MODELS_ENDPOINT
+        value: https://models.inference.ai.azure.com/chat/completions
       - key: OPENAI_API_KEY
         sync: false
       - key: QUIZ_AI_MODEL
