@@ -490,6 +490,125 @@ button:disabled {
   margin: 10px 0 0;
 }
 
+.ki-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  background: linear-gradient(160deg, #101625, #191f35);
+}
+
+.ki-sidebar {
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 13, 22, 0.9);
+  padding: 12px;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 10px;
+}
+
+.ki-sidebar-top {
+  display: grid;
+  gap: 8px;
+}
+
+.ki-sidebar h3 {
+  margin: 0;
+  color: #d8e2ff;
+}
+
+.ki-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.ki-session-btn {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.ki-session-btn.active {
+  background: linear-gradient(135deg, #3f6dff, #775dff);
+}
+
+.ki-main {
+  padding: 20px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+}
+
+.ki-main-header h1 {
+  margin: 0;
+}
+
+.ki-main-header .subtitle {
+  margin: 4px 0 0;
+}
+
+.ki-messages {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(8, 14, 36, 0.72);
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.ki-bubble {
+  max-width: min(760px, 92%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.ki-bubble-user {
+  justify-self: end;
+  background: rgba(119, 93, 255, 0.3);
+}
+
+.ki-bubble-ai {
+  justify-self: start;
+  background: rgba(70, 105, 255, 0.2);
+}
+
+.ki-input-wrap {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.ki-input-wrap textarea {
+  min-height: 70px;
+}
+
+.ki-input-wrap button {
+  width: 130px;
+}
+
+@media (max-width: 900px) {
+  .ki-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .ki-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+}
+
 .ai-help {
   margin-top: 12px;
   padding: 10px;

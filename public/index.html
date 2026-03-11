@@ -26,33 +26,15 @@
           <a id="impostorLink" class="mode-link" href="impostor.html">Impostor Pro</a>
           <a class="mode-link" href="quiz.html">Quiz-Duell</a>
           <a class="mode-link" href="admin.html">Admin Dashboard</a>
-          <a class="mode-link" href="#hannosKiBox">Hannos KI</a>
-        </div>
-
-        <div id="hannosKiBox" class="home-ai-box">
-          <h3>Hannos KI</h3>
-          <p class="subtitle">Stelle direkt hier eine Frage zur Website oder zum Lernen.</p>
-          <div id="homeAiChat" class="home-ai-chat" aria-live="polite">
-            <div class="home-ai-bubble home-ai-bubble-ai">Hi! Ich helfe dir beim Lernen und bei Fragen zur Website.</div>
-          </div>
-          <label for="homeAiInput">Deine Frage</label>
-          <textarea id="homeAiInput" rows="2" maxlength="300" placeholder="z. B. Wie lerne ich Mathe schneller?"></textarea>
-          <div class="home-ai-actions">
-            <button id="homeAiAskBtn" type="button" class="primary">KI fragen</button>
-            <button id="homeAiClearBtn" type="button" class="mini-btn">Verlauf loeschen</button>
-          </div>
-          <p id="homeAiStatus" class="subtitle"></p>
+          <a class="mode-link" href="hannos-ki.html">Hannos KI</a>
         </div>
       </section>
     </main>
 
     <script src="pwa.js"></script>
-    <script src="config.js"></script>
 
     <script>
       const LANGUAGE_KEY = "app_lang_v1";
-      const HOME_AI_HISTORY_KEY = "home_ai_chat_history_v1";
-      const HOME_AI_HISTORY_MAX = 120;
       const translations = {
         de: {
           title: "Spiel wählen",
@@ -67,13 +49,6 @@
       const langLabel = document.getElementById("langLabel");
       const langSelect = document.getElementById("langSelect");
       const impostorLink = document.getElementById("impostorLink");
-      const homeAiInput = document.getElementById("homeAiInput");
-      const homeAiAskBtn = document.getElementById("homeAiAskBtn");
-      const homeAiClearBtn = document.getElementById("homeAiClearBtn");
-      const homeAiStatus = document.getElementById("homeAiStatus");
-      const homeAiChat = document.getElementById("homeAiChat");
-
-      let homeAiLoading = false;
 
       function getInitialLang() {
         return "de";
@@ -99,128 +74,7 @@
         applyLanguage("de");
       });
 
-      function getAiApiBase() {
-        const configured = String(window.QUIZ_ONLINE_ORIGIN || "").trim();
-        return configured || window.location.origin;
-      }
-
-      function setHomeAiStatus(text) {
-        homeAiStatus.textContent = String(text || "");
-      }
-
-      function loadHomeAiHistory() {
-        try {
-          const raw = window.localStorage.getItem(HOME_AI_HISTORY_KEY) || "";
-          if (!raw) return [];
-          const parsed = JSON.parse(raw);
-          if (!Array.isArray(parsed)) return [];
-          return parsed
-            .map((entry) => ({
-              kind: entry?.kind === "user" ? "user" : "ai",
-              text: String(entry?.text || "").trim().slice(0, 1600)
-            }))
-            .filter((entry) => entry.text);
-        } catch {
-          return [];
-        }
-      }
-
-      function saveHomeAiHistory(entries) {
-        const safeEntries = (Array.isArray(entries) ? entries : [])
-          .slice(-HOME_AI_HISTORY_MAX)
-          .map((entry) => ({
-            kind: entry?.kind === "user" ? "user" : "ai",
-            text: String(entry?.text || "").slice(0, 1600)
-          }));
-        window.localStorage.setItem(HOME_AI_HISTORY_KEY, JSON.stringify(safeEntries));
-      }
-
-      let homeAiHistory = loadHomeAiHistory();
-
-      function renderHomeAiHistory() {
-        if (!homeAiChat) return;
-        homeAiChat.innerHTML = "";
-        const entries = homeAiHistory.length
-          ? homeAiHistory
-          : [{ kind: "ai", text: "Hi! Ich helfe dir beim Lernen und bei Fragen zur Website." }];
-        entries.forEach((entry) => {
-          const bubble = document.createElement("div");
-          bubble.className = entry.kind === "user" ? "home-ai-bubble home-ai-bubble-user" : "home-ai-bubble home-ai-bubble-ai";
-          bubble.textContent = entry.text;
-          homeAiChat.appendChild(bubble);
-        });
-        homeAiChat.scrollTop = homeAiChat.scrollHeight;
-      }
-
-      function appendChatBubble(kind, text) {
-        const normalizedKind = kind === "user" ? "user" : "ai";
-        const normalizedText = String(text || "").trim().slice(0, 1600);
-        if (!normalizedText) return;
-        homeAiHistory.push({ kind: normalizedKind, text: normalizedText });
-        homeAiHistory = homeAiHistory.slice(-HOME_AI_HISTORY_MAX);
-        saveHomeAiHistory(homeAiHistory);
-        renderHomeAiHistory();
-      }
-
-      function resetHomeAiChat() {
-        homeAiHistory = [];
-        saveHomeAiHistory(homeAiHistory);
-        renderHomeAiHistory();
-        setHomeAiStatus("Verlauf geloescht.");
-      }
-
-      function updateHomeAiButton() {
-        if (!homeAiAskBtn) return;
-        homeAiAskBtn.disabled = homeAiLoading;
-      }
-
-      async function askHomeAi() {
-        const message = String(homeAiInput?.value || "").trim().slice(0, 300);
-        if (!message) {
-          setHomeAiStatus("Bitte zuerst eine Frage eingeben.");
-          return;
-        }
-
-        homeAiLoading = true;
-        updateHomeAiButton();
-        setHomeAiStatus("KI denkt...");
-        appendChatBubble("user", message);
-        if (homeAiInput) homeAiInput.value = "";
-
-        try {
-          const response = await fetch(`${getAiApiBase()}/api/ai/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message })
-          });
-
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            throw new Error(String(payload?.error || `HTTP ${response.status}`));
-          }
-
-          appendChatBubble("ai", String(payload?.text || ""));
-          setHomeAiStatus("Antwort bereit.");
-        } catch (error) {
-          setHomeAiStatus(`KI nicht verfügbar: ${String(error?.message || "Fehler")}`);
-        } finally {
-          homeAiLoading = false;
-          updateHomeAiButton();
-        }
-      }
-
-      homeAiAskBtn?.addEventListener("click", askHomeAi);
-      homeAiClearBtn?.addEventListener("click", resetHomeAiChat);
-      homeAiInput?.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          askHomeAi();
-        }
-      });
-
       applyLanguage(getInitialLang());
-      renderHomeAiHistory();
-      updateHomeAiButton();
     </script>
   </body>
 </html>
