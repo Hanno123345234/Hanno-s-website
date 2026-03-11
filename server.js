@@ -36,6 +36,12 @@ const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_MODEL = String(process.env.QUIZ_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
 const GITHUB_TOKEN = String(process.env.GITHUB_TOKEN || process.env.GITHUB_MODELS_TOKEN || "").trim();
 const GITHUB_MODEL = String(process.env.GITHUB_MODEL || "microsoft/Phi-3.5-mini-instruct").trim();
+const GITHUB_MODEL_FALLBACKS = String(
+  process.env.GITHUB_MODEL_FALLBACKS || "meta/Llama-3.2-3B-Instruct,microsoft/Phi-3.5-mini-instruct,microsoft/phi-3.5-mini-instruct"
+)
+  .split(",")
+  .map((entry) => entry.trim())
+  .filter(Boolean);
 const GITHUB_MODELS_ENDPOINT = String(
   process.env.GITHUB_MODELS_ENDPOINT || "https://models.inference.ai.azure.com/chat/completions"
 ).trim();
@@ -104,36 +110,56 @@ function isAiConfigured() {
 
 async function generateAiText({ systemPrompt, userPrompt, temperature, maxTokens }) {
   if (AI_PROVIDER === "github") {
-    const response = await fetch(GITHUB_MODELS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
-        "api-key": GITHUB_TOKEN,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: GITHUB_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature,
-        max_tokens: maxTokens
-      })
+    const attempts = [GITHUB_MODEL, ...GITHUB_MODEL_FALLBACKS].filter(Boolean);
+    const seen = new Set();
+    const modelsToTry = attempts.filter((model) => {
+      const key = model.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const apiError = String(payload?.error?.message || payload?.error || "GitHub Models request failed");
-      throw new Error(apiError);
+    let lastError = "GitHub Models request failed";
+
+    for (const model of modelsToTry) {
+      const response = await fetch(GITHUB_MODELS_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${GITHUB_TOKEN}`,
+          "api-key": GITHUB_TOKEN,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature,
+          max_tokens: maxTokens
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const apiError = String(payload?.error?.message || payload?.error || "GitHub Models request failed");
+        lastError = apiError;
+        if (/unknown model/i.test(apiError)) {
+          continue;
+        }
+        throw new Error(apiError);
+      }
+
+      const text = sanitizeQuizPromptText(extractChatCompletionsText(payload), 1400);
+      if (!text) {
+        lastError = "Leere KI-Antwort erhalten.";
+        continue;
+      }
+
+      return { text, model, provider: "github" };
     }
 
-    const text = sanitizeQuizPromptText(extractChatCompletionsText(payload), 1400);
-    if (!text) {
-      throw new Error("Leere KI-Antwort erhalten.");
-    }
-
-    return { text, model: GITHUB_MODEL, provider: "github" };
+    throw new Error(lastError);
   }
 
   const response = await fetch("https://api.openai.com/v1/responses", {

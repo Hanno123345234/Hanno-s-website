@@ -17,6 +17,8 @@ services:
         value: microsoft/Phi-3.5-mini-instruct
       - key: GITHUB_MODELS_ENDPOINT
         value: https://models.inference.ai.azure.com/chat/completions
+      - key: GITHUB_MODEL_FALLBACKS
+        value: meta/Llama-3.2-3B-Instruct,microsoft/Phi-3.5-mini-instruct,microsoft/phi-3.5-mini-instruct
       - key: OPENAI_API_KEY
         sync: false
       - key: QUIZ_AI_MODEL
