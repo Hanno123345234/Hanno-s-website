@@ -31,6 +31,7 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_OWNER_KEY = String(process.env.ADMIN_OWNER_KEY || process.env.ADMIN_KEY || "Anna").trim();
 const ADMIN_EDITOR_KEY = String(process.env.ADMIN_EDITOR_KEY || "hanno123").trim();
 const ADMIN_BOOTSTRAP_CODES = String(process.env.ADMIN_ACCESS_CODES || "").trim();
+const AI_ENABLED_BY_DEFAULT = String(process.env.AI_ENABLED || "true").trim().toLowerCase() !== "false";
 const AI_PROVIDER = String(process.env.AI_PROVIDER || "github").trim().toLowerCase();
 const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_MODEL = String(process.env.QUIZ_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
@@ -60,6 +61,8 @@ app.use(express.static("public"));
 app.use(express.json());
 
 const quizAiRateLimitByIp = new Map();
+let aiEnabled = AI_ENABLED_BY_DEFAULT;
+const aiChatLogs = [];
 
 function sanitizeQuizPromptText(raw, maxLength = 320) {
   return String(raw || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
@@ -241,9 +244,36 @@ function consumeQuizAiRateLimit(ipAddress) {
   return { blocked: false, retryAfterSec: 0 };
 }
 
+function logAiChat(entry = {}) {
+  pushLimited(
+    aiChatLogs,
+    {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      at: nowIso(),
+      ...entry
+    },
+    1200
+  );
+}
+
+function requireAiEnabled(res) {
+  if (aiEnabled) return true;
+  res.status(503).json({ error: "KI ist momentan global deaktiviert." });
+  return false;
+}
+
 app.post("/api/quiz/ai-help", async (req, res) => {
+  if (!requireAiEnabled(res)) return;
+
   const limiter = consumeQuizAiRateLimit(req.ip);
   if (limiter.blocked) {
+    logAiChat({
+      endpoint: "/api/quiz/ai-help",
+      mode: String(req.body?.mode || "hint"),
+      ip: req.ip || null,
+      ok: false,
+      error: "rate_limited"
+    });
     res.set("Retry-After", String(limiter.retryAfterSec));
     res.status(429).json({ error: "Zu viele KI-Anfragen. Bitte kurz warten." });
     return;
@@ -251,6 +281,13 @@ app.post("/api/quiz/ai-help", async (req, res) => {
 
   if (!isAiConfigured()) {
     const missing = AI_PROVIDER === "github" ? "GITHUB_TOKEN" : "OPENAI_API_KEY";
+    logAiChat({
+      endpoint: "/api/quiz/ai-help",
+      mode: String(req.body?.mode || "hint"),
+      ip: req.ip || null,
+      ok: false,
+      error: `missing_${missing}`
+    });
     res.status(503).json({ error: `KI ist noch nicht aktiviert (${missing} fehlt).` });
     return;
   }
@@ -270,11 +307,25 @@ app.post("/api/quiz/ai-help", async (req, res) => {
     : null;
 
   if (!question || answers.length < 2) {
+    logAiChat({
+      endpoint: "/api/quiz/ai-help",
+      mode,
+      ip: req.ip || null,
+      ok: false,
+      error: "invalid_question_payload"
+    });
     res.status(400).json({ error: "Frage oder Antworten fehlen." });
     return;
   }
 
   if (mode === "chat" && !userMessage) {
+    logAiChat({
+      endpoint: "/api/quiz/ai-help",
+      mode,
+      ip: req.ip || null,
+      ok: false,
+      error: "missing_user_message"
+    });
     res.status(400).json({ error: "Bitte eine Frage an die KI senden." });
     return;
   }
@@ -308,15 +359,46 @@ app.post("/api/quiz/ai-help", async (req, res) => {
       temperature: 0.4,
       maxTokens: 220
     });
+    logAiChat({
+      endpoint: "/api/quiz/ai-help",
+      mode,
+      ip: req.ip || null,
+      category,
+      difficulty,
+      prompt: mode === "chat" ? userMessage : question,
+      ok: true,
+      provider: result.provider,
+      model: result.model,
+      response: result.text
+    });
     res.json({ text: result.text, mode, model: result.model, provider: result.provider });
   } catch (error) {
+    logAiChat({
+      endpoint: "/api/quiz/ai-help",
+      mode,
+      ip: req.ip || null,
+      category,
+      difficulty,
+      prompt: mode === "chat" ? userMessage : question,
+      ok: false,
+      error: String(error?.message || "unknown")
+    });
     res.status(502).json({ error: `KI-Fehler: ${String(error?.message || "unknown")}` });
   }
 });
 
 app.post("/api/ai/chat", async (req, res) => {
+  if (!requireAiEnabled(res)) return;
+
   const limiter = consumeQuizAiRateLimit(req.ip);
   if (limiter.blocked) {
+    logAiChat({
+      endpoint: "/api/ai/chat",
+      mode: "chat",
+      ip: req.ip || null,
+      ok: false,
+      error: "rate_limited"
+    });
     res.set("Retry-After", String(limiter.retryAfterSec));
     res.status(429).json({ error: "Zu viele KI-Anfragen. Bitte kurz warten." });
     return;
@@ -324,12 +406,26 @@ app.post("/api/ai/chat", async (req, res) => {
 
   if (!isAiConfigured()) {
     const missing = AI_PROVIDER === "github" ? "GITHUB_TOKEN" : "OPENAI_API_KEY";
+    logAiChat({
+      endpoint: "/api/ai/chat",
+      mode: "chat",
+      ip: req.ip || null,
+      ok: false,
+      error: `missing_${missing}`
+    });
     res.status(503).json({ error: `KI ist noch nicht aktiviert (${missing} fehlt).` });
     return;
   }
 
   const message = sanitizeQuizPromptText(req.body?.message, 320);
   if (!message) {
+    logAiChat({
+      endpoint: "/api/ai/chat",
+      mode: "chat",
+      ip: req.ip || null,
+      ok: false,
+      error: "missing_message"
+    });
     res.status(400).json({ error: "Bitte eine Frage eingeben." });
     return;
   }
@@ -343,8 +439,26 @@ app.post("/api/ai/chat", async (req, res) => {
       temperature: 0.5,
       maxTokens: 240
     });
+    logAiChat({
+      endpoint: "/api/ai/chat",
+      mode: "chat",
+      ip: req.ip || null,
+      prompt: message,
+      ok: true,
+      provider: result.provider,
+      model: result.model,
+      response: result.text
+    });
     res.json({ text: result.text, model: result.model, provider: result.provider });
   } catch (error) {
+    logAiChat({
+      endpoint: "/api/ai/chat",
+      mode: "chat",
+      ip: req.ip || null,
+      prompt: message,
+      ok: false,
+      error: String(error?.message || "unknown")
+    });
     res.status(502).json({ error: `KI-Fehler: ${String(error?.message || "unknown")}` });
   }
 });
@@ -672,7 +786,9 @@ app.get("/api/admin", (req, res) => {
       activeOnlineFingerprints: amongOnlineByFingerprint.size,
       totalMatchesTracked: amongMatchHistory.length,
       moderationActions: amongModerationLogs.length,
-      joinLogCount: amongJoinLogs.length
+      joinLogCount: amongJoinLogs.length,
+      aiLogCount: aiChatLogs.length,
+      aiEnabled
     },
     members: adminPublicMemberView(),
     recentMatches: amongMatchHistory.slice(-120).reverse(),
@@ -680,6 +796,40 @@ app.get("/api/admin", (req, res) => {
     mutes,
     risk,
     reports
+  });
+});
+
+app.get("/api/admin/ai/logs", (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+  res.json({
+    ok: true,
+    aiEnabled,
+    provider: AI_PROVIDER,
+    model: AI_PROVIDER === "github" ? GITHUB_MODEL : OPENAI_MODEL,
+    logs: aiChatLogs.slice(-400).reverse()
+  });
+});
+
+app.post("/api/admin/ai/toggle", (req, res) => {
+  const auth = requireAdminRole(req, res, "editor");
+  if (!auth) return;
+
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled must be boolean." });
+    return;
+  }
+
+  aiEnabled = enabled;
+  logModerationAction("ai_toggle", {
+    enabled,
+    by: auth.source || "admin"
+  });
+
+  res.json({
+    ok: true,
+    aiEnabled
   });
 });
 

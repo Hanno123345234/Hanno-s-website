@@ -20,11 +20,15 @@ const matchList = document.getElementById("matchList");
 const grantInfo = document.getElementById("grantInfo");
 const commandInfo = document.getElementById("commandInfo");
 const moderationList = document.getElementById("moderationList");
+const aiLogList = document.getElementById("aiLogList");
+const aiControlInfo = document.getElementById("aiControlInfo");
 const commandInput = document.getElementById("commandInput");
 const navButtons = document.querySelectorAll(".admin-nav-btn");
 const grantLabelInput = document.getElementById("grantLabel");
 const grantRoleInput = document.getElementById("grantRole");
 const grantHoursInput = document.getElementById("grantHours");
+const enableAiBtn = document.getElementById("enableAiBtn");
+const disableAiBtn = document.getElementById("disableAiBtn");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 const savedAdminKeyDraft = window.localStorage.getItem(ADMIN_KEY_DRAFT_STORAGE) || "";
@@ -103,12 +107,56 @@ function renderSummary(summary = {}, access = {}) {
     `Online Fingerprints: ${summary.activeOnlineFingerprints || 0}`,
     `Match-Historie: ${summary.totalMatchesTracked || 0}`,
     `Moderation Actions: ${summary.moderationActions || 0}`,
-    `Join Logs: ${summary.joinLogCount || 0}`
+    `Join Logs: ${summary.joinLogCount || 0}`,
+    `KI Status: ${summary.aiEnabled ? "aktiv" : "deaktiviert"}`,
+    `KI Logs: ${summary.aiLogCount || 0}`
   ];
   rows.forEach((text) => {
     const li = document.createElement("li");
     li.textContent = text;
     summaryList.appendChild(li);
+  });
+}
+
+function renderAiControl(info = {}, access = {}) {
+  const enabled = info?.aiEnabled === true;
+  const provider = String(info?.provider || "-");
+  const model = String(info?.model || "-");
+  const canEdit = !!access.canEdit;
+
+  if (aiControlInfo) {
+    aiControlInfo.textContent = `Status: ${enabled ? "aktiv" : "deaktiviert"} • Provider: ${provider} • Modell: ${model}`;
+  }
+
+  if (enableAiBtn) {
+    enableAiBtn.disabled = !canEdit || enabled;
+    enableAiBtn.classList.toggle("hidden", !canEdit);
+  }
+
+  if (disableAiBtn) {
+    disableAiBtn.disabled = !canEdit || !enabled;
+    disableAiBtn.classList.toggle("hidden", !canEdit);
+  }
+}
+
+function renderAiLogs(entries = []) {
+  if (!aiLogList) return;
+  aiLogList.innerHTML = "";
+  if (!entries.length) {
+    const li = document.createElement("li");
+    li.textContent = "Noch keine KI-Logs.";
+    aiLogList.appendChild(li);
+    return;
+  }
+
+  entries.slice(0, 120).forEach((entry) => {
+    const li = document.createElement("li");
+    const at = entry.at ? new Date(entry.at).toLocaleString("de-DE") : "-";
+    const state = entry.ok ? "ok" : `error: ${entry.error || "-"}`;
+    const prompt = String(entry.prompt || "").slice(0, 120);
+    const response = String(entry.response || "").slice(0, 120);
+    li.textContent = `${at} • ${entry.endpoint || "-"} • ${entry.mode || "-"} • ${state} • ${entry.provider || "-"}/${entry.model || "-"} • Q: ${prompt || "-"} • A: ${response || "-"}`;
+    aiLogList.appendChild(li);
   });
 }
 
@@ -213,6 +261,17 @@ async function loadModerationLogs() {
   return data.logs || [];
 }
 
+async function loadAiLogs() {
+  const response = await adminFetch("/api/admin/ai/logs");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "KI-Logs konnten nicht geladen werden");
+  }
+  renderAiControl(data, { canEdit: true });
+  renderAiLogs(data.logs || []);
+  return data;
+}
+
 function parseDurationToken(token) {
   if (!token) return NaN;
   const normalized = String(token).trim().toLowerCase();
@@ -308,7 +367,15 @@ async function loadAdmin() {
     renderBanMuteList(muteList, data.mutes || [], "Mutes");
     renderMatches(data.recentMatches || []);
     renderModerationLogs([]);
+    renderAiControl({
+      aiEnabled: !!data.summary?.aiEnabled,
+      provider: "-",
+      model: "-"
+    }, data.access);
+    renderAiLogs([]);
     await loadModerationLogs();
+    const aiData = await loadAiLogs();
+    renderAiControl(aiData, data.access);
 
     accessBox.classList.toggle("hidden", !data.access?.canGrant);
     commandBox.classList.toggle("hidden", !data.access?.canEdit);
@@ -339,6 +406,30 @@ document.getElementById("adminLogoutBtn").addEventListener("click", () => {
 });
 
 document.getElementById("refreshAdminBtn").addEventListener("click", loadAdmin);
+
+if (enableAiBtn) {
+  enableAiBtn.addEventListener("click", async () => {
+    try {
+      await postAdmin("/api/admin/ai/toggle", { enabled: true });
+      setInfo("KI wurde global eingeschaltet.");
+      await loadAdmin();
+    } catch (error) {
+      setInfo(error.message || "KI konnte nicht eingeschaltet werden");
+    }
+  });
+}
+
+if (disableAiBtn) {
+  disableAiBtn.addEventListener("click", async () => {
+    try {
+      await postAdmin("/api/admin/ai/toggle", { enabled: false });
+      setInfo("KI wurde global ausgeschaltet.");
+      await loadAdmin();
+    } catch (error) {
+      setInfo(error.message || "KI konnte nicht ausgeschaltet werden");
+    }
+  });
+}
 
 document.getElementById("grantAccessBtn").addEventListener("click", async () => {
   try {
