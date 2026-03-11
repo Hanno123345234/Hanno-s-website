@@ -37,8 +37,9 @@
           </div>
           <label for="homeAiInput">Deine Frage</label>
           <textarea id="homeAiInput" rows="2" maxlength="300" placeholder="z. B. Wie lerne ich Mathe schneller?"></textarea>
-          <div class="stack">
+          <div class="home-ai-actions">
             <button id="homeAiAskBtn" type="button" class="primary">KI fragen</button>
+            <button id="homeAiClearBtn" type="button" class="mini-btn">Verlauf loeschen</button>
           </div>
           <p id="homeAiStatus" class="subtitle"></p>
         </div>
@@ -66,6 +67,7 @@
       const impostorLink = document.getElementById("impostorLink");
       const homeAiInput = document.getElementById("homeAiInput");
       const homeAiAskBtn = document.getElementById("homeAiAskBtn");
+      const homeAiClearBtn = document.getElementById("homeAiClearBtn");
       const homeAiStatus = document.getElementById("homeAiStatus");
       const homeAiChat = document.getElementById("homeAiChat");
 
@@ -116,6 +118,13 @@
         homeAiChat.scrollTop = homeAiChat.scrollHeight;
       }
 
+      function resetHomeAiChat() {
+        if (!homeAiChat) return;
+        homeAiChat.innerHTML = "";
+        appendChatBubble("ai", "Hi! Ich helfe dir beim Lernen und bei Fragen zur Website.");
+        setHomeAiStatus("Verlauf geloescht.");
+      }
+
       function updateHomeAiButton() {
         if (!homeAiAskBtn) return;
         homeAiAskBtn.disabled = homeAiLoading;
@@ -157,6 +166,7 @@
       }
 
       homeAiAskBtn?.addEventListener("click", askHomeAi);
+      homeAiClearBtn?.addEventListener("click", resetHomeAiChat);
       homeAiInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
