@@ -82,7 +82,7 @@ function extractOpenAiText(payload) {
       }
     }
   }
-
+w
   return "";
 }
 
@@ -807,7 +807,7 @@ app.get("/api/admin/ai/logs", (req, res) => {
     aiEnabled,
     provider: AI_PROVIDER,
     model: AI_PROVIDER === "github" ? GITHUB_MODEL : OPENAI_MODEL,
-    logs: aiChatLogs.slice(-400).reverse()
+    logs: [...aiChatLogs].reverse()
   });
 });
 

@@ -668,6 +668,17 @@ button:disabled {
   gap: 8px;
 }
 
+.ai-log-item {
+  display: block !important;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.ai-log-item > div {
+  margin: 2px 0;
+}
+
 .player-name {
   overflow: hidden;
   text-overflow: ellipsis;

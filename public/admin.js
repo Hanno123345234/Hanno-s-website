@@ -69,13 +69,25 @@ function renderAiLogs(entries = []) {
     return;
   }
 
-  entries.slice(0, 180).forEach((entry) => {
+  entries.forEach((entry) => {
     const li = document.createElement("li");
+    li.className = "ai-log-item";
+
     const at = entry.at ? new Date(entry.at).toLocaleString("de-DE") : "-";
     const state = entry.ok ? "ok" : `error: ${entry.error || "-"}`;
-    const prompt = String(entry.prompt || "").slice(0, 120);
-    const response = String(entry.response || "").slice(0, 120);
-    li.textContent = `${at} • ${entry.endpoint || "-"} • ${entry.mode || "-"} • ${state} • ${entry.provider || "-"}/${entry.model || "-"} • Q: ${prompt || "-"} • A: ${response || "-"}`;
+
+    const meta = document.createElement("div");
+    meta.textContent = `${at} • ${entry.endpoint || "-"} • ${entry.mode || "-"} • ${state} • ${entry.provider || "-"}/${entry.model || "-"}`;
+
+    const question = document.createElement("div");
+    question.textContent = `Q: ${String(entry.prompt || "-")}`;
+
+    const answer = document.createElement("div");
+    answer.textContent = `A: ${String(entry.response || "-")}`;
+
+    li.appendChild(meta);
+    li.appendChild(question);
+    li.appendChild(answer);
     aiLogList.appendChild(li);
   });
 }
