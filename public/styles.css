@@ -215,6 +215,13 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.mode-link-scrims {
+  background: linear-gradient(135deg, #1ea4ff, #39d2ff);
+  color: #031522;
+  border: none;
+  box-shadow: 0 8px 22px rgba(30, 164, 255, 0.35);
+}
+
 .lang-row {
   display: grid;
   gap: 8px;

@@ -8,3 +8,7 @@
 // If empty, the quiz uses the current site origin (works on Render/local).
 // Default is your Render service so GitHub Pages can use online mode.
 window.QUIZ_ONLINE_ORIGIN = window.QUIZ_ONLINE_ORIGIN || "https://hanno-s-website.onrender.com";
+
+// Scrims button destination on the home page.
+// Change this to your own Scrims dashboard URL when needed.
+window.SCRIMS_DASHBOARD_URL = window.SCRIMS_DASHBOARD_URL || "https://novaprac.com";
