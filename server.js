@@ -47,7 +47,7 @@ const GITHUB_MODEL_FALLBACKS = String(
 const GITHUB_MODELS_ENDPOINT = String(
   process.env.GITHUB_MODELS_ENDPOINT || "https://models.inference.ai.azure.com/chat/completions"
 ).trim();
-const SCRIMS_API_BASE = String(process.env.SCRIMS_API_BASE || "").trim().replace(/\/+$/, "");
+const SCRIMS_API_BASE = String(process.env.SCRIMS_API_BASE || "https://cybrancee-bot-eu-central-21.cybrancee.com").trim().replace(/\/+$/, "");
 const SCRIMS_API_KEY = String(process.env.SCRIMS_API_KEY || "").trim();
 
 app.use((req, res, next) => {
@@ -98,6 +98,37 @@ async function proxyScrimsAuth(req, res, upstreamPath) {
   }
 }
 
+async function proxyScrimsApi(req, res, upstreamPath) {
+  if (!SCRIMS_API_BASE) {
+    res.status(503).json({ ok: false, error: "SCRIMS_API_BASE fehlt im Server-Environment." });
+    return;
+  }
+
+  const upstreamUrl = `${SCRIMS_API_BASE}${upstreamPath}`;
+  try {
+    const headers = {
+      cookie: String(req.headers.cookie || "")
+    };
+
+    if (SCRIMS_API_KEY) headers["x-api-key"] = SCRIMS_API_KEY;
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      headers["Content-Type"] = "application/json";
+    }
+
+    const response = await fetch(upstreamUrl, {
+      method: req.method,
+      headers,
+      body: req.method !== "GET" && req.method !== "HEAD" ? JSON.stringify(req.body || {}) : undefined
+    });
+
+    const payloadText = await response.text();
+    const contentType = response.headers.get("content-type") || "application/json; charset=utf-8";
+    res.status(response.status || 200).set("Content-Type", contentType).send(payloadText);
+  } catch (error) {
+    res.status(502).json({ ok: false, error: `Scrims API proxy error: ${String(error?.message || "unknown")}` });
+  }
+}
+
 app.get("/auth/discord", async (req, res) => {
   await proxyScrimsAuth(req, res, "/auth/discord");
 });
@@ -109,6 +140,27 @@ app.get("/auth/discord/callback", async (req, res) => {
 
 app.get("/auth/logout", async (req, res) => {
   await proxyScrimsAuth(req, res, "/auth/logout");
+});
+
+app.get("/api/me", async (req, res) => {
+  await proxyScrimsApi(req, res, "/api/me");
+});
+
+app.get("/api/dropmap/state", async (req, res) => {
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  await proxyScrimsApi(req, res, `/api/dropmap/state${query}`);
+});
+
+app.post("/api/dropmap/mark", async (req, res) => {
+  await proxyScrimsApi(req, res, "/api/dropmap/mark");
+});
+
+app.post("/api/dropmap/delete", async (req, res) => {
+  await proxyScrimsApi(req, res, "/api/dropmap/delete");
+});
+
+app.post("/api/dropmap/clear", async (req, res) => {
+  await proxyScrimsApi(req, res, "/api/dropmap/clear");
 });
 
 app.post("/api/scrims/create-lobby", async (req, res) => {
