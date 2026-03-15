@@ -17,3 +17,7 @@ window.SCRIMS_DASHBOARD_URL = window.SCRIMS_DASHBOARD_URL || "scrims.html";
 // Keep empty to use same origin (/api/scrims/*).
 // Example: "https://your-cybrancee-domain.com"
 window.SCRIMS_API_BASE = window.SCRIMS_API_BASE || "";
+
+// Optional fallback guild id for Scrims creator.
+// Prefer server env vars: SCRIMS_GUILD_ID / DISCORD_GUILD_ID / GUILD_ID.
+window.SCRIMS_GUILD_ID = window.SCRIMS_GUILD_ID || "";

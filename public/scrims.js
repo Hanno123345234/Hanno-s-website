@@ -9,6 +9,7 @@ const resetBtn = document.getElementById("resetBtn");
 const submitBtn = form.querySelector('button[type="submit"]');
 
 const API_BASE = String(window.SCRIMS_API_BASE || "").trim().replace(/\/+$/, "");
+const SCRIMS_GUILD_ID = String(window.SCRIMS_GUILD_ID || "").trim();
 
 function apiUrl(path) {
   return API_BASE ? `${API_BASE}${path}` : path;
@@ -49,6 +50,7 @@ form.addEventListener("submit", async (event) => {
     lobby: Number(document.getElementById("lobby").value),
     registrationOpens: registrationInput.value,
     lobbyTemplate: document.getElementById("lobbyTemplate").value,
+    guildId: SCRIMS_GUILD_ID || undefined,
   };
 
   submitBtn.disabled = true;
@@ -78,3 +80,21 @@ form.addEventListener("submit", async (event) => {
 });
 
 refreshPriorityTimes();
+
+async function checkScrimsHealth() {
+  try {
+    const response = await fetch(apiUrl("/api/scrims/health"));
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data || data.ok !== true) {
+      const missing = Array.isArray(data && data.missing) ? data.missing.join(", ") : "unbekannt";
+      resultText.textContent = `Hinweis: Fehlende Konfiguration (${missing}).`;
+      resultBox.hidden = false;
+      return;
+    }
+  } catch (error) {
+    resultText.textContent = "Hinweis: Health-Check nicht erreichbar.";
+    resultBox.hidden = false;
+  }
+}
+
+checkScrimsHealth();

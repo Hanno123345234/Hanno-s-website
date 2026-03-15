@@ -57,7 +57,7 @@ const SCRIMS_DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || "").tri
 const SCRIMS_DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || "").trim();
 const SCRIMS_DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || "https://hanno-s-website.onrender.com/auth/discord/callback").trim();
 const SCRIMS_DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || process.env.TOKEN || process.env.BOT_TOKEN || process.env.DISCORD_BOT_TOKEN || "").trim();
-const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || "").trim();
+const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCORD_GUILD_ID || process.env.GUILD_ID || "").trim();
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
@@ -209,9 +209,25 @@ function scrimsSessionLabel(template) {
   return mode;
 }
 
+function resolveScrimsGuildId(body) {
+  const byBody = String(body && (body.guildId || body.guild || body.serverId) || "").trim();
+  const byConfig = String(process.env.SCRIMS_GUILD_ID || process.env.DISCORD_GUILD_ID || process.env.GUILD_ID || "").trim();
+  return byBody || byConfig || "";
+}
+
+function scrimsMissingConfig(body) {
+  const missing = [];
+  if (!SCRIMS_DISCORD_TOKEN) missing.push("DISCORD_TOKEN");
+  if (!resolveScrimsGuildId(body)) missing.push("SCRIMS_GUILD_ID (oder DISCORD_GUILD_ID / GUILD_ID)");
+  if (!SCRIMS_DISCORD_CLIENT_ID) missing.push("DISCORD_CLIENT_ID");
+  if (!SCRIMS_DISCORD_CLIENT_SECRET) missing.push("DISCORD_CLIENT_SECRET");
+  return missing;
+}
+
 async function scrimsCreateLobbyLocal(body) {
   if (!SCRIMS_DISCORD_TOKEN) throw new Error("DISCORD_TOKEN fehlt auf Render.");
-  if (!SCRIMS_GUILD_ID) throw new Error("SCRIMS_GUILD_ID fehlt auf Render.");
+  const guildId = resolveScrimsGuildId(body);
+  if (!guildId) throw new Error("SCRIMS_GUILD_ID fehlt auf Render.");
 
   const sessionNo = Number(body && body.session);
   const lobbyNo = Number(body && body.lobby);
@@ -232,26 +248,26 @@ async function scrimsCreateLobbyLocal(body) {
     `${prefix}-staff`
   ];
 
-  const channels = await scrimsDiscordApi("GET", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN);
+  const channels = await scrimsDiscordApi("GET", `/guilds/${guildId}/channels`, SCRIMS_DISCORD_TOKEN);
   let category = Array.isArray(channels)
     ? channels.find((ch) => Number(ch.type) === 4 && String(ch.name || "").toLowerCase() === categoryName.toLowerCase())
     : null;
 
   if (!category) {
-    category = await scrimsDiscordApi("POST", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN, {
+    category = await scrimsDiscordApi("POST", `/guilds/${guildId}/channels`, SCRIMS_DISCORD_TOKEN, {
       name: categoryName,
       type: 4
     });
   }
 
-  const refreshed = await scrimsDiscordApi("GET", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN);
+  const refreshed = await scrimsDiscordApi("GET", `/guilds/${guildId}/channels`, SCRIMS_DISCORD_TOKEN);
   const created = [];
   for (const channelName of channelNames) {
     const exists = Array.isArray(refreshed)
       ? refreshed.find((ch) => Number(ch.type) === 0 && String(ch.parent_id || "") === String(category.id) && String(ch.name || "") === channelName)
       : null;
     if (exists) continue;
-    await scrimsDiscordApi("POST", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN, {
+    await scrimsDiscordApi("POST", `/guilds/${guildId}/channels`, SCRIMS_DISCORD_TOKEN, {
       name: channelName,
       type: 0,
       parent_id: category.id
@@ -482,6 +498,18 @@ app.get("/api/me", async (req, res) => {
   res.json({ ok: true, user: session ? { id: session.id, username: session.username, avatarUrl: session.avatarUrl } : null });
 });
 
+app.get("/api/scrims/health", async (req, res) => {
+  const missing = scrimsMissingConfig({});
+  res.json({
+    ok: missing.length === 0,
+    hasDiscordToken: !!SCRIMS_DISCORD_TOKEN,
+    guildIdConfigured: !!resolveScrimsGuildId({}),
+    oauthConfigured: !!(SCRIMS_DISCORD_CLIENT_ID && SCRIMS_DISCORD_CLIENT_SECRET),
+    redirectUri: SCRIMS_DISCORD_REDIRECT_URI,
+    missing
+  });
+});
+
 app.get("/api/dropmap/state", async (req, res) => {
   const lobby = scrimsLobbyKey(req.query.lobby || "1");
   const state = scrimsState();
@@ -571,6 +599,15 @@ app.post("/api/dropmap/clear", async (req, res) => {
 
 app.post("/api/scrims/create-lobby", async (req, res) => {
   try {
+    const missing = scrimsMissingConfig(req.body || {});
+    if (missing.length) {
+      res.status(400).json({
+        ok: false,
+        error: `Fehlende Konfiguration: ${missing.join(", ")}`,
+        missing
+      });
+      return;
+    }
     const out = await scrimsCreateLobbyLocal(req.body || {});
     res.status(200).json(out);
   } catch (error) {
