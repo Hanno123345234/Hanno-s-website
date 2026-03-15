@@ -10,24 +10,65 @@
   </head>
   <body>
     <main class="app">
-      <section class="card active">
-        <p class="subtitle">Gemacht von Hanno</p>
-        <h1 id="titleText">Spiel wählen</h1>
-        <p id="subtitleText" class="subtitle">Wähle deinen Modus</p>
+      <section class="home-shell">
+        <header class="home-topbar">
+          <p class="home-brand">Hanno Platform</p>
+          <nav class="home-links" aria-label="Schnellnavigation">
+            <a class="home-link home-link-primary" href="quiz.html">Quiz-Duell</a>
+            <a class="home-link" href="hannos-ki.html">Hannos KI</a>
+            <a class="home-link" href="admin.html">Admin</a>
+          </nav>
+        </header>
 
-        <div class="lang-row">
-          <label for="langSelect" id="langLabel">Sprache</label>
-          <select id="langSelect" aria-label="Sprache auswählen">
-            <option value="de">Deutsch</option>
-          </select>
-        </div>
+        <section class="home-hero card active">
+          <p class="home-kicker">Compete at the highest level</p>
+          <h1 id="titleText">Spiel wählen</h1>
+          <p id="subtitleText" class="subtitle">Wähle deinen Modus</p>
 
-        <div class="stack">
-          <a id="impostorLink" class="mode-link" href="impostor.html">Impostor Pro</a>
-          <a class="mode-link" href="quiz.html">Quiz-Duell</a>
-          <a class="mode-link" href="admin.html">Admin Dashboard</a>
-          <a class="mode-link" href="hannos-ki.html">Hannos KI</a>
-        </div>
+          <div class="home-stats" aria-label="Highlights">
+            <article>
+              <strong>Daily</strong>
+              <span>Sessions</span>
+            </article>
+            <article>
+              <strong>Live</strong>
+              <span>Community</span>
+            </article>
+            <article>
+              <strong>Smart</strong>
+              <span>Tools</span>
+            </article>
+          </div>
+
+          <div class="lang-row">
+            <label for="langSelect" id="langLabel">Sprache</label>
+            <select id="langSelect" aria-label="Sprache auswählen">
+              <option value="de">Deutsch</option>
+            </select>
+          </div>
+
+          <div class="stack home-stack">
+            <a id="impostorLink" class="mode-link" href="impostor.html">Impostor Pro</a>
+            <a class="mode-link" href="quiz.html">Quiz-Duell</a>
+            <a class="mode-link" href="admin.html">Admin Dashboard</a>
+            <a class="mode-link" href="hannos-ki.html">Hannos KI</a>
+          </div>
+        </section>
+
+        <section class="home-features" aria-label="Features">
+          <article class="home-feature-card">
+            <h2>Active Community</h2>
+            <p>Verbinde dich mit deinem Team, teile Strategien und baue bessere Sessions mit klaren Workflows.</p>
+          </article>
+          <article class="home-feature-card">
+            <h2>Session Tools</h2>
+            <p>Alles an einem Ort: Spielmodi, Quiz, KI-Unterstützung und Admin-Funktionen für den Alltag.</p>
+          </article>
+          <article class="home-feature-card">
+            <h2>Competitive Ready</h2>
+            <p>Professioneller Aufbau, schnelle Navigation und klare Oberfläche wie moderne Scrim-Plattformen.</p>
+          </article>
+        </section>
       </section>
     </main>
 
