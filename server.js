@@ -47,6 +47,8 @@ const GITHUB_MODEL_FALLBACKS = String(
 const GITHUB_MODELS_ENDPOINT = String(
   process.env.GITHUB_MODELS_ENDPOINT || "https://models.inference.ai.azure.com/chat/completions"
 ).trim();
+const SCRIMS_API_BASE = String(process.env.SCRIMS_API_BASE || "").trim().replace(/\/+$/, "");
+const SCRIMS_API_KEY = String(process.env.SCRIMS_API_KEY || "").trim();
 
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -59,6 +61,37 @@ app.use((req, res, next) => {
 
 app.use(express.static("public"));
 app.use(express.json());
+
+app.post("/api/scrims/create-lobby", async (req, res) => {
+  if (!SCRIMS_API_BASE) {
+    res.status(503).json({
+      ok: false,
+      error: "SCRIMS_API_BASE fehlt im Server-Environment."
+    });
+    return;
+  }
+
+  try {
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    if (SCRIMS_API_KEY) headers["x-api-key"] = SCRIMS_API_KEY;
+
+    const response = await fetch(`${SCRIMS_API_BASE}/api/create-lobby`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req.body || {})
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    res.status(response.status).json(payload);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: `Scrims API nicht erreichbar: ${String(error?.message || "unknown")}`
+    });
+  }
+});
 
 const quizAiRateLimitByIp = new Map();
 let aiEnabled = AI_ENABLED_BY_DEFAULT;

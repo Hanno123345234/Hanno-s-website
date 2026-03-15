@@ -11,4 +11,9 @@ window.QUIZ_ONLINE_ORIGIN = window.QUIZ_ONLINE_ORIGIN || "https://hanno-s-websit
 
 // Scrims button destination on the home page.
 // Change this to your own Scrims dashboard URL when needed.
-window.SCRIMS_DASHBOARD_URL = window.SCRIMS_DASHBOARD_URL || "https://novaprac.com";
+window.SCRIMS_DASHBOARD_URL = window.SCRIMS_DASHBOARD_URL || "scrims.html";
+
+// Backend API base for creating lobbies.
+// Keep empty to use same origin (/api/scrims/*).
+// Example: "https://your-cybrancee-domain.com"
+window.SCRIMS_API_BASE = window.SCRIMS_API_BASE || "";
