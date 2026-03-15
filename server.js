@@ -47,7 +47,11 @@ const GITHUB_MODEL_FALLBACKS = String(
 const GITHUB_MODELS_ENDPOINT = String(
   process.env.GITHUB_MODELS_ENDPOINT || "https://models.inference.ai.azure.com/chat/completions"
 ).trim();
-const SCRIMS_API_BASE = String(process.env.SCRIMS_API_BASE || "https://cybrancee-bot-eu-central-21.cybrancee.com").trim().replace(/\/+$/, "");
+const SCRIMS_API_BASE = String(process.env.SCRIMS_API_BASE || "").trim().replace(/\/+$/, "");
+const SCRIMS_API_BASES = String(process.env.SCRIMS_API_BASES || "")
+  .split(",")
+  .map((entry) => String(entry || "").trim().replace(/\/+$/, ""))
+  .filter(Boolean);
 const SCRIMS_API_KEY = String(process.env.SCRIMS_API_KEY || "").trim();
 
 app.use((req, res, next) => {
@@ -62,15 +66,60 @@ app.use((req, res, next) => {
 app.use(express.static("public"));
 app.use(express.json());
 
-async function proxyScrimsAuth(req, res, upstreamPath) {
-  if (!SCRIMS_API_BASE) {
-    res.status(503).send("SCRIMS_API_BASE fehlt im Server-Environment.");
-    return;
+function getScrimsBaseCandidates() {
+  const defaults = [
+    "https://cybrancee-bot-eu-central-21.cybrancee.com",
+    "http://cybrancee-bot-eu-central-21.cybrancee.com:4173",
+    "http://cybrancee-bot-eu-central-21.cybrancee.com"
+  ];
+  const raw = [SCRIMS_API_BASE, ...SCRIMS_API_BASES, ...defaults].filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+async function fetchScrimsWithFallback(upstreamPath, init = {}, opts = {}) {
+  const bases = getScrimsBaseCandidates();
+  if (!bases.length) {
+    throw new Error("Keine SCRIMS_API_BASE konfiguriert.");
   }
 
-  const upstreamUrl = `${SCRIMS_API_BASE}${upstreamPath}`;
+  const path = String(upstreamPath || "");
+  const timeoutMs = Number(opts.timeoutMs || 9000);
+  const errors = [];
+
+  for (const base of bases) {
+    const url = `${base}${path}`;
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (path.startsWith("/api/") && contentType.includes("text/html")) {
+        errors.push(`${base} -> HTML statt API (${response.status})`);
+        continue;
+      }
+
+      return { response, base };
+    } catch (error) {
+      errors.push(`${base} -> ${String(error?.message || "fetch failed")}`);
+    }
+  }
+
+  throw new Error(`Scrims API nicht erreichbar. Gepruefte Ziele: ${errors.join(" | ")}`);
+}
+
+async function proxyScrimsAuth(req, res, upstreamPath) {
   try {
-    const response = await fetch(upstreamUrl, {
+    const { response } = await fetchScrimsWithFallback(upstreamPath, {
       method: "GET",
       headers: {
         cookie: String(req.headers.cookie || "")
@@ -99,12 +148,6 @@ async function proxyScrimsAuth(req, res, upstreamPath) {
 }
 
 async function proxyScrimsApi(req, res, upstreamPath) {
-  if (!SCRIMS_API_BASE) {
-    res.status(503).json({ ok: false, error: "SCRIMS_API_BASE fehlt im Server-Environment." });
-    return;
-  }
-
-  const upstreamUrl = `${SCRIMS_API_BASE}${upstreamPath}`;
   try {
     const headers = {
       cookie: String(req.headers.cookie || "")
@@ -115,7 +158,7 @@ async function proxyScrimsApi(req, res, upstreamPath) {
       headers["Content-Type"] = "application/json";
     }
 
-    const response = await fetch(upstreamUrl, {
+    const { response } = await fetchScrimsWithFallback(upstreamPath, {
       method: req.method,
       headers,
       body: req.method !== "GET" && req.method !== "HEAD" ? JSON.stringify(req.body || {}) : undefined
@@ -164,32 +207,27 @@ app.post("/api/dropmap/clear", async (req, res) => {
 });
 
 app.post("/api/scrims/create-lobby", async (req, res) => {
-  if (!SCRIMS_API_BASE) {
-    res.status(503).json({
-      ok: false,
-      error: "SCRIMS_API_BASE fehlt im Server-Environment."
-    });
-    return;
-  }
-
   try {
     const headers = {
       "Content-Type": "application/json"
     };
     if (SCRIMS_API_KEY) headers["x-api-key"] = SCRIMS_API_KEY;
 
-    const response = await fetch(`${SCRIMS_API_BASE}/api/create-lobby`, {
+    const { response, base } = await fetchScrimsWithFallback("/api/create-lobby", {
       method: "POST",
       headers,
       body: JSON.stringify(req.body || {})
     });
 
     const payload = await response.json().catch(() => ({}));
-    res.status(response.status).json(payload);
+    res.status(response.status).json({
+      ...(payload && typeof payload === "object" ? payload : {}),
+      upstreamBase: base
+    });
   } catch (error) {
     res.status(502).json({
       ok: false,
-      error: `Scrims API nicht erreichbar: ${String(error?.message || "unknown")}`
+      error: String(error?.message || "Scrims API nicht erreichbar")
     });
   }
 });
