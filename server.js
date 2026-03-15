@@ -53,6 +53,16 @@ const SCRIMS_API_BASES = String(process.env.SCRIMS_API_BASES || "")
   .map((entry) => String(entry || "").trim().replace(/\/+$/, ""))
   .filter(Boolean);
 const SCRIMS_API_KEY = String(process.env.SCRIMS_API_KEY || "").trim();
+const SCRIMS_DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || "").trim();
+const SCRIMS_DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || "").trim();
+const SCRIMS_DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || "https://hanno-s-website.onrender.com/auth/discord/callback").trim();
+const SCRIMS_DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || process.env.TOKEN || process.env.BOT_TOKEN || process.env.DISCORD_BOT_TOKEN || "").trim();
+const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || "").trim();
+const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
+const scrimsWebSessions = new Map();
+const scrimsOAuthStates = new Map();
+const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+const SCRIMS_OAUTH_STATE_MAX_AGE_MS = 1000 * 60 * 10;
 
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -65,6 +75,196 @@ app.use((req, res, next) => {
 
 app.use(express.static("public"));
 app.use(express.json());
+
+function scrimsNowMs() {
+  return Date.now();
+}
+
+function scrimsRandomToken(bytes = 24) {
+  return require("crypto").randomBytes(bytes).toString("hex");
+}
+
+function scrimsParseCookies(req) {
+  const out = {};
+  const raw = String((req && req.headers && req.headers.cookie) || "");
+  if (!raw) return out;
+  for (const chunk of raw.split(";")) {
+    const i = chunk.indexOf("=");
+    if (i < 0) continue;
+    const k = chunk.slice(0, i).trim();
+    const v = chunk.slice(i + 1).trim();
+    if (!k) continue;
+    out[k] = decodeURIComponent(v);
+  }
+  return out;
+}
+
+function scrimsSerializeCookie(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(String(value || ""))}`];
+  parts.push(`Path=${options.path || "/"}`);
+  if (options.httpOnly !== false) parts.push("HttpOnly");
+  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
+  if (options.secure) parts.push("Secure");
+  if (Number.isFinite(options.maxAge)) parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge))}`);
+  return parts.join("; ");
+}
+
+function scrimsPruneSessions() {
+  const now = scrimsNowMs();
+  for (const [sid, session] of scrimsWebSessions.entries()) {
+    if (!session || Number(session.expiresAt || 0) <= now) scrimsWebSessions.delete(sid);
+  }
+  for (const [state, meta] of scrimsOAuthStates.entries()) {
+    if (!meta || Number(meta.expiresAt || 0) <= now) scrimsOAuthStates.delete(state);
+  }
+}
+
+function scrimsGetSession(req) {
+  scrimsPruneSessions();
+  const cookies = scrimsParseCookies(req);
+  const sid = String(cookies.sid || "");
+  if (!sid) return null;
+  const session = scrimsWebSessions.get(sid) || null;
+  if (!session) return null;
+  if (Number(session.expiresAt || 0) <= scrimsNowMs()) {
+    scrimsWebSessions.delete(sid);
+    return null;
+  }
+  return session;
+}
+
+function scrimsDiscordAvatarUrl(user) {
+  if (!user || !user.id) return "";
+  if (user.avatar) return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
+  let idx = 0;
+  try { idx = Number(BigInt(String(user.id)) % 5n); } catch (error) {}
+  return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
+}
+
+function scrimsLoadJson(filePath, fallback) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function scrimsSaveJson(filePath, data) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function scrimsLobbyKey(input) {
+  const n = Number(input);
+  if (!Number.isFinite(n) || n < 1) return "1";
+  return String(Math.floor(n));
+}
+
+function scrimsNormalizePercent(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return Number(n.toFixed(3));
+}
+
+function scrimsSanitizeText(input, max = 80) {
+  return String(input || "").trim().slice(0, max);
+}
+
+function scrimsState() {
+  const obj = scrimsLoadJson(SCRIMS_DROPMAP_PATH, {});
+  if (!obj || typeof obj !== "object") return { lobbies: {} };
+  if (!obj.lobbies || typeof obj.lobbies !== "object") obj.lobbies = {};
+  return obj;
+}
+
+async function scrimsDiscordApi(method, apiPath, token, body) {
+  const url = `https://discord.com/api/v10${apiPath}`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bot ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (error) { data = { raw: text }; }
+  if (!response.ok) {
+    const msg = data && (data.message || data.raw) ? String(data.message || data.raw) : `HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function scrimsSessionLabel(template) {
+  const mode = String(template || "duo-default").startsWith("trio") ? "Trio" : "Duo";
+  return mode;
+}
+
+async function scrimsCreateLobbyLocal(body) {
+  if (!SCRIMS_DISCORD_TOKEN) throw new Error("DISCORD_TOKEN fehlt auf Render.");
+  if (!SCRIMS_GUILD_ID) throw new Error("SCRIMS_GUILD_ID fehlt auf Render.");
+
+  const sessionNo = Number(body && body.session);
+  const lobbyNo = Number(body && body.lobby);
+  const template = String(body && body.lobbyTemplate || "duo-default").trim().toLowerCase();
+  if (!Number.isFinite(sessionNo) || sessionNo < 1) throw new Error("Invalid session number.");
+  if (!Number.isFinite(lobbyNo) || lobbyNo < 1) throw new Error("Invalid lobby number.");
+
+  const sessionLabel = scrimsSessionLabel(template);
+  const categoryName = `${sessionLabel} Session ${sessionNo} Lobby ${lobbyNo}`;
+  const prefix = `lobby-${lobbyNo}`;
+  const channelNames = [
+    `${prefix}-registration`,
+    `${prefix}-dropmap`,
+    `${prefix}-code`,
+    `${prefix}-chat`,
+    `${prefix}-unreg`,
+    template.startsWith("trio") ? `${prefix}-trio-fills` : `${prefix}-fills`,
+    `${prefix}-staff`
+  ];
+
+  const channels = await scrimsDiscordApi("GET", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN);
+  let category = Array.isArray(channels)
+    ? channels.find((ch) => Number(ch.type) === 4 && String(ch.name || "").toLowerCase() === categoryName.toLowerCase())
+    : null;
+
+  if (!category) {
+    category = await scrimsDiscordApi("POST", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN, {
+      name: categoryName,
+      type: 4
+    });
+  }
+
+  const refreshed = await scrimsDiscordApi("GET", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN);
+  const created = [];
+  for (const channelName of channelNames) {
+    const exists = Array.isArray(refreshed)
+      ? refreshed.find((ch) => Number(ch.type) === 0 && String(ch.parent_id || "") === String(category.id) && String(ch.name || "") === channelName)
+      : null;
+    if (exists) continue;
+    await scrimsDiscordApi("POST", `/guilds/${SCRIMS_GUILD_ID}/channels`, SCRIMS_DISCORD_TOKEN, {
+      name: channelName,
+      type: 0,
+      parent_id: category.id
+    });
+    created.push(channelName);
+  }
+
+  return {
+    ok: true,
+    categoryName,
+    channels: created
+  };
+}
 
 function getScrimsBaseCandidates() {
   const defaults = [
@@ -173,61 +373,210 @@ async function proxyScrimsApi(req, res, upstreamPath) {
 }
 
 app.get("/auth/discord", async (req, res) => {
-  await proxyScrimsAuth(req, res, "/auth/discord");
+  if (!SCRIMS_DISCORD_CLIENT_ID || !SCRIMS_DISCORD_CLIENT_SECRET) {
+    res.status(500).send("Missing DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET in Render env.");
+    return;
+  }
+  const state = scrimsRandomToken(18);
+  scrimsOAuthStates.set(state, { expiresAt: scrimsNowMs() + SCRIMS_OAUTH_STATE_MAX_AGE_MS });
+  const q = new URLSearchParams({
+    client_id: SCRIMS_DISCORD_CLIENT_ID,
+    response_type: "code",
+    redirect_uri: SCRIMS_DISCORD_REDIRECT_URI,
+    scope: "identify",
+    state,
+    prompt: "none"
+  });
+  const stateCookie = scrimsSerializeCookie("oauth_state", state, {
+    maxAge: Math.floor(SCRIMS_OAUTH_STATE_MAX_AGE_MS / 1000),
+    sameSite: "Lax",
+    secure: true
+  });
+  res.setHeader("Set-Cookie", stateCookie);
+  res.redirect(302, `https://discord.com/oauth2/authorize?${q.toString()}`);
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
-  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  await proxyScrimsAuth(req, res, `/auth/discord/callback${query}`);
+  const code = String(req.query.code || "").trim();
+  const state = String(req.query.state || "").trim();
+  const cookies = scrimsParseCookies(req);
+  const cookieState = String(cookies.oauth_state || "").trim();
+  const stateMeta = state ? scrimsOAuthStates.get(state) : null;
+
+  const clearStateCookie = scrimsSerializeCookie("oauth_state", "", {
+    maxAge: 0,
+    sameSite: "Lax",
+    secure: true
+  });
+
+  if (!code || !state || !cookieState || state !== cookieState || !stateMeta || Number(stateMeta.expiresAt || 0) <= scrimsNowMs()) {
+    if (state) scrimsOAuthStates.delete(state);
+    res.setHeader("Set-Cookie", clearStateCookie);
+    res.redirect(302, "/dropmap.html?auth=failed");
+    return;
+  }
+
+  scrimsOAuthStates.delete(state);
+  try {
+    const tokenBody = new URLSearchParams({
+      client_id: SCRIMS_DISCORD_CLIENT_ID,
+      client_secret: SCRIMS_DISCORD_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: SCRIMS_DISCORD_REDIRECT_URI
+    });
+
+    const tokenRes = await fetch("https://discord.com/api/v10/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenBody.toString()
+    });
+    const tokenJson = await tokenRes.json().catch(() => ({}));
+    const accessToken = String(tokenJson && tokenJson.access_token ? tokenJson.access_token : "");
+    if (!tokenRes.ok || !accessToken) throw new Error("oauth token failed");
+
+    const meRes = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const me = await meRes.json().catch(() => ({}));
+    if (!meRes.ok || !me || !me.id) throw new Error("user fetch failed");
+
+    const sid = scrimsRandomToken(24);
+    scrimsWebSessions.set(sid, {
+      id: String(me.id),
+      username: String(me.global_name || me.username || "User"),
+      avatarUrl: scrimsDiscordAvatarUrl(me),
+      createdAt: scrimsNowMs(),
+      expiresAt: scrimsNowMs() + SCRIMS_SESSION_MAX_AGE_MS
+    });
+
+    const cookiesOut = [
+      scrimsSerializeCookie("sid", sid, {
+        maxAge: Math.floor(SCRIMS_SESSION_MAX_AGE_MS / 1000),
+        sameSite: "Lax",
+        secure: true
+      }),
+      clearStateCookie
+    ];
+    res.setHeader("Set-Cookie", cookiesOut);
+    res.redirect(302, "/dropmap.html?auth=ok");
+  } catch (error) {
+    res.setHeader("Set-Cookie", clearStateCookie);
+    res.redirect(302, "/dropmap.html?auth=failed");
+  }
 });
 
 app.get("/auth/logout", async (req, res) => {
-  await proxyScrimsAuth(req, res, "/auth/logout");
+  const cookies = scrimsParseCookies(req);
+  const sid = String(cookies.sid || "");
+  if (sid) scrimsWebSessions.delete(sid);
+  res.setHeader("Set-Cookie", [
+    scrimsSerializeCookie("sid", "", { maxAge: 0, sameSite: "Lax", secure: true }),
+    scrimsSerializeCookie("oauth_state", "", { maxAge: 0, sameSite: "Lax", secure: true })
+  ]);
+  res.redirect(302, "/dropmap.html");
 });
 
 app.get("/api/me", async (req, res) => {
-  await proxyScrimsApi(req, res, "/api/me");
+  const session = scrimsGetSession(req);
+  res.json({ ok: true, user: session ? { id: session.id, username: session.username, avatarUrl: session.avatarUrl } : null });
 });
 
 app.get("/api/dropmap/state", async (req, res) => {
-  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  await proxyScrimsApi(req, res, `/api/dropmap/state${query}`);
+  const lobby = scrimsLobbyKey(req.query.lobby || "1");
+  const state = scrimsState();
+  if (!state.lobbies[lobby] || !Array.isArray(state.lobbies[lobby].marks)) state.lobbies[lobby] = { marks: [], updatedAt: Date.now() };
+  res.json({ ok: true, lobby, marks: state.lobbies[lobby].marks });
 });
 
 app.post("/api/dropmap/mark", async (req, res) => {
-  await proxyScrimsApi(req, res, "/api/dropmap/mark");
+  const session = scrimsGetSession(req);
+  if (!session) {
+    res.status(401).json({ ok: false, error: "Please connect Discord first." });
+    return;
+  }
+
+  const body = req.body || {};
+  const lobby = scrimsLobbyKey(body.lobby);
+  const label = scrimsSanitizeText(body.label, 80);
+  const x = scrimsNormalizePercent(body.x);
+  const y = scrimsNormalizePercent(body.y);
+  if (!label) {
+    res.status(400).json({ ok: false, error: "Spot label is required." });
+    return;
+  }
+  if (x === null || y === null) {
+    res.status(400).json({ ok: false, error: "Invalid map coordinates." });
+    return;
+  }
+
+  const state = scrimsState();
+  if (!state.lobbies[lobby] || !Array.isArray(state.lobbies[lobby].marks)) state.lobbies[lobby] = { marks: [], updatedAt: Date.now() };
+  const marks = state.lobbies[lobby].marks;
+  const existingIndex = marks.findIndex((entry) => String(entry.userId || "") === String(session.id));
+  const mark = {
+    id: existingIndex >= 0 ? marks[existingIndex].id : `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    userId: String(session.id),
+    player: String(session.username),
+    avatarUrl: String(session.avatarUrl || ""),
+    label,
+    x,
+    y,
+    updatedAt: Date.now()
+  };
+  if (existingIndex >= 0) marks[existingIndex] = mark;
+  else marks.push(mark);
+  state.lobbies[lobby].updatedAt = Date.now();
+  if (!scrimsSaveJson(SCRIMS_DROPMAP_PATH, state)) {
+    res.status(500).json({ ok: false, error: "Failed to persist dropmap state." });
+    return;
+  }
+  res.json({ ok: true, lobby, marks });
 });
 
 app.post("/api/dropmap/delete", async (req, res) => {
-  await proxyScrimsApi(req, res, "/api/dropmap/delete");
+  const session = scrimsGetSession(req);
+  if (!session) {
+    res.status(401).json({ ok: false, error: "Please connect Discord first." });
+    return;
+  }
+  const body = req.body || {};
+  const lobby = scrimsLobbyKey(body.lobby);
+  const id = scrimsSanitizeText(body.id, 120);
+  if (!id) {
+    res.status(400).json({ ok: false, error: "Mark id is required." });
+    return;
+  }
+  const state = scrimsState();
+  if (!state.lobbies[lobby] || !Array.isArray(state.lobbies[lobby].marks)) state.lobbies[lobby] = { marks: [], updatedAt: Date.now() };
+  state.lobbies[lobby].marks = state.lobbies[lobby].marks.filter((entry) => !(String(entry.id) === id && String(entry.userId || "") === String(session.id)));
+  state.lobbies[lobby].updatedAt = Date.now();
+  if (!scrimsSaveJson(SCRIMS_DROPMAP_PATH, state)) {
+    res.status(500).json({ ok: false, error: "Failed to persist dropmap state." });
+    return;
+  }
+  res.json({ ok: true, lobby, marks: state.lobbies[lobby].marks });
 });
 
 app.post("/api/dropmap/clear", async (req, res) => {
-  await proxyScrimsApi(req, res, "/api/dropmap/clear");
+  const lobby = scrimsLobbyKey((req.body || {}).lobby);
+  const state = scrimsState();
+  state.lobbies[lobby] = { marks: [], updatedAt: Date.now() };
+  if (!scrimsSaveJson(SCRIMS_DROPMAP_PATH, state)) {
+    res.status(500).json({ ok: false, error: "Failed to persist dropmap state." });
+    return;
+  }
+  res.json({ ok: true, lobby, marks: [] });
 });
 
 app.post("/api/scrims/create-lobby", async (req, res) => {
   try {
-    const headers = {
-      "Content-Type": "application/json"
-    };
-    if (SCRIMS_API_KEY) headers["x-api-key"] = SCRIMS_API_KEY;
-
-    const { response, base } = await fetchScrimsWithFallback("/api/create-lobby", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(req.body || {})
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    res.status(response.status).json({
-      ...(payload && typeof payload === "object" ? payload : {}),
-      upstreamBase: base
-    });
+    const out = await scrimsCreateLobbyLocal(req.body || {});
+    res.status(200).json(out);
   } catch (error) {
-    res.status(502).json({
+    res.status(400).json({
       ok: false,
-      error: String(error?.message || "Scrims API nicht erreichbar")
+      error: String(error?.message || "Lobby creation failed")
     });
   }
 });
