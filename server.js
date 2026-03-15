@@ -62,6 +62,55 @@ app.use((req, res, next) => {
 app.use(express.static("public"));
 app.use(express.json());
 
+async function proxyScrimsAuth(req, res, upstreamPath) {
+  if (!SCRIMS_API_BASE) {
+    res.status(503).send("SCRIMS_API_BASE fehlt im Server-Environment.");
+    return;
+  }
+
+  const upstreamUrl = `${SCRIMS_API_BASE}${upstreamPath}`;
+  try {
+    const response = await fetch(upstreamUrl, {
+      method: "GET",
+      headers: {
+        cookie: String(req.headers.cookie || "")
+      },
+      redirect: "manual"
+    });
+
+    const location = response.headers.get("location");
+    const getSetCookie = response.headers.getSetCookie;
+    const setCookies = typeof getSetCookie === "function" ? getSetCookie.call(response.headers) : [];
+    if (setCookies.length) {
+      res.setHeader("Set-Cookie", setCookies);
+    }
+
+    if (location) {
+      res.redirect(response.status || 302, location);
+      return;
+    }
+
+    const contentType = response.headers.get("content-type") || "text/plain; charset=utf-8";
+    const bodyText = await response.text();
+    res.status(response.status || 200).set("Content-Type", contentType).send(bodyText);
+  } catch (error) {
+    res.status(502).send(`Auth proxy error: ${String(error?.message || "unknown")}`);
+  }
+}
+
+app.get("/auth/discord", async (req, res) => {
+  await proxyScrimsAuth(req, res, "/auth/discord");
+});
+
+app.get("/auth/discord/callback", async (req, res) => {
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  await proxyScrimsAuth(req, res, `/auth/discord/callback${query}`);
+});
+
+app.get("/auth/logout", async (req, res) => {
+  await proxyScrimsAuth(req, res, "/auth/logout");
+});
+
 app.post("/api/scrims/create-lobby", async (req, res) => {
   if (!SCRIMS_API_BASE) {
     res.status(503).json({
