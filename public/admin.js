@@ -176,6 +176,8 @@ async function saveDiscordCommands() {
   discordCommands = Array.isArray(data?.commands) ? data.commands : [];
   if (data?.persisted === false && data?.persistError) {
     setInfo(`Gespeichert, aber Warnung: ${data.persistError}`);
+  } else if (data?.persistError) {
+    setInfo(`Gespeichert. Hinweis: ${data.persistError}`);
   }
   return data;
 }
@@ -457,7 +459,11 @@ cmdSaveBtn.addEventListener("click", async () => {
     } else {
       setInfo(`Command *${trigger} gespeichert.`);
     }
-    setCommandStatus(`Command *${trigger} gespeichert und unten in der Liste aktualisiert.`);
+    if (out?.persistPath) {
+      setCommandStatus(`Command *${trigger} gespeichert. Speicherpfad: ${out.persistPath}`);
+    } else {
+      setCommandStatus(`Command *${trigger} gespeichert und unten in der Liste aktualisiert.`);
+    }
   } catch (error) {
     setInfo(error.message || "Command konnte nicht gespeichert werden");
     setCommandStatus("Speichern fehlgeschlagen. Bitte Eingaben und Zugriff pruefen.");

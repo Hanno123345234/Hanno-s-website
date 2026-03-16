@@ -3,6 +3,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +61,7 @@ const SCRIMS_DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || process.env.TOK
 const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCORD_GUILD_ID || process.env.GUILD_ID || "").trim();
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
 const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
+const DISCORD_COMMANDS_FALLBACK_PATH = path.join(os.tmpdir(), "hanno_discord_commands.json");
 const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
 const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "true").trim().toLowerCase() === "true";
 const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
@@ -67,6 +69,7 @@ const BOT_DYNAMIC_COMMANDS_REFRESH_KEY = String(process.env.BOT_DYNAMIC_COMMANDS
 let discordCommandsCache = null;
 let discordCommandsPersistOk = true;
 let discordCommandsPersistError = null;
+let discordCommandsPersistPath = DISCORD_COMMANDS_PATH;
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -207,7 +210,14 @@ function normalizeDiscordCommandEntry(entry, index = 0) {
 function loadDiscordCommands() {
   if (Array.isArray(discordCommandsCache)) return discordCommandsCache.slice();
 
-  const raw = scrimsLoadJson(DISCORD_COMMANDS_PATH, { commands: [] });
+  let raw = scrimsLoadJson(DISCORD_COMMANDS_PATH, null);
+  if (!raw || !Array.isArray(raw?.commands)) {
+    raw = scrimsLoadJson(DISCORD_COMMANDS_FALLBACK_PATH, { commands: [] });
+    if (raw && Array.isArray(raw?.commands)) {
+      discordCommandsPersistPath = DISCORD_COMMANDS_FALLBACK_PATH;
+    }
+  }
+  if (!raw || !Array.isArray(raw?.commands)) raw = { commands: [] };
   const list = Array.isArray(raw?.commands) ? raw.commands : [];
   const normalized = [];
   const seen = new Set();
@@ -241,14 +251,25 @@ function saveDiscordCommands(commands) {
   deduped.sort((a, b) => a.trigger.localeCompare(b.trigger));
   discordCommandsCache = deduped.slice();
 
-  if (!scrimsSaveJson(DISCORD_COMMANDS_PATH, { commands: deduped, updatedAt: new Date().toISOString() })) {
-    discordCommandsPersistOk = false;
-    discordCommandsPersistError = "Failed to write discord_commands.json (using in-memory cache).";
+  const payload = { commands: deduped, updatedAt: new Date().toISOString() };
+  const wrotePrimary = scrimsSaveJson(DISCORD_COMMANDS_PATH, payload);
+  if (wrotePrimary) {
+    discordCommandsPersistOk = true;
+    discordCommandsPersistError = null;
+    discordCommandsPersistPath = DISCORD_COMMANDS_PATH;
     return deduped;
   }
 
-  discordCommandsPersistOk = true;
-  discordCommandsPersistError = null;
+  const wroteFallback = scrimsSaveJson(DISCORD_COMMANDS_FALLBACK_PATH, payload);
+  if (wroteFallback) {
+    discordCommandsPersistOk = true;
+    discordCommandsPersistError = `Primary path not writable, using fallback: ${DISCORD_COMMANDS_FALLBACK_PATH}`;
+    discordCommandsPersistPath = DISCORD_COMMANDS_FALLBACK_PATH;
+    return deduped;
+  }
+
+  discordCommandsPersistOk = false;
+  discordCommandsPersistError = "Failed to write command file on primary and fallback paths (using in-memory cache).";
   return deduped;
 }
 
@@ -645,7 +666,8 @@ app.get("/api/discord-commands", async (req, res) => {
     commands,
     authMode: keyMatches ? "key" : "public",
     persisted: discordCommandsPersistOk,
-    persistError: discordCommandsPersistError
+    persistError: discordCommandsPersistError,
+    persistPath: discordCommandsPersistPath
   });
 });
 
@@ -1549,7 +1571,8 @@ app.get("/api/admin/discord-commands", (req, res) => {
     ok: true,
     commands: loadDiscordCommands(),
     persisted: discordCommandsPersistOk,
-    persistError: discordCommandsPersistError
+    persistError: discordCommandsPersistError,
+    persistPath: discordCommandsPersistPath
   });
 });
 
@@ -1581,7 +1604,8 @@ app.post("/api/admin/discord-commands", async (req, res) => {
       commands: saved,
       sync,
       persisted: discordCommandsPersistOk,
-      persistError: discordCommandsPersistError
+      persistError: discordCommandsPersistError,
+      persistPath: discordCommandsPersistPath
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: String(error?.message || "Failed to save commands") });
