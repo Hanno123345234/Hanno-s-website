@@ -10,10 +10,23 @@ const aiLogList = document.getElementById("aiLogList");
 const aiControlInfo = document.getElementById("aiControlInfo");
 const enableAiBtn = document.getElementById("enableAiBtn");
 const disableAiBtn = document.getElementById("disableAiBtn");
+const commandList = document.getElementById("discordCommandList");
+const cmdTriggerInput = document.getElementById("cmdTriggerInput");
+const cmdModeSelect = document.getElementById("cmdModeSelect");
+const cmdEmbedTitleInput = document.getElementById("cmdEmbedTitleInput");
+const cmdEmbedColorInput = document.getElementById("cmdEmbedColorInput");
+const cmdResponseInput = document.getElementById("cmdResponseInput");
+const cmdEnabledInput = document.getElementById("cmdEnabledInput");
+const cmdSaveBtn = document.getElementById("cmdSaveBtn");
+const cmdResetBtn = document.getElementById("cmdResetBtn");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 const draftKey = window.localStorage.getItem(ADMIN_KEY_DRAFT_STORAGE) || "";
 if (draftKey) adminKey = draftKey;
+
+let canEditAdmin = false;
+let discordCommands = [];
+let editingTrigger = null;
 
 function setInfo(text) {
   adminInfo.textContent = String(text || "");
@@ -92,6 +105,132 @@ function renderAiLogs(entries = []) {
   });
 }
 
+function sanitizeHexColor(raw, fallback = "#87CEFA") {
+  const value = String(raw || "").trim();
+  const m = value.match(/^#?[0-9a-fA-F]{6}$/);
+  if (!m) return fallback;
+  return `#${value.replace(/^#/, "").toUpperCase()}`;
+}
+
+function resetCommandForm() {
+  editingTrigger = null;
+  cmdTriggerInput.value = "";
+  cmdModeSelect.value = "text";
+  cmdEmbedTitleInput.value = "";
+  cmdEmbedColorInput.value = "#87CEFA";
+  cmdResponseInput.value = "";
+  cmdEnabledInput.checked = true;
+  cmdSaveBtn.textContent = "Command speichern";
+}
+
+function setCommandEditorEnabled(enabled) {
+  cmdTriggerInput.disabled = !enabled;
+  cmdModeSelect.disabled = !enabled;
+  cmdEmbedTitleInput.disabled = !enabled;
+  cmdEmbedColorInput.disabled = !enabled;
+  cmdResponseInput.disabled = !enabled;
+  cmdEnabledInput.disabled = !enabled;
+  cmdSaveBtn.disabled = !enabled;
+  cmdResetBtn.disabled = !enabled;
+}
+
+async function saveDiscordCommands() {
+  const payload = {
+    commands: discordCommands.map((entry) => ({
+      trigger: entry.trigger,
+      response: entry.response,
+      enabled: entry.enabled !== false,
+      mode: entry.mode || "text",
+      embedTitle: entry.embedTitle || "",
+      embedColor: sanitizeHexColor(entry.embedColor || "#87CEFA")
+    }))
+  };
+  const data = await postAdmin("/api/admin/discord-commands", payload);
+  discordCommands = Array.isArray(data?.commands) ? data.commands : [];
+}
+
+function renderDiscordCommands() {
+  commandList.innerHTML = "";
+  if (!discordCommands.length) {
+    const li = document.createElement("li");
+    li.textContent = "Noch keine Commands angelegt.";
+    commandList.appendChild(li);
+    return;
+  }
+
+  discordCommands
+    .slice()
+    .sort((a, b) => String(a.trigger).localeCompare(String(b.trigger)))
+    .forEach((entry) => {
+      const li = document.createElement("li");
+      li.className = "ai-log-item";
+
+      const title = document.createElement("div");
+      title.textContent = `${entry.enabled === false ? "[deaktiviert] " : ""}*${entry.trigger}`;
+
+      const meta = document.createElement("div");
+      meta.textContent = `Modus: ${entry.mode || "text"}${entry.mode === "embed" ? ` • Farbe: ${sanitizeHexColor(entry.embedColor || "#87CEFA")}` : ""}`;
+
+      const preview = document.createElement("div");
+      preview.textContent = String(entry.response || "").slice(0, 220);
+
+      const actions = document.createElement("div");
+      actions.className = "stack";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "mini-btn";
+      editBtn.textContent = "Bearbeiten";
+      editBtn.disabled = !canEditAdmin;
+      editBtn.addEventListener("click", () => {
+        editingTrigger = entry.trigger;
+        cmdTriggerInput.value = entry.trigger;
+        cmdModeSelect.value = entry.mode || "text";
+        cmdEmbedTitleInput.value = entry.embedTitle || "";
+        cmdEmbedColorInput.value = sanitizeHexColor(entry.embedColor || "#87CEFA");
+        cmdResponseInput.value = entry.response || "";
+        cmdEnabledInput.checked = entry.enabled !== false;
+        cmdSaveBtn.textContent = "Command aktualisieren";
+      });
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "kick-btn";
+      deleteBtn.textContent = "Loeschen";
+      deleteBtn.disabled = !canEditAdmin;
+      deleteBtn.addEventListener("click", async () => {
+        if (!window.confirm(`Command *${entry.trigger} loeschen?`)) return;
+        try {
+          discordCommands = discordCommands.filter((item) => item.trigger !== entry.trigger);
+          await saveDiscordCommands();
+          renderDiscordCommands();
+          setInfo(`Command *${entry.trigger} geloescht.`);
+          if (editingTrigger === entry.trigger) resetCommandForm();
+        } catch (error) {
+          setInfo(error.message || "Command konnte nicht geloescht werden");
+        }
+      });
+
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      li.appendChild(title);
+      li.appendChild(meta);
+      li.appendChild(preview);
+      li.appendChild(actions);
+      commandList.appendChild(li);
+    });
+}
+
+async function loadDiscordCommands() {
+  const response = await adminFetch("/api/admin/discord-commands");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Discord Commands konnten nicht geladen werden");
+  }
+  discordCommands = Array.isArray(data?.commands) ? data.commands : [];
+  renderDiscordCommands();
+}
+
 async function loadAdmin() {
   setInfo("Lade Admin-Daten…");
   try {
@@ -107,13 +246,16 @@ async function loadAdmin() {
       throw new Error(aiData.error || "KI-Logs konnten nicht geladen werden");
     }
 
-    const canEdit = !!adminData?.access?.canEdit;
-    renderAiControl(aiData, canEdit);
+    canEditAdmin = !!adminData?.access?.canEdit;
+    renderAiControl(aiData, canEditAdmin);
     renderAiLogs(aiData.logs || []);
+    setCommandEditorEnabled(canEditAdmin);
+    await loadDiscordCommands();
     setInfo(`Aktualisiert (${adminData?.access?.role || "viewer"})`);
     setLoggedIn(true);
   } catch (error) {
     setLoggedIn(false);
+    setCommandEditorEnabled(false);
     setInfo(error.message || "Admin-Login fehlgeschlagen");
   }
 }
@@ -158,14 +300,73 @@ disableAiBtn.addEventListener("click", async () => {
   }
 });
 
+cmdSaveBtn.addEventListener("click", async () => {
+  if (!canEditAdmin) {
+    setInfo("Keine Bearbeitungsrechte fuer Commands.");
+    return;
+  }
+
+  const trigger = String(cmdTriggerInput.value || "").trim().toLowerCase().replace(/\s+/g, "");
+  const mode = String(cmdModeSelect.value || "text").trim().toLowerCase();
+  const response = String(cmdResponseInput.value || "").trim();
+  const embedTitle = String(cmdEmbedTitleInput.value || "").trim();
+  const embedColor = sanitizeHexColor(cmdEmbedColorInput.value || "#87CEFA");
+
+  if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(trigger)) {
+    setInfo("Trigger ungueltig. Erlaubt: a-z, 0-9, _, -, Laenge 2-32.");
+    return;
+  }
+  if (!response) {
+    setInfo("Antwort darf nicht leer sein.");
+    return;
+  }
+
+  const next = {
+    trigger,
+    response,
+    enabled: !!cmdEnabledInput.checked,
+    mode: mode === "embed" ? "embed" : "text",
+    embedTitle,
+    embedColor
+  };
+
+  try {
+    const existingIndex = discordCommands.findIndex((entry) => entry.trigger === trigger);
+    if (existingIndex >= 0) {
+      discordCommands[existingIndex] = next;
+    } else {
+      discordCommands.push(next);
+    }
+
+    if (editingTrigger && editingTrigger !== trigger) {
+      discordCommands = discordCommands.filter((entry) => entry.trigger !== editingTrigger);
+    }
+
+    await saveDiscordCommands();
+    renderDiscordCommands();
+    resetCommandForm();
+    setInfo(`Command *${trigger} gespeichert.`);
+  } catch (error) {
+    setInfo(error.message || "Command konnte nicht gespeichert werden");
+  }
+});
+
+cmdResetBtn.addEventListener("click", () => {
+  resetCommandForm();
+  setInfo("Formular zurueckgesetzt.");
+});
+
 adminKeyInput.addEventListener("input", () => {
   window.localStorage.setItem(ADMIN_KEY_DRAFT_STORAGE, String(adminKeyInput.value || ""));
 });
 
 if (adminKey) {
   adminKeyInput.value = adminKey;
+  resetCommandForm();
   loadAdmin();
 } else {
   setLoggedIn(false);
+  setCommandEditorEnabled(false);
+  resetCommandForm();
   setInfo("Bitte einloggen");
 }

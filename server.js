@@ -59,6 +59,8 @@ const SCRIMS_DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || "
 const SCRIMS_DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || process.env.TOKEN || process.env.BOT_TOKEN || process.env.DISCORD_BOT_TOKEN || "").trim();
 const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCORD_GUILD_ID || process.env.GUILD_ID || "").trim();
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
+const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
+const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -157,6 +159,81 @@ function scrimsSaveJson(filePath, data) {
   } catch (error) {
     return false;
   }
+}
+
+function normalizeHexColor(raw, fallback = "#87CEFA") {
+  const value = String(raw || "").trim();
+  if (!value) return fallback;
+  const m = value.match(/^#?[0-9a-fA-F]{6}$/);
+  if (!m) return fallback;
+  return `#${value.replace(/^#/, "").toUpperCase()}`;
+}
+
+function normalizeDiscordCommandEntry(entry, index = 0) {
+  const trigger = String(entry?.trigger || entry?.name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(trigger)) {
+    throw new Error(`Invalid trigger at index ${index + 1}. Use 2-32 chars: a-z, 0-9, _ or -.`);
+  }
+
+  const response = String(entry?.response || entry?.content || "").trim();
+  if (!response) throw new Error(`Missing response for trigger '${trigger}'.`);
+  if (response.length > 1800) throw new Error(`Response too long for '${trigger}' (max 1800 chars).`);
+
+  const modeRaw = String(entry?.mode || "text").trim().toLowerCase();
+  const mode = ["text", "embed"].includes(modeRaw) ? modeRaw : "text";
+  const embedTitle = String(entry?.embedTitle || "").trim().slice(0, 120);
+  const embedColor = normalizeHexColor(entry?.embedColor || "#87CEFA");
+
+  return {
+    trigger,
+    response,
+    enabled: entry?.enabled !== false,
+    mode,
+    embedTitle,
+    embedColor,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function loadDiscordCommands() {
+  const raw = scrimsLoadJson(DISCORD_COMMANDS_PATH, { commands: [] });
+  const list = Array.isArray(raw?.commands) ? raw.commands : [];
+  const normalized = [];
+  const seen = new Set();
+
+  for (let i = 0; i < list.length; i += 1) {
+    try {
+      const item = normalizeDiscordCommandEntry(list[i], i);
+      if (seen.has(item.trigger)) continue;
+      seen.add(item.trigger);
+      normalized.push(item);
+    } catch (error) {
+      // skip invalid legacy entries
+    }
+  }
+
+  return normalized.sort((a, b) => a.trigger.localeCompare(b.trigger));
+}
+
+function saveDiscordCommands(commands) {
+  const deduped = [];
+  const seen = new Set();
+  for (let i = 0; i < commands.length; i += 1) {
+    const item = normalizeDiscordCommandEntry(commands[i], i);
+    if (seen.has(item.trigger)) {
+      throw new Error(`Duplicate trigger '${item.trigger}'.`);
+    }
+    seen.add(item.trigger);
+    deduped.push(item);
+  }
+  deduped.sort((a, b) => a.trigger.localeCompare(b.trigger));
+  if (!scrimsSaveJson(DISCORD_COMMANDS_PATH, { commands: deduped, updatedAt: new Date().toISOString() })) {
+    throw new Error("Failed to save discord commands.");
+  }
+  return deduped;
 }
 
 function scrimsLobbyKey(input) {
@@ -496,6 +573,21 @@ app.get("/auth/logout", async (req, res) => {
 app.get("/api/me", async (req, res) => {
   const session = scrimsGetSession(req);
   res.json({ ok: true, user: session ? { id: session.id, username: session.username, avatarUrl: session.avatarUrl } : null });
+});
+
+app.get("/api/discord-commands", async (req, res) => {
+  if (!DISCORD_COMMANDS_BOT_KEY) {
+    res.status(503).json({ ok: false, error: "DISCORD_COMMANDS_BOT_KEY missing on server." });
+    return;
+  }
+  const provided = String(req.get("x-bot-key") || req.query.key || "").trim();
+  if (!provided || provided !== DISCORD_COMMANDS_BOT_KEY) {
+    res.status(401).json({ ok: false, error: "Unauthorized bot key." });
+    return;
+  }
+
+  const commands = loadDiscordCommands();
+  res.json({ ok: true, commands });
 });
 
 app.get("/api/scrims/health", async (req, res) => {
@@ -1389,6 +1481,39 @@ app.post("/api/admin/ai/toggle", (req, res) => {
     ok: true,
     aiEnabled
   });
+});
+
+app.get("/api/admin/discord-commands", (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+  res.json({ ok: true, commands: loadDiscordCommands() });
+});
+
+app.post("/api/admin/discord-commands", (req, res) => {
+  const auth = requireAdminRole(req, res, "editor");
+  if (!auth) return;
+
+  const rawCommands = Array.isArray(req.body?.commands) ? req.body.commands : null;
+  if (!rawCommands) {
+    res.status(400).json({ ok: false, error: "commands must be an array." });
+    return;
+  }
+
+  if (rawCommands.length > 200) {
+    res.status(400).json({ ok: false, error: "Too many commands (max 200)." });
+    return;
+  }
+
+  try {
+    const saved = saveDiscordCommands(rawCommands);
+    logModerationAction("discord_commands_update", {
+      by: auth.source || "admin",
+      count: saved.length
+    });
+    res.json({ ok: true, commands: saved });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: String(error?.message || "Failed to save commands") });
+  }
 });
 
 app.get("/api/admin/join-logs", (req, res) => {

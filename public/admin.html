@@ -39,6 +39,39 @@
             </div>
           </div>
 
+          <div id="discordCommandsSection" class="admin-box">
+            <h3>Discord Commands</h3>
+            <p class="subtitle">Eigene Prefix-Commands erstellen und direkt im Bot verwenden.</p>
+
+            <label for="cmdTriggerInput">Trigger (ohne Prefix, z. B. hello)</label>
+            <input id="cmdTriggerInput" type="text" placeholder="hello" autocomplete="off" maxlength="32" />
+
+            <label for="cmdModeSelect">Ausgabe</label>
+            <select id="cmdModeSelect">
+              <option value="text">Textnachricht</option>
+              <option value="embed">Embed</option>
+            </select>
+
+            <label for="cmdEmbedTitleInput">Embed Titel (optional)</label>
+            <input id="cmdEmbedTitleInput" type="text" placeholder="Info" autocomplete="off" maxlength="120" />
+
+            <label for="cmdEmbedColorInput">Embed Farbe (Hex)</label>
+            <input id="cmdEmbedColorInput" type="text" placeholder="#87CEFA" autocomplete="off" maxlength="7" />
+
+            <label for="cmdResponseInput">Antwort</label>
+            <textarea id="cmdResponseInput" rows="4" placeholder="Hallo {user}, willkommen auf {server}."></textarea>
+            <p class="subtitle">Platzhalter: {user}, {username}, {server}, {channel}, {args}, {arg1} ... {arg5}</p>
+
+            <label><input id="cmdEnabledInput" type="checkbox" checked /> Aktiv</label>
+
+            <div class="stack">
+              <button id="cmdSaveBtn" class="primary" type="button">Command speichern</button>
+              <button id="cmdResetBtn" class="mini-btn" type="button">Formular leeren</button>
+            </div>
+
+            <ul id="discordCommandList" class="player-list"></ul>
+          </div>
+
           <div class="player-list-wrap">
             <h3>KI Chat Logs</h3>
             <ul id="aiLogList" class="player-list"></ul>
