@@ -8,7 +8,7 @@
     <title>Admin</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="admin-page">
     <main class="app">
       <section class="card active">
         <div class="top-tools">
@@ -81,7 +81,8 @@
               <button id="cmdResetBtn" class="mini-btn" type="button">Formular leeren</button>
             </div>
 
-            <ul id="discordCommandList" class="player-list"></ul>
+            <ul id="discordCommandList" class="player-list command-card-grid"></ul>
+            <p id="cmdStatusInfo" class="subtitle"></p>
           </div>
 
           <div class="player-list-wrap">

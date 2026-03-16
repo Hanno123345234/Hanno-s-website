@@ -22,6 +22,7 @@ const cmdResponseInput = document.getElementById("cmdResponseInput");
 const cmdEnabledInput = document.getElementById("cmdEnabledInput");
 const cmdSaveBtn = document.getElementById("cmdSaveBtn");
 const cmdResetBtn = document.getElementById("cmdResetBtn");
+const cmdStatusInfo = document.getElementById("cmdStatusInfo");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 const draftKey = window.localStorage.getItem(ADMIN_KEY_DRAFT_STORAGE) || "";
@@ -33,6 +34,11 @@ let editingTrigger = null;
 
 function setInfo(text) {
   adminInfo.textContent = String(text || "");
+}
+
+function setCommandStatus(text) {
+  if (!cmdStatusInfo) return;
+  cmdStatusInfo.textContent = String(text || "");
 }
 
 function setLoggedIn(isLoggedIn) {
@@ -130,6 +136,7 @@ function resetCommandForm() {
   cmdEnabledInput.checked = true;
   cmdSaveBtn.textContent = "Command speichern";
   updateCommandModeUI();
+  setCommandStatus("Bereit. Neuen Command anlegen oder bestehenden bearbeiten.");
 }
 
 function setCommandEditorEnabled(enabled) {
@@ -166,8 +173,10 @@ function renderDiscordCommands() {
   commandList.innerHTML = "";
   if (!discordCommands.length) {
     const li = document.createElement("li");
+    li.className = "command-empty";
     li.textContent = "Noch keine Commands angelegt.";
     commandList.appendChild(li);
+    setCommandStatus("0 Commands vorhanden. Lege deinen ersten Command an.");
     return;
   }
 
@@ -184,34 +193,67 @@ function renderDiscordCommands() {
 
   if (!visibleCommands.length) {
     const li = document.createElement("li");
+    li.className = "command-empty";
     li.textContent = "Keine Commands passend zur Suche gefunden.";
     commandList.appendChild(li);
+    const activeSearch = search ? `Suche: "${search}"` : "Suche: -";
+    const activeFilter = actionFilter !== "all" ? `Filter: ${actionFilter}` : "Filter: alle";
+    setCommandStatus(`Keine Treffer. ${activeSearch} | ${activeFilter}`);
     return;
   }
+
+  setCommandStatus(`${visibleCommands.length} von ${discordCommands.length} Commands sichtbar.`);
 
   visibleCommands
     .slice()
     .sort((a, b) => String(a.trigger).localeCompare(String(b.trigger)))
     .forEach((entry) => {
       const li = document.createElement("li");
-      li.className = "ai-log-item";
+      li.className = "command-card";
 
-      const title = document.createElement("div");
-      title.textContent = `${entry.enabled === false ? "[deaktiviert] " : ""}*${entry.trigger}`;
+      const mode = String(entry.mode || "text").toLowerCase();
+      const actionLabel = mode === "embed" ? "EMBED" : "TEXT";
 
-      const meta = document.createElement("div");
-      meta.textContent = `Aktion: ${(entry.mode || "text") === "embed" ? "Embed senden" : "Text senden"}${entry.mode === "embed" ? ` • Farbe: ${sanitizeHexColor(entry.embedColor || "#87CEFA")}` : ""}`;
+      const header = document.createElement("div");
+      header.className = "command-card-header";
+
+      const title = document.createElement("h4");
+      title.className = "command-card-title";
+      title.textContent = String(entry.trigger || "-");
+
+      const actionBadge = document.createElement("span");
+      actionBadge.className = `command-action-badge ${mode === "embed" ? "is-embed" : "is-text"}`;
+      actionBadge.textContent = actionLabel;
+
+      header.appendChild(title);
+      header.appendChild(actionBadge);
+
+      const chips = document.createElement("div");
+      chips.className = "command-card-chips";
+
+      const rateChip = document.createElement("span");
+      rateChip.className = "command-chip chip-rate";
+      rateChip.textContent = "Rate Limited";
+
+      const stateChip = document.createElement("span");
+      stateChip.className = `command-chip ${entry.enabled === false ? "chip-disabled" : "chip-enabled"}`;
+      stateChip.textContent = entry.enabled === false ? "Disabled" : "Enabled";
+
+      chips.appendChild(rateChip);
+      chips.appendChild(stateChip);
 
       const preview = document.createElement("div");
-      preview.textContent = String(entry.response || "").slice(0, 220);
+      preview.className = "command-card-preview";
+      const previewText = String(entry.response || "").trim();
+      preview.textContent = previewText ? previewText.slice(0, 160) : "Keine Vorschau";
 
       const actions = document.createElement("div");
-      actions.className = "stack";
+      actions.className = "command-card-actions";
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
-      editBtn.className = "mini-btn";
-      editBtn.textContent = "Bearbeiten";
+      editBtn.className = "mini-btn command-card-btn";
+      editBtn.textContent = "Edit";
       editBtn.disabled = !canEditAdmin;
       editBtn.addEventListener("click", () => {
         editingTrigger = entry.trigger;
@@ -227,8 +269,8 @@ function renderDiscordCommands() {
 
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
-      deleteBtn.className = "kick-btn";
-      deleteBtn.textContent = "Loeschen";
+      deleteBtn.className = "kick-btn command-card-btn";
+      deleteBtn.textContent = "Delete";
       deleteBtn.disabled = !canEditAdmin;
       deleteBtn.addEventListener("click", async () => {
         if (!window.confirm(`Command *${entry.trigger} loeschen?`)) return;
@@ -245,8 +287,8 @@ function renderDiscordCommands() {
 
       actions.appendChild(editBtn);
       actions.appendChild(deleteBtn);
-      li.appendChild(title);
-      li.appendChild(meta);
+      li.appendChild(header);
+      li.appendChild(chips);
       li.appendChild(preview);
       li.appendChild(actions);
       commandList.appendChild(li);
@@ -262,6 +304,11 @@ async function loadDiscordCommands() {
   discordCommands = Array.isArray(data?.commands) ? data.commands : [];
   if (data?.persisted === false && data?.persistError) {
     setInfo(`Warnung: ${data.persistError}`);
+  }
+  if (discordCommands.length) {
+    setCommandStatus(`${discordCommands.length} Commands geladen.`);
+  } else {
+    setCommandStatus("Noch keine Commands vorhanden.");
   }
   renderDiscordCommands();
 }
@@ -378,28 +425,54 @@ cmdSaveBtn.addEventListener("click", async () => {
     }
 
     const out = await saveDiscordCommands();
+    if (cmdSearchInput) cmdSearchInput.value = "";
+    if (cmdFilterAction) cmdFilterAction.value = "all";
     renderDiscordCommands();
     resetCommandForm();
     const sync = out?.sync || {};
     if (sync.attempted) {
       if (sync.ok) setInfo(`Command *${trigger} gespeichert und Bot sofort synchronisiert.`);
-      else setInfo(`Command *${trigger} gespeichert, Bot-Sync fehlgeschlagen: ${sync.error || "unknown"}`);
+      else {
+        const syncError = String(sync.error || "").toLowerCase();
+        if (syncError.includes("timeout")) {
+          setInfo(`Command *${trigger} gespeichert. Bot-Sync laeuft verzoegert, der Polling-Fallback uebernimmt.`);
+        } else {
+          setInfo(`Command *${trigger} gespeichert. Sofort-Sync fehlgeschlagen: ${sync.error || "unknown"}.`);
+        }
+      }
     } else {
       setInfo(`Command *${trigger} gespeichert.`);
     }
+    setCommandStatus(`Command *${trigger} gespeichert und unten in der Liste aktualisiert.`);
   } catch (error) {
     setInfo(error.message || "Command konnte nicht gespeichert werden");
+    setCommandStatus("Speichern fehlgeschlagen. Bitte Eingaben und Zugriff pruefen.");
   }
 });
 
 cmdResetBtn.addEventListener("click", () => {
+  if (cmdSearchInput) cmdSearchInput.value = "";
+  if (cmdFilterAction) cmdFilterAction.value = "all";
+  renderDiscordCommands();
   resetCommandForm();
   setInfo("Formular zurueckgesetzt.");
 });
 
 if (cmdModeSelect) cmdModeSelect.addEventListener("change", updateCommandModeUI);
-if (cmdSearchInput) cmdSearchInput.addEventListener("input", renderDiscordCommands);
-if (cmdFilterAction) cmdFilterAction.addEventListener("change", renderDiscordCommands);
+if (cmdSearchInput) {
+  cmdSearchInput.addEventListener("input", () => {
+    renderDiscordCommands();
+    const query = String(cmdSearchInput.value || "").trim();
+    if (query) setCommandStatus(`Suche aktiv: "${query}"`);
+  });
+}
+if (cmdFilterAction) {
+  cmdFilterAction.addEventListener("change", () => {
+    renderDiscordCommands();
+    const mode = String(cmdFilterAction.value || "all");
+    setCommandStatus(mode === "all" ? "Filter entfernt. Alle Aktionen sichtbar." : `Filter aktiv: ${mode}`);
+  });
+}
 
 adminKeyInput.addEventListener("input", () => {
   window.localStorage.setItem(ADMIN_KEY_DRAFT_STORAGE, String(adminKeyInput.value || ""));
