@@ -52,11 +52,13 @@
               <option value="embed">Embed</option>
             </select>
 
-            <label for="cmdEmbedTitleInput">Embed Titel (optional)</label>
-            <input id="cmdEmbedTitleInput" type="text" placeholder="Info" autocomplete="off" maxlength="120" />
+            <div id="cmdEmbedFields" class="hidden">
+              <label for="cmdEmbedTitleInput">Embed Titel (optional)</label>
+              <input id="cmdEmbedTitleInput" type="text" placeholder="Info" autocomplete="off" maxlength="120" />
 
-            <label for="cmdEmbedColorInput">Embed Farbe (Hex)</label>
-            <input id="cmdEmbedColorInput" type="text" placeholder="#87CEFA" autocomplete="off" maxlength="7" />
+              <label for="cmdEmbedColorInput">Embed Farbe (Hex)</label>
+              <input id="cmdEmbedColorInput" type="text" placeholder="#87CEFA" autocomplete="off" maxlength="7" />
+            </div>
 
             <label for="cmdResponseInput">Antwort</label>
             <textarea id="cmdResponseInput" rows="4" placeholder="Hallo {user}, willkommen auf {server}."></textarea>

@@ -61,6 +61,8 @@ const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCOR
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
 const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
 const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
+const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
+const BOT_DYNAMIC_COMMANDS_REFRESH_KEY = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_KEY || "").trim();
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -234,6 +236,42 @@ function saveDiscordCommands(commands) {
     throw new Error("Failed to save discord commands.");
   }
   return deduped;
+}
+
+async function notifyBotDynamicCommandsRefresh() {
+  if (!BOT_DYNAMIC_COMMANDS_REFRESH_URL) {
+    return { attempted: false, ok: false, error: "BOT_DYNAMIC_COMMANDS_REFRESH_URL not configured" };
+  }
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (BOT_DYNAMIC_COMMANDS_REFRESH_KEY) headers["x-refresh-key"] = BOT_DYNAMIC_COMMANDS_REFRESH_KEY;
+    const response = await fetch(BOT_DYNAMIC_COMMANDS_REFRESH_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ reason: "admin_save" }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        attempted: true,
+        ok: false,
+        error: String(payload?.error || `HTTP ${response.status}`)
+      };
+    }
+    return {
+      attempted: true,
+      ok: true,
+      status: response.status,
+      source: payload?.source || null
+    };
+  } catch (error) {
+    return {
+      attempted: true,
+      ok: false,
+      error: String(error?.message || "refresh notify failed")
+    };
+  }
 }
 
 function scrimsLobbyKey(input) {
@@ -1489,7 +1527,7 @@ app.get("/api/admin/discord-commands", (req, res) => {
   res.json({ ok: true, commands: loadDiscordCommands() });
 });
 
-app.post("/api/admin/discord-commands", (req, res) => {
+app.post("/api/admin/discord-commands", async (req, res) => {
   const auth = requireAdminRole(req, res, "editor");
   if (!auth) return;
 
@@ -1506,11 +1544,13 @@ app.post("/api/admin/discord-commands", (req, res) => {
 
   try {
     const saved = saveDiscordCommands(rawCommands);
+    const sync = await notifyBotDynamicCommandsRefresh();
     logModerationAction("discord_commands_update", {
       by: auth.source || "admin",
-      count: saved.length
+      count: saved.length,
+      sync: sync.ok ? "ok" : (sync.attempted ? "failed" : "skipped")
     });
-    res.json({ ok: true, commands: saved });
+    res.json({ ok: true, commands: saved, sync });
   } catch (error) {
     res.status(400).json({ ok: false, error: String(error?.message || "Failed to save commands") });
   }
