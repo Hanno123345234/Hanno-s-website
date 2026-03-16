@@ -43,13 +43,23 @@
             <h3>Discord Commands</h3>
             <p class="subtitle">Eigene Prefix-Commands erstellen und direkt im Bot verwenden.</p>
 
+            <label for="cmdSearchInput">Commands suchen</label>
+            <input id="cmdSearchInput" type="text" placeholder="Nach Trigger oder Text suchen..." autocomplete="off" />
+
+            <label for="cmdFilterAction">Aktion filtern</label>
+            <select id="cmdFilterAction">
+              <option value="all">Alle Aktionen</option>
+              <option value="text">Text senden</option>
+              <option value="embed">Embed senden</option>
+            </select>
+
             <label for="cmdTriggerInput">Trigger (ohne Prefix, z. B. hello)</label>
             <input id="cmdTriggerInput" type="text" placeholder="hello" autocomplete="off" maxlength="32" />
 
-            <label for="cmdModeSelect">Ausgabe</label>
+            <label for="cmdModeSelect">Aktion</label>
             <select id="cmdModeSelect">
-              <option value="text">Textnachricht</option>
-              <option value="embed">Embed</option>
+              <option value="text">Text senden</option>
+              <option value="embed">Embed senden</option>
             </select>
 
             <div id="cmdEmbedFields" class="hidden">

@@ -14,6 +14,8 @@ const commandList = document.getElementById("discordCommandList");
 const cmdTriggerInput = document.getElementById("cmdTriggerInput");
 const cmdModeSelect = document.getElementById("cmdModeSelect");
 const cmdEmbedFields = document.getElementById("cmdEmbedFields");
+const cmdSearchInput = document.getElementById("cmdSearchInput");
+const cmdFilterAction = document.getElementById("cmdFilterAction");
 const cmdEmbedTitleInput = document.getElementById("cmdEmbedTitleInput");
 const cmdEmbedColorInput = document.getElementById("cmdEmbedColorInput");
 const cmdResponseInput = document.getElementById("cmdResponseInput");
@@ -166,7 +168,25 @@ function renderDiscordCommands() {
     return;
   }
 
-  discordCommands
+  const search = String(cmdSearchInput?.value || "").trim().toLowerCase();
+  const actionFilter = String(cmdFilterAction?.value || "all").trim().toLowerCase();
+
+  const visibleCommands = discordCommands.filter((entry) => {
+    const mode = String(entry.mode || "text").toLowerCase();
+    if (actionFilter !== "all" && mode !== actionFilter) return false;
+    if (!search) return true;
+    const haystack = `${entry.trigger || ""} ${entry.response || ""} ${entry.embedTitle || ""}`.toLowerCase();
+    return haystack.includes(search);
+  });
+
+  if (!visibleCommands.length) {
+    const li = document.createElement("li");
+    li.textContent = "Keine Commands passend zur Suche gefunden.";
+    commandList.appendChild(li);
+    return;
+  }
+
+  visibleCommands
     .slice()
     .sort((a, b) => String(a.trigger).localeCompare(String(b.trigger)))
     .forEach((entry) => {
@@ -177,7 +197,7 @@ function renderDiscordCommands() {
       title.textContent = `${entry.enabled === false ? "[deaktiviert] " : ""}*${entry.trigger}`;
 
       const meta = document.createElement("div");
-      meta.textContent = `Modus: ${entry.mode || "text"}${entry.mode === "embed" ? ` • Farbe: ${sanitizeHexColor(entry.embedColor || "#87CEFA")}` : ""}`;
+      meta.textContent = `Aktion: ${(entry.mode || "text") === "embed" ? "Embed senden" : "Text senden"}${entry.mode === "embed" ? ` • Farbe: ${sanitizeHexColor(entry.embedColor || "#87CEFA")}` : ""}`;
 
       const preview = document.createElement("div");
       preview.textContent = String(entry.response || "").slice(0, 220);
@@ -372,6 +392,8 @@ cmdResetBtn.addEventListener("click", () => {
 });
 
 cmdModeSelect.addEventListener("change", updateCommandModeUI);
+cmdSearchInput.addEventListener("input", renderDiscordCommands);
+cmdFilterAction.addEventListener("change", renderDiscordCommands);
 
 adminKeyInput.addEventListener("input", () => {
   window.localStorage.setItem(ADMIN_KEY_DRAFT_STORAGE, String(adminKeyInput.value || ""));
