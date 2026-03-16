@@ -29,6 +29,8 @@ services:
         sync: false
       - key: DISCORD_COMMANDS_BOT_KEY
         sync: false
+      - key: DISCORD_COMMANDS_ALLOW_PUBLIC_READ
+        value: "true"
       - key: BOT_DYNAMIC_COMMANDS_REFRESH_URL
         value: http://cybrancee-bot-eu-central-21.cybrancee.com:4173/internal/dynamic-commands/refresh
       - key: BOT_DYNAMIC_COMMANDS_REFRESH_KEY

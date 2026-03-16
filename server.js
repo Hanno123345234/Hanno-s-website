@@ -61,6 +61,7 @@ const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCOR
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
 const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
 const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
+const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "true").trim().toLowerCase() === "true";
 const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
 const BOT_DYNAMIC_COMMANDS_REFRESH_KEY = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_KEY || "").trim();
 const scrimsWebSessions = new Map();
@@ -614,18 +615,19 @@ app.get("/api/me", async (req, res) => {
 });
 
 app.get("/api/discord-commands", async (req, res) => {
-  if (!DISCORD_COMMANDS_BOT_KEY) {
-    res.status(503).json({ ok: false, error: "DISCORD_COMMANDS_BOT_KEY missing on server." });
-    return;
-  }
   const provided = String(req.get("x-bot-key") || req.query.key || "").trim();
-  if (!provided || provided !== DISCORD_COMMANDS_BOT_KEY) {
-    res.status(401).json({ ok: false, error: "Unauthorized bot key." });
-    return;
+  const hasConfiguredKey = !!DISCORD_COMMANDS_BOT_KEY;
+  const keyMatches = hasConfiguredKey && !!provided && provided === DISCORD_COMMANDS_BOT_KEY;
+
+  if (!keyMatches) {
+    if (!(DISCORD_COMMANDS_ALLOW_PUBLIC_READ || !hasConfiguredKey)) {
+      res.status(401).json({ ok: false, error: "Unauthorized bot key." });
+      return;
+    }
   }
 
   const commands = loadDiscordCommands();
-  res.json({ ok: true, commands });
+  res.json({ ok: true, commands, authMode: keyMatches ? "key" : "public" });
 });
 
 app.get("/api/scrims/health", async (req, res) => {
