@@ -62,6 +62,11 @@ const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCOR
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
 const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
 const DISCORD_COMMANDS_FALLBACK_PATH = path.join(os.tmpdir(), "hanno_discord_commands.json");
+const DISCORD_COMMANDS_STORAGE = String(process.env.DISCORD_COMMANDS_STORAGE || "github").trim().toLowerCase();
+const DISCORD_COMMANDS_GITHUB_REPO = String(process.env.DISCORD_COMMANDS_GITHUB_REPO || "Hanno123345234/Hanno-s-website").trim();
+const DISCORD_COMMANDS_GITHUB_PATH = String(process.env.DISCORD_COMMANDS_GITHUB_PATH || "data/discord_commands.json").trim();
+const DISCORD_COMMANDS_GITHUB_BRANCH = String(process.env.DISCORD_COMMANDS_GITHUB_BRANCH || "main").trim();
+const DISCORD_COMMANDS_GITHUB_TOKEN = String(process.env.DISCORD_COMMANDS_GITHUB_TOKEN || GITHUB_TOKEN).trim();
 const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
 const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "true").trim().toLowerCase() === "true";
 const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
@@ -70,6 +75,7 @@ let discordCommandsCache = null;
 let discordCommandsPersistOk = true;
 let discordCommandsPersistError = null;
 let discordCommandsPersistPath = DISCORD_COMMANDS_PATH;
+let discordCommandsGithubSha = null;
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -207,8 +213,114 @@ function normalizeDiscordCommandEntry(entry, index = 0) {
   };
 }
 
-function loadDiscordCommands() {
+function canUseGithubCommandsStorage() {
+  return DISCORD_COMMANDS_STORAGE === "github"
+    && !!DISCORD_COMMANDS_GITHUB_REPO
+    && !!DISCORD_COMMANDS_GITHUB_PATH
+    && !!DISCORD_COMMANDS_GITHUB_BRANCH
+    && !!DISCORD_COMMANDS_GITHUB_TOKEN;
+}
+
+function githubCommandsStorageLabel() {
+  return `github:${DISCORD_COMMANDS_GITHUB_REPO}/${DISCORD_COMMANDS_GITHUB_PATH}@${DISCORD_COMMANDS_GITHUB_BRANCH}`;
+}
+
+function normalizeDiscordCommandList(list = []) {
+  const normalized = [];
+  const seen = new Set();
+  for (let i = 0; i < list.length; i += 1) {
+    const item = normalizeDiscordCommandEntry(list[i], i);
+    if (seen.has(item.trigger)) {
+      throw new Error(`Duplicate trigger '${item.trigger}'.`);
+    }
+    seen.add(item.trigger);
+    normalized.push(item);
+  }
+  normalized.sort((a, b) => a.trigger.localeCompare(b.trigger));
+  return normalized;
+}
+
+async function fetchDiscordCommandsFromGithub() {
+  const apiUrl = `https://api.github.com/repos/${DISCORD_COMMANDS_GITHUB_REPO}/contents/${encodeURIComponent(DISCORD_COMMANDS_GITHUB_PATH).replace(/%2F/g, "/")}?ref=${encodeURIComponent(DISCORD_COMMANDS_GITHUB_BRANCH)}`;
+  const response = await fetch(apiUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${DISCORD_COMMANDS_GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "hanno-commands-storage"
+    },
+    signal: AbortSignal.timeout(10_000)
+  });
+
+  if (response.status === 404) {
+    discordCommandsGithubSha = null;
+    return { commands: [], sha: null };
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload?.message || `GitHub read failed (${response.status})`));
+  }
+
+  const b64 = String(payload?.content || "").replace(/\n/g, "");
+  const decoded = b64 ? Buffer.from(b64, "base64").toString("utf8") : "{}";
+  const parsed = JSON.parse(decoded || "{}");
+  const list = Array.isArray(parsed?.commands) ? parsed.commands : [];
+  return {
+    commands: list,
+    sha: String(payload?.sha || "") || null
+  };
+}
+
+async function saveDiscordCommandsToGithub(dedupedCommands) {
+  const payloadObj = { commands: dedupedCommands, updatedAt: new Date().toISOString() };
+  const contentB64 = Buffer.from(JSON.stringify(payloadObj, null, 2), "utf8").toString("base64");
+  const apiUrl = `https://api.github.com/repos/${DISCORD_COMMANDS_GITHUB_REPO}/contents/${encodeURIComponent(DISCORD_COMMANDS_GITHUB_PATH).replace(/%2F/g, "/")}`;
+  const body = {
+    message: `update discord commands (${new Date().toISOString()})`,
+    content: contentB64,
+    branch: DISCORD_COMMANDS_GITHUB_BRANCH
+  };
+  if (discordCommandsGithubSha) body.sha = discordCommandsGithubSha;
+
+  const response = await fetch(apiUrl, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${DISCORD_COMMANDS_GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "hanno-commands-storage"
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000)
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload?.message || `GitHub write failed (${response.status})`));
+  }
+
+  discordCommandsGithubSha = String(payload?.content?.sha || payload?.commit?.sha || "") || discordCommandsGithubSha;
+}
+
+async function loadDiscordCommands() {
   if (Array.isArray(discordCommandsCache)) return discordCommandsCache.slice();
+
+  if (canUseGithubCommandsStorage()) {
+    try {
+      const remote = await fetchDiscordCommandsFromGithub();
+      const normalizedRemote = normalizeDiscordCommandList(remote.commands || []);
+      discordCommandsCache = normalizedRemote.slice();
+      discordCommandsGithubSha = remote.sha || null;
+      discordCommandsPersistOk = true;
+      discordCommandsPersistError = null;
+      discordCommandsPersistPath = githubCommandsStorageLabel();
+      return discordCommandsCache.slice();
+    } catch (error) {
+      discordCommandsPersistOk = false;
+      discordCommandsPersistError = `GitHub read failed, fallback active: ${String(error?.message || error)}`;
+    }
+  }
 
   let raw = scrimsLoadJson(DISCORD_COMMANDS_PATH, null);
   if (!raw || !Array.isArray(raw?.commands)) {
@@ -220,36 +332,37 @@ function loadDiscordCommands() {
   if (!raw || !Array.isArray(raw?.commands)) raw = { commands: [] };
   const list = Array.isArray(raw?.commands) ? raw.commands : [];
   const normalized = [];
-  const seen = new Set();
-
   for (let i = 0; i < list.length; i += 1) {
     try {
-      const item = normalizeDiscordCommandEntry(list[i], i);
-      if (seen.has(item.trigger)) continue;
-      seen.add(item.trigger);
-      normalized.push(item);
+      normalized.push(normalizeDiscordCommandEntry(list[i], i));
     } catch (error) {
       // skip invalid legacy entries
     }
   }
-
   discordCommandsCache = normalized.sort((a, b) => a.trigger.localeCompare(b.trigger));
   return discordCommandsCache.slice();
 }
 
-function saveDiscordCommands(commands) {
-  const deduped = [];
-  const seen = new Set();
-  for (let i = 0; i < commands.length; i += 1) {
-    const item = normalizeDiscordCommandEntry(commands[i], i);
-    if (seen.has(item.trigger)) {
-      throw new Error(`Duplicate trigger '${item.trigger}'.`);
-    }
-    seen.add(item.trigger);
-    deduped.push(item);
-  }
-  deduped.sort((a, b) => a.trigger.localeCompare(b.trigger));
+async function saveDiscordCommands(commands) {
+  const deduped = normalizeDiscordCommandList(commands);
   discordCommandsCache = deduped.slice();
+
+  if (canUseGithubCommandsStorage()) {
+    try {
+      if (!discordCommandsGithubSha) {
+        const current = await fetchDiscordCommandsFromGithub();
+        discordCommandsGithubSha = current.sha || null;
+      }
+      await saveDiscordCommandsToGithub(deduped);
+      discordCommandsPersistOk = true;
+      discordCommandsPersistError = null;
+      discordCommandsPersistPath = githubCommandsStorageLabel();
+      return deduped;
+    } catch (error) {
+      discordCommandsPersistOk = false;
+      discordCommandsPersistError = `GitHub write failed, fallback active: ${String(error?.message || error)}`;
+    }
+  }
 
   const payload = { commands: deduped, updatedAt: new Date().toISOString() };
   const wrotePrimary = scrimsSaveJson(DISCORD_COMMANDS_PATH, payload);
@@ -660,7 +773,7 @@ app.get("/api/discord-commands", async (req, res) => {
     }
   }
 
-  const commands = loadDiscordCommands();
+  const commands = await loadDiscordCommands();
   res.json({
     ok: true,
     commands,
@@ -1564,12 +1677,12 @@ app.post("/api/admin/ai/toggle", (req, res) => {
   });
 });
 
-app.get("/api/admin/discord-commands", (req, res) => {
+app.get("/api/admin/discord-commands", async (req, res) => {
   const auth = requireAdminRole(req, res, "viewer");
   if (!auth) return;
   res.json({
     ok: true,
-    commands: loadDiscordCommands(),
+    commands: await loadDiscordCommands(),
     persisted: discordCommandsPersistOk,
     persistError: discordCommandsPersistError,
     persistPath: discordCommandsPersistPath
@@ -1592,7 +1705,7 @@ app.post("/api/admin/discord-commands", async (req, res) => {
   }
 
   try {
-    const saved = saveDiscordCommands(rawCommands);
+    const saved = await saveDiscordCommands(rawCommands);
     const sync = await notifyBotDynamicCommandsRefresh();
     logModerationAction("discord_commands_update", {
       by: auth.source || "admin",

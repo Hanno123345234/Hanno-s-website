@@ -29,6 +29,16 @@ services:
         sync: false
       - key: DISCORD_COMMANDS_BOT_KEY
         sync: false
+      - key: DISCORD_COMMANDS_STORAGE
+        value: github
+      - key: DISCORD_COMMANDS_GITHUB_REPO
+        value: Hanno123345234/Hanno-s-website
+      - key: DISCORD_COMMANDS_GITHUB_PATH
+        value: data/discord_commands.json
+      - key: DISCORD_COMMANDS_GITHUB_BRANCH
+        value: main
+      - key: DISCORD_COMMANDS_GITHUB_TOKEN
+        sync: false
       - key: DISCORD_COMMANDS_ALLOW_PUBLIC_READ
         value: "true"
       - key: BOT_DYNAMIC_COMMANDS_REFRESH_URL
