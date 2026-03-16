@@ -156,6 +156,9 @@ async function saveDiscordCommands() {
   };
   const data = await postAdmin("/api/admin/discord-commands", payload);
   discordCommands = Array.isArray(data?.commands) ? data.commands : [];
+  if (data?.persisted === false && data?.persistError) {
+    setInfo(`Gespeichert, aber Warnung: ${data.persistError}`);
+  }
   return data;
 }
 
@@ -257,6 +260,9 @@ async function loadDiscordCommands() {
     throw new Error(data.error || "Discord Commands konnten nicht geladen werden");
   }
   discordCommands = Array.isArray(data?.commands) ? data.commands : [];
+  if (data?.persisted === false && data?.persistError) {
+    setInfo(`Warnung: ${data.persistError}`);
+  }
   renderDiscordCommands();
 }
 
@@ -391,9 +397,9 @@ cmdResetBtn.addEventListener("click", () => {
   setInfo("Formular zurueckgesetzt.");
 });
 
-cmdModeSelect.addEventListener("change", updateCommandModeUI);
-cmdSearchInput.addEventListener("input", renderDiscordCommands);
-cmdFilterAction.addEventListener("change", renderDiscordCommands);
+if (cmdModeSelect) cmdModeSelect.addEventListener("change", updateCommandModeUI);
+if (cmdSearchInput) cmdSearchInput.addEventListener("input", renderDiscordCommands);
+if (cmdFilterAction) cmdFilterAction.addEventListener("change", renderDiscordCommands);
 
 adminKeyInput.addEventListener("input", () => {
   window.localStorage.setItem(ADMIN_KEY_DRAFT_STORAGE, String(adminKeyInput.value || ""));

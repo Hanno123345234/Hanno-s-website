@@ -64,6 +64,9 @@ const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || 
 const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "true").trim().toLowerCase() === "true";
 const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
 const BOT_DYNAMIC_COMMANDS_REFRESH_KEY = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_KEY || "").trim();
+let discordCommandsCache = null;
+let discordCommandsPersistOk = true;
+let discordCommandsPersistError = null;
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -202,6 +205,8 @@ function normalizeDiscordCommandEntry(entry, index = 0) {
 }
 
 function loadDiscordCommands() {
+  if (Array.isArray(discordCommandsCache)) return discordCommandsCache.slice();
+
   const raw = scrimsLoadJson(DISCORD_COMMANDS_PATH, { commands: [] });
   const list = Array.isArray(raw?.commands) ? raw.commands : [];
   const normalized = [];
@@ -218,7 +223,8 @@ function loadDiscordCommands() {
     }
   }
 
-  return normalized.sort((a, b) => a.trigger.localeCompare(b.trigger));
+  discordCommandsCache = normalized.sort((a, b) => a.trigger.localeCompare(b.trigger));
+  return discordCommandsCache.slice();
 }
 
 function saveDiscordCommands(commands) {
@@ -233,9 +239,16 @@ function saveDiscordCommands(commands) {
     deduped.push(item);
   }
   deduped.sort((a, b) => a.trigger.localeCompare(b.trigger));
+  discordCommandsCache = deduped.slice();
+
   if (!scrimsSaveJson(DISCORD_COMMANDS_PATH, { commands: deduped, updatedAt: new Date().toISOString() })) {
-    throw new Error("Failed to save discord commands.");
+    discordCommandsPersistOk = false;
+    discordCommandsPersistError = "Failed to write discord_commands.json (using in-memory cache).";
+    return deduped;
   }
+
+  discordCommandsPersistOk = true;
+  discordCommandsPersistError = null;
   return deduped;
 }
 
@@ -627,7 +640,13 @@ app.get("/api/discord-commands", async (req, res) => {
   }
 
   const commands = loadDiscordCommands();
-  res.json({ ok: true, commands, authMode: keyMatches ? "key" : "public" });
+  res.json({
+    ok: true,
+    commands,
+    authMode: keyMatches ? "key" : "public",
+    persisted: discordCommandsPersistOk,
+    persistError: discordCommandsPersistError
+  });
 });
 
 app.get("/api/scrims/health", async (req, res) => {
@@ -1526,7 +1545,12 @@ app.post("/api/admin/ai/toggle", (req, res) => {
 app.get("/api/admin/discord-commands", (req, res) => {
   const auth = requireAdminRole(req, res, "viewer");
   if (!auth) return;
-  res.json({ ok: true, commands: loadDiscordCommands() });
+  res.json({
+    ok: true,
+    commands: loadDiscordCommands(),
+    persisted: discordCommandsPersistOk,
+    persistError: discordCommandsPersistError
+  });
 });
 
 app.post("/api/admin/discord-commands", async (req, res) => {
@@ -1552,7 +1576,13 @@ app.post("/api/admin/discord-commands", async (req, res) => {
       count: saved.length,
       sync: sync.ok ? "ok" : (sync.attempted ? "failed" : "skipped")
     });
-    res.json({ ok: true, commands: saved, sync });
+    res.json({
+      ok: true,
+      commands: saved,
+      sync,
+      persisted: discordCommandsPersistOk,
+      persistError: discordCommandsPersistError
+    });
   } catch (error) {
     res.status(400).json({ ok: false, error: String(error?.message || "Failed to save commands") });
   }
