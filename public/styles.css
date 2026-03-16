@@ -1300,6 +1300,36 @@ body.admin-page .app {
   background: rgba(67, 28, 109, 0.5);
 }
 
+.command-action-badge.is-dm {
+  color: #8ad8ff;
+  border-color: rgba(69, 188, 255, 0.5);
+  background: rgba(8, 66, 108, 0.5);
+}
+
+.command-action-badge.is-ban {
+  color: #ff7e96;
+  border-color: rgba(255, 78, 120, 0.5);
+  background: rgba(95, 13, 34, 0.45);
+}
+
+.command-action-badge.is-mute {
+  color: #ffd26f;
+  border-color: rgba(255, 183, 79, 0.5);
+  background: rgba(94, 60, 8, 0.52);
+}
+
+.command-action-badge.is-kick {
+  color: #ff9f7f;
+  border-color: rgba(255, 140, 98, 0.5);
+  background: rgba(102, 33, 9, 0.52);
+}
+
+.command-action-badge.is-role {
+  color: #d3b0ff;
+  border-color: rgba(177, 111, 255, 0.54);
+  background: rgba(58, 20, 105, 0.54);
+}
+
 .command-card-chips {
   display: flex;
   gap: 8px;

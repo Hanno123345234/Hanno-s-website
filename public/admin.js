@@ -126,6 +126,17 @@ function updateCommandModeUI() {
   if (cmdEmbedFields) cmdEmbedFields.classList.toggle("hidden", !isEmbed);
 }
 
+function commandModeView(modeRaw) {
+  const mode = String(modeRaw || "text").toLowerCase();
+  if (mode === "embed") return { label: "EMBED", badgeClass: "is-embed" };
+  if (mode === "dm") return { label: "DM", badgeClass: "is-dm" };
+  if (mode === "ban") return { label: "BAN", badgeClass: "is-ban" };
+  if (mode === "mute") return { label: "MUTE", badgeClass: "is-mute" };
+  if (mode === "kick") return { label: "KICK", badgeClass: "is-kick" };
+  if (mode === "role") return { label: "ROLE", badgeClass: "is-role" };
+  return { label: "TEXT", badgeClass: "is-text" };
+}
+
 function resetCommandForm() {
   editingTrigger = null;
   cmdTriggerInput.value = "";
@@ -212,7 +223,7 @@ function renderDiscordCommands() {
       li.className = "command-card";
 
       const mode = String(entry.mode || "text").toLowerCase();
-      const actionLabel = mode === "embed" ? "EMBED" : "TEXT";
+      const modeView = commandModeView(mode);
 
       const header = document.createElement("div");
       header.className = "command-card-header";
@@ -222,8 +233,8 @@ function renderDiscordCommands() {
       title.textContent = String(entry.trigger || "-");
 
       const actionBadge = document.createElement("span");
-      actionBadge.className = `command-action-badge ${mode === "embed" ? "is-embed" : "is-text"}`;
-      actionBadge.textContent = actionLabel;
+      actionBadge.className = `command-action-badge ${modeView.badgeClass}`;
+      actionBadge.textContent = modeView.label;
 
       header.appendChild(title);
       header.appendChild(actionBadge);
@@ -403,11 +414,14 @@ cmdSaveBtn.addEventListener("click", async () => {
     return;
   }
 
+  const allowedModes = new Set(["text", "embed", "dm", "ban", "mute", "kick", "role"]);
+  const normalizedMode = allowedModes.has(mode) ? mode : "text";
+
   const next = {
     trigger,
     response,
     enabled: !!cmdEnabledInput.checked,
-    mode: mode === "embed" ? "embed" : "text",
+    mode: normalizedMode,
     embedTitle,
     embedColor
   };

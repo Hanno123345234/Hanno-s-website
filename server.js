@@ -189,7 +189,7 @@ function normalizeDiscordCommandEntry(entry, index = 0) {
   if (response.length > 1800) throw new Error(`Response too long for '${trigger}' (max 1800 chars).`);
 
   const modeRaw = String(entry?.mode || "text").trim().toLowerCase();
-  const mode = ["text", "embed"].includes(modeRaw) ? modeRaw : "text";
+  const mode = ["text", "embed", "dm", "ban", "mute", "kick", "role"].includes(modeRaw) ? modeRaw : "text";
   const embedTitle = String(entry?.embedTitle || "").trim().slice(0, 120);
   const embedColor = normalizeHexColor(entry?.embedColor || "#87CEFA");
 
