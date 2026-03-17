@@ -23,6 +23,27 @@ const cmdEnabledInput = document.getElementById("cmdEnabledInput");
 const cmdSaveBtn = document.getElementById("cmdSaveBtn");
 const cmdResetBtn = document.getElementById("cmdResetBtn");
 const cmdStatusInfo = document.getElementById("cmdStatusInfo");
+const wickGuildIdInput = document.getElementById("wickGuildIdInput");
+const wickLogChannelInput = document.getElementById("wickLogChannelInput");
+const wickEnabledInput = document.getElementById("wickEnabledInput");
+const wickAutoStrikeInput = document.getElementById("wickAutoStrikeInput");
+const wickTimeout3Input = document.getElementById("wickTimeout3Input");
+const wickTimeout5Input = document.getElementById("wickTimeout5Input");
+const wickAntiRaidEnabledInput = document.getElementById("wickAntiRaidEnabledInput");
+const wickRaidJoinsInput = document.getElementById("wickRaidJoinsInput");
+const wickRaidSecondsInput = document.getElementById("wickRaidSecondsInput");
+const wickRaidSlowmodeInput = document.getElementById("wickRaidSlowmodeInput");
+const wickAntiNukeEnabledInput = document.getElementById("wickAntiNukeEnabledInput");
+const wickNukeChannelDeleteInput = document.getElementById("wickNukeChannelDeleteInput");
+const wickNukeRoleDeleteInput = document.getElementById("wickNukeRoleDeleteInput");
+const wickNukeLockdownInput = document.getElementById("wickNukeLockdownInput");
+const wickLinkShieldEnabledInput = document.getElementById("wickLinkShieldEnabledInput");
+const wickBlockInvitesInput = document.getElementById("wickBlockInvitesInput");
+const wickWhitelistDomainsInput = document.getElementById("wickWhitelistDomainsInput");
+const wickSaveBtn = document.getElementById("wickSaveBtn");
+const wickResetBtn = document.getElementById("wickResetBtn");
+const wickGuildList = document.getElementById("wickGuildList");
+const wickStatusInfo = document.getElementById("wickStatusInfo");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 const draftKey = window.localStorage.getItem(ADMIN_KEY_DRAFT_STORAGE) || "";
@@ -31,6 +52,7 @@ if (draftKey) adminKey = draftKey;
 let canEditAdmin = false;
 let discordCommands = [];
 let editingTrigger = null;
+let wickSettingsState = { guilds: {} };
 
 function setInfo(text) {
   adminInfo.textContent = String(text || "");
@@ -39,6 +61,11 @@ function setInfo(text) {
 function setCommandStatus(text) {
   if (!cmdStatusInfo) return;
   cmdStatusInfo.textContent = String(text || "");
+}
+
+function setWickStatus(text) {
+  if (!wickStatusInfo) return;
+  wickStatusInfo.textContent = String(text || "");
 }
 
 function setLoggedIn(isLoggedIn) {
@@ -159,6 +186,190 @@ function setCommandEditorEnabled(enabled) {
   cmdEnabledInput.disabled = !enabled;
   cmdSaveBtn.disabled = !enabled;
   cmdResetBtn.disabled = !enabled;
+  if (wickGuildIdInput) wickGuildIdInput.disabled = !enabled;
+  if (wickLogChannelInput) wickLogChannelInput.disabled = !enabled;
+  if (wickEnabledInput) wickEnabledInput.disabled = !enabled;
+  if (wickAutoStrikeInput) wickAutoStrikeInput.disabled = !enabled;
+  if (wickTimeout3Input) wickTimeout3Input.disabled = !enabled;
+  if (wickTimeout5Input) wickTimeout5Input.disabled = !enabled;
+  if (wickAntiRaidEnabledInput) wickAntiRaidEnabledInput.disabled = !enabled;
+  if (wickRaidJoinsInput) wickRaidJoinsInput.disabled = !enabled;
+  if (wickRaidSecondsInput) wickRaidSecondsInput.disabled = !enabled;
+  if (wickRaidSlowmodeInput) wickRaidSlowmodeInput.disabled = !enabled;
+  if (wickAntiNukeEnabledInput) wickAntiNukeEnabledInput.disabled = !enabled;
+  if (wickNukeChannelDeleteInput) wickNukeChannelDeleteInput.disabled = !enabled;
+  if (wickNukeRoleDeleteInput) wickNukeRoleDeleteInput.disabled = !enabled;
+  if (wickNukeLockdownInput) wickNukeLockdownInput.disabled = !enabled;
+  if (wickLinkShieldEnabledInput) wickLinkShieldEnabledInput.disabled = !enabled;
+  if (wickBlockInvitesInput) wickBlockInvitesInput.disabled = !enabled;
+  if (wickWhitelistDomainsInput) wickWhitelistDomainsInput.disabled = !enabled;
+  if (wickSaveBtn) wickSaveBtn.disabled = !enabled;
+  if (wickResetBtn) wickResetBtn.disabled = !enabled;
+}
+
+function normalizeGuildId(input) {
+  const id = String(input || "").trim();
+  if (!/^\d{5,30}$/.test(id)) return "";
+  return id;
+}
+
+function parseDomainList(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 200);
+}
+
+function wickConfigFromForm() {
+  return {
+    enabled: !!wickEnabledInput.checked,
+    logChannelId: normalizeGuildId(wickLogChannelInput.value) || null,
+    autoStrikeOnWarn: !!wickAutoStrikeInput.checked,
+    timeoutAt3: Math.max(0, Number(wickTimeout3Input.value || 30) || 30),
+    timeoutAt5: Math.max(0, Number(wickTimeout5Input.value || 1440) || 1440),
+    antiRaid: {
+      enabled: !!wickAntiRaidEnabledInput.checked,
+      joins: Math.max(2, Number(wickRaidJoinsInput.value || 8) || 8),
+      seconds: Math.max(5, Number(wickRaidSecondsInput.value || 20) || 20),
+      slowmodeSeconds: Math.max(0, Number(wickRaidSlowmodeInput.value || 15) || 15)
+    },
+    antiNuke: {
+      enabled: !!wickAntiNukeEnabledInput.checked,
+      maxChannelDeletePerMinute: Math.max(1, Number(wickNukeChannelDeleteInput.value || 4) || 4),
+      maxRoleDeletePerMinute: Math.max(1, Number(wickNukeRoleDeleteInput.value || 3) || 3),
+      lockdownMinutes: Math.max(1, Number(wickNukeLockdownInput.value || 10) || 10)
+    },
+    linkShield: {
+      enabled: !!wickLinkShieldEnabledInput.checked,
+      blockDiscordInvites: !!wickBlockInvitesInput.checked,
+      whitelistDomains: parseDomainList(wickWhitelistDomainsInput.value)
+    }
+  };
+}
+
+function fillWickForm(guildId, cfg = null) {
+  wickGuildIdInput.value = String(guildId || "").trim();
+  const c = cfg || {
+    enabled: true,
+    logChannelId: "",
+    autoStrikeOnWarn: true,
+    timeoutAt3: 30,
+    timeoutAt5: 1440,
+    antiRaid: { enabled: true, joins: 8, seconds: 20, slowmodeSeconds: 15 },
+    antiNuke: { enabled: true, maxChannelDeletePerMinute: 4, maxRoleDeletePerMinute: 3, lockdownMinutes: 10 },
+    linkShield: { enabled: false, blockDiscordInvites: true, whitelistDomains: [] }
+  };
+  wickEnabledInput.checked = c.enabled !== false;
+  wickLogChannelInput.value = c.logChannelId || "";
+  wickAutoStrikeInput.checked = c.autoStrikeOnWarn !== false;
+  wickTimeout3Input.value = Number(c.timeoutAt3 || 30);
+  wickTimeout5Input.value = Number(c.timeoutAt5 || 1440);
+  wickAntiRaidEnabledInput.checked = c.antiRaid?.enabled !== false;
+  wickRaidJoinsInput.value = Number(c.antiRaid?.joins || 8);
+  wickRaidSecondsInput.value = Number(c.antiRaid?.seconds || 20);
+  wickRaidSlowmodeInput.value = Number(c.antiRaid?.slowmodeSeconds || 15);
+  wickAntiNukeEnabledInput.checked = c.antiNuke?.enabled !== false;
+  wickNukeChannelDeleteInput.value = Number(c.antiNuke?.maxChannelDeletePerMinute || 4);
+  wickNukeRoleDeleteInput.value = Number(c.antiNuke?.maxRoleDeletePerMinute || 3);
+  wickNukeLockdownInput.value = Number(c.antiNuke?.lockdownMinutes || 10);
+  wickLinkShieldEnabledInput.checked = c.linkShield?.enabled === true;
+  wickBlockInvitesInput.checked = c.linkShield?.blockDiscordInvites !== false;
+  wickWhitelistDomainsInput.value = Array.isArray(c.linkShield?.whitelistDomains) ? c.linkShield.whitelistDomains.join(", ") : "";
+}
+
+function resetWickForm() {
+  fillWickForm("", null);
+  setWickStatus("Bereit. Guild ID eingeben, konfigurieren und speichern.");
+}
+
+function renderWickGuilds() {
+  if (!wickGuildList) return;
+  wickGuildList.innerHTML = "";
+  const guilds = wickSettingsState && wickSettingsState.guilds && typeof wickSettingsState.guilds === "object"
+    ? wickSettingsState.guilds
+    : {};
+  const entries = Object.entries(guilds).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+
+  if (!entries.length) {
+    const li = document.createElement("li");
+    li.className = "command-empty";
+    li.textContent = "Noch keine Wick Guild-Konfiguration gespeichert.";
+    wickGuildList.appendChild(li);
+    return;
+  }
+
+  entries.forEach(([guildId, cfg]) => {
+    const li = document.createElement("li");
+    li.className = "wick-guild-card";
+
+    const header = document.createElement("div");
+    header.className = "command-card-header";
+
+    const title = document.createElement("h4");
+    title.className = "command-card-title";
+    title.textContent = guildId;
+
+    const badge = document.createElement("span");
+    badge.className = `command-chip ${cfg.enabled === false ? "chip-disabled" : "chip-enabled"}`;
+    badge.textContent = cfg.enabled === false ? "Disabled" : "Enabled";
+
+    header.appendChild(title);
+    header.appendChild(badge);
+
+    const meta = document.createElement("div");
+    meta.className = "wick-guild-meta";
+    meta.textContent = `AutoStrike: ${cfg.autoStrikeOnWarn !== false ? "on" : "off"} | Timeout 3/5: ${cfg.timeoutAt3 || 30}m/${cfg.timeoutAt5 || 1440}m | AntiRaid: ${cfg.antiRaid?.enabled !== false ? "on" : "off"} | AntiNuke: ${cfg.antiNuke?.enabled !== false ? "on" : "off"}`;
+
+    const actions = document.createElement("div");
+    actions.className = "wick-guild-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "mini-btn command-card-btn";
+    editBtn.textContent = "Edit";
+    editBtn.disabled = !canEditAdmin;
+    editBtn.addEventListener("click", () => {
+      fillWickForm(guildId, cfg);
+      setWickStatus(`Guild ${guildId} geladen.`);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "kick-btn command-card-btn";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.disabled = !canEditAdmin;
+    deleteBtn.addEventListener("click", async () => {
+      if (!window.confirm(`Wick Settings fuer Guild ${guildId} loeschen?`)) return;
+      try {
+        const next = { ...(wickSettingsState || {}), guilds: { ...(wickSettingsState.guilds || {}) } };
+        delete next.guilds[guildId];
+        const data = await postAdmin("/api/admin/wick-settings", { settings: next });
+        wickSettingsState = data?.settings || { guilds: {} };
+        renderWickGuilds();
+        setInfo(`Wick Settings fuer Guild ${guildId} geloescht.`);
+      } catch (error) {
+        setInfo(error.message || "Guild-Settings konnten nicht geloescht werden");
+      }
+    });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    li.appendChild(header);
+    li.appendChild(meta);
+    li.appendChild(actions);
+    wickGuildList.appendChild(li);
+  });
+}
+
+async function loadWickSettings() {
+  const response = await adminFetch("/api/admin/wick-settings");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Wick Settings konnten nicht geladen werden");
+  wickSettingsState = data?.settings && typeof data.settings === "object" ? data.settings : { guilds: {} };
+  renderWickGuilds();
+  if (data?.persisted === false && data?.persistError) setInfo(`Wick Warnung: ${data.persistError}`);
+  setWickStatus(`Wick Settings geladen: ${Object.keys(wickSettingsState.guilds || {}).length} Guild(s).`);
 }
 
 async function saveDiscordCommands() {
@@ -346,6 +557,7 @@ async function loadAdmin() {
     renderAiLogs(aiData.logs || []);
     setCommandEditorEnabled(canEditAdmin);
     await loadDiscordCommands();
+    await loadWickSettings();
     setInfo(`Aktualisiert (${adminData?.access?.role || "viewer"})`);
     setLoggedIn(true);
   } catch (error) {
@@ -478,6 +690,50 @@ cmdResetBtn.addEventListener("click", () => {
   setInfo("Formular zurueckgesetzt.");
 });
 
+if (wickSaveBtn) {
+  wickSaveBtn.addEventListener("click", async () => {
+    if (!canEditAdmin) {
+      setInfo("Keine Bearbeitungsrechte fuer Wick Settings.");
+      return;
+    }
+
+    const guildId = normalizeGuildId(wickGuildIdInput.value);
+    if (!guildId) {
+      setInfo("Bitte eine gueltige Guild ID angeben.");
+      return;
+    }
+
+    const next = { ...(wickSettingsState || {}), guilds: { ...(wickSettingsState.guilds || {}) } };
+    next.guilds[guildId] = wickConfigFromForm();
+
+    try {
+      const out = await postAdmin("/api/admin/wick-settings", { settings: next });
+      wickSettingsState = out?.settings || { guilds: {} };
+      renderWickGuilds();
+      const sync = out?.sync || {};
+      if (sync.attempted && !sync.ok) {
+        setInfo(`Wick Settings gespeichert. Sofort-Sync fehlgeschlagen: ${sync.error || "unknown"}.`);
+      } else if (sync.attempted && sync.ok) {
+        setInfo(`Wick Settings fuer Guild ${guildId} gespeichert und Bot synchronisiert.`);
+      } else {
+        setInfo(`Wick Settings fuer Guild ${guildId} gespeichert.`);
+      }
+      if (out?.persistPath) setWickStatus(`Gespeichert. Speicherpfad: ${out.persistPath}`);
+      else setWickStatus(`Guild ${guildId} erfolgreich gespeichert.`);
+    } catch (error) {
+      setInfo(error.message || "Wick Settings konnten nicht gespeichert werden");
+      setWickStatus("Speichern fehlgeschlagen. Eingaben und Berechtigung pruefen.");
+    }
+  });
+}
+
+if (wickResetBtn) {
+  wickResetBtn.addEventListener("click", () => {
+    resetWickForm();
+    setInfo("Wick Formular zurueckgesetzt.");
+  });
+}
+
 if (cmdModeSelect) cmdModeSelect.addEventListener("change", updateCommandModeUI);
 if (cmdSearchInput) {
   cmdSearchInput.addEventListener("input", () => {
@@ -501,12 +757,14 @@ adminKeyInput.addEventListener("input", () => {
 if (adminKey) {
   adminKeyInput.value = adminKey;
   resetCommandForm();
+  resetWickForm();
   updateCommandModeUI();
   loadAdmin();
 } else {
   setLoggedIn(false);
   setCommandEditorEnabled(false);
   resetCommandForm();
+  resetWickForm();
   updateCommandModeUI();
   setInfo("Bitte einloggen");
 }

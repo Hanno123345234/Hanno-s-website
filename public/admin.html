@@ -95,6 +95,79 @@
             <p id="cmdStatusInfo" class="subtitle"></p>
           </div>
 
+          <div id="wickSettingsSection" class="admin-box">
+            <h3>Wick Settings</h3>
+            <p class="subtitle">Wick-Style Moderation komplett im Web einstellen und live an den Bot uebergeben.</p>
+
+            <label for="wickGuildIdInput">Guild ID</label>
+            <input id="wickGuildIdInput" type="text" placeholder="1368527215343435826" autocomplete="off" />
+
+            <label for="wickLogChannelInput">Log Channel ID (optional)</label>
+            <input id="wickLogChannelInput" type="text" placeholder="1466065677986299966" autocomplete="off" />
+
+            <label><input id="wickEnabledInput" type="checkbox" checked /> Wick aktiviert</label>
+            <label><input id="wickAutoStrikeInput" type="checkbox" checked /> Auto-Strike bei Warn</label>
+
+            <div class="wick-grid-2">
+              <div>
+                <label for="wickTimeout3Input">Timeout bei 3 Strikes (Minuten)</label>
+                <input id="wickTimeout3Input" type="number" min="0" step="1" value="30" />
+              </div>
+              <div>
+                <label for="wickTimeout5Input">Timeout bei 5 Strikes (Minuten)</label>
+                <input id="wickTimeout5Input" type="number" min="0" step="1" value="1440" />
+              </div>
+            </div>
+
+            <h4>Anti Raid</h4>
+            <label><input id="wickAntiRaidEnabledInput" type="checkbox" checked /> Aktiv</label>
+            <div class="wick-grid-3">
+              <div>
+                <label for="wickRaidJoinsInput">Joins Threshold</label>
+                <input id="wickRaidJoinsInput" type="number" min="2" step="1" value="8" />
+              </div>
+              <div>
+                <label for="wickRaidSecondsInput">Innerhalb Sekunden</label>
+                <input id="wickRaidSecondsInput" type="number" min="5" step="1" value="20" />
+              </div>
+              <div>
+                <label for="wickRaidSlowmodeInput">Slowmode Sekunden</label>
+                <input id="wickRaidSlowmodeInput" type="number" min="0" step="1" value="15" />
+              </div>
+            </div>
+
+            <h4>Anti Nuke</h4>
+            <label><input id="wickAntiNukeEnabledInput" type="checkbox" checked /> Aktiv</label>
+            <div class="wick-grid-3">
+              <div>
+                <label for="wickNukeChannelDeleteInput">Max Channel Deletes/Min</label>
+                <input id="wickNukeChannelDeleteInput" type="number" min="1" step="1" value="4" />
+              </div>
+              <div>
+                <label for="wickNukeRoleDeleteInput">Max Role Deletes/Min</label>
+                <input id="wickNukeRoleDeleteInput" type="number" min="1" step="1" value="3" />
+              </div>
+              <div>
+                <label for="wickNukeLockdownInput">Lockdown Minuten</label>
+                <input id="wickNukeLockdownInput" type="number" min="1" step="1" value="10" />
+              </div>
+            </div>
+
+            <h4>Link Shield</h4>
+            <label><input id="wickLinkShieldEnabledInput" type="checkbox" /> Aktiv</label>
+            <label><input id="wickBlockInvitesInput" type="checkbox" checked /> Discord Invites blocken</label>
+            <label for="wickWhitelistDomainsInput">Whitelist Domains (Komma getrennt)</label>
+            <textarea id="wickWhitelistDomainsInput" rows="3" placeholder="youtube.com, twitch.tv, discord.com"></textarea>
+
+            <div class="stack">
+              <button id="wickSaveBtn" class="primary" type="button">Wick Settings speichern</button>
+              <button id="wickResetBtn" class="mini-btn" type="button">Formular leeren</button>
+            </div>
+
+            <ul id="wickGuildList" class="player-list command-card-grid"></ul>
+            <p id="wickStatusInfo" class="subtitle"></p>
+          </div>
+
           <div class="player-list-wrap">
             <h3>KI Chat Logs</h3>
             <ul id="aiLogList" class="player-list"></ul>

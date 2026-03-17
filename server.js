@@ -63,20 +63,33 @@ const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
 const SCRIMS_CREATE_HISTORY_PATH = path.join(__dirname, "scrims_create_history.json");
 const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
 const DISCORD_COMMANDS_FALLBACK_PATH = path.join(os.tmpdir(), "hanno_discord_commands.json");
+const WICK_SETTINGS_PATH = path.join(__dirname, "wick_settings.json");
+const WICK_SETTINGS_FALLBACK_PATH = path.join(os.tmpdir(), "hanno_wick_settings.json");
 const DISCORD_COMMANDS_STORAGE = String(process.env.DISCORD_COMMANDS_STORAGE || "github").trim().toLowerCase();
 const DISCORD_COMMANDS_GITHUB_REPO = String(process.env.DISCORD_COMMANDS_GITHUB_REPO || "Hanno123345234/Hanno-s-website").trim();
 const DISCORD_COMMANDS_GITHUB_PATH = String(process.env.DISCORD_COMMANDS_GITHUB_PATH || "data/discord_commands.json").trim();
 const DISCORD_COMMANDS_GITHUB_BRANCH = String(process.env.DISCORD_COMMANDS_GITHUB_BRANCH || "main").trim();
 const DISCORD_COMMANDS_GITHUB_TOKEN = String(process.env.DISCORD_COMMANDS_GITHUB_TOKEN || GITHUB_TOKEN).trim();
+const WICK_SETTINGS_GITHUB_REPO = String(process.env.WICK_SETTINGS_GITHUB_REPO || DISCORD_COMMANDS_GITHUB_REPO).trim();
+const WICK_SETTINGS_GITHUB_PATH = String(process.env.WICK_SETTINGS_GITHUB_PATH || "data/wick_settings.json").trim();
+const WICK_SETTINGS_GITHUB_BRANCH = String(process.env.WICK_SETTINGS_GITHUB_BRANCH || DISCORD_COMMANDS_GITHUB_BRANCH).trim();
+const WICK_SETTINGS_GITHUB_TOKEN = String(process.env.WICK_SETTINGS_GITHUB_TOKEN || DISCORD_COMMANDS_GITHUB_TOKEN).trim();
 const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
 const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "true").trim().toLowerCase() === "true";
 const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
 const BOT_DYNAMIC_COMMANDS_REFRESH_KEY = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_KEY || "").trim();
+const BOT_WICK_SETTINGS_REFRESH_URL = String(process.env.BOT_WICK_SETTINGS_REFRESH_URL || BOT_DYNAMIC_COMMANDS_REFRESH_URL).trim();
+const BOT_WICK_SETTINGS_REFRESH_KEY = String(process.env.BOT_WICK_SETTINGS_REFRESH_KEY || BOT_DYNAMIC_COMMANDS_REFRESH_KEY).trim();
 let discordCommandsCache = null;
 let discordCommandsPersistOk = true;
 let discordCommandsPersistError = null;
 let discordCommandsPersistPath = DISCORD_COMMANDS_PATH;
 let discordCommandsGithubSha = null;
+let wickSettingsCache = null;
+let wickSettingsPersistOk = true;
+let wickSettingsPersistError = null;
+let wickSettingsPersistPath = WICK_SETTINGS_PATH;
+let wickSettingsGithubSha = null;
 const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -248,6 +261,231 @@ function normalizeDiscordCommandList(list = []) {
   }
   normalized.sort((a, b) => a.trigger.localeCompare(b.trigger));
   return normalized;
+}
+
+function canUseGithubWickStorage() {
+  return DISCORD_COMMANDS_STORAGE === "github"
+    && !!WICK_SETTINGS_GITHUB_REPO
+    && !!WICK_SETTINGS_GITHUB_PATH
+    && !!WICK_SETTINGS_GITHUB_BRANCH
+    && !!WICK_SETTINGS_GITHUB_TOKEN;
+}
+
+function wickSettingsStorageLabel() {
+  return `github:${WICK_SETTINGS_GITHUB_REPO}/${WICK_SETTINGS_GITHUB_PATH}@${WICK_SETTINGS_GITHUB_BRANCH}`;
+}
+
+function normalizeWickGuildConfig(raw = {}) {
+  const out = {
+    enabled: raw?.enabled !== false,
+    logChannelId: String(raw?.logChannelId || "").trim() || null,
+    autoStrikeOnWarn: raw?.autoStrikeOnWarn !== false,
+    timeoutAt3: Math.max(0, Number(raw?.timeoutAt3 || 30) || 30),
+    timeoutAt5: Math.max(0, Number(raw?.timeoutAt5 || 1440) || 1440),
+    antiRaid: {
+      enabled: raw?.antiRaid?.enabled !== false,
+      joins: Math.max(2, Number(raw?.antiRaid?.joins || 8) || 8),
+      seconds: Math.max(5, Number(raw?.antiRaid?.seconds || 20) || 20),
+      slowmodeSeconds: Math.max(0, Number(raw?.antiRaid?.slowmodeSeconds || 15) || 15)
+    },
+    antiNuke: {
+      enabled: raw?.antiNuke?.enabled !== false,
+      maxChannelDeletePerMinute: Math.max(1, Number(raw?.antiNuke?.maxChannelDeletePerMinute || 4) || 4),
+      maxRoleDeletePerMinute: Math.max(1, Number(raw?.antiNuke?.maxRoleDeletePerMinute || 3) || 3),
+      lockdownMinutes: Math.max(1, Number(raw?.antiNuke?.lockdownMinutes || 10) || 10)
+    },
+    linkShield: {
+      enabled: raw?.linkShield?.enabled === true,
+      blockDiscordInvites: raw?.linkShield?.blockDiscordInvites !== false,
+      whitelistDomains: Array.isArray(raw?.linkShield?.whitelistDomains)
+        ? raw.linkShield.whitelistDomains.map((s) => String(s || "").trim().toLowerCase()).filter(Boolean).slice(0, 200)
+        : []
+    },
+    updatedAt: new Date().toISOString()
+  };
+  return out;
+}
+
+function normalizeWickSettingsState(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const guildsIn = src?.guilds && typeof src.guilds === "object" ? src.guilds : {};
+  const guildsOut = {};
+  for (const [guildIdRaw, value] of Object.entries(guildsIn)) {
+    const guildId = String(guildIdRaw || "").trim();
+    if (!/^\d{5,30}$/.test(guildId)) continue;
+    guildsOut[guildId] = normalizeWickGuildConfig(value || {});
+  }
+  return {
+    guilds: guildsOut,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+async function fetchWickSettingsFromGithub() {
+  const apiUrl = `https://api.github.com/repos/${WICK_SETTINGS_GITHUB_REPO}/contents/${encodeURIComponent(WICK_SETTINGS_GITHUB_PATH).replace(/%2F/g, "/")}?ref=${encodeURIComponent(WICK_SETTINGS_GITHUB_BRANCH)}`;
+  const response = await fetch(apiUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${WICK_SETTINGS_GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "hanno-wick-storage"
+    },
+    signal: AbortSignal.timeout(10_000)
+  });
+
+  if (response.status === 404) {
+    wickSettingsGithubSha = null;
+    return { state: { guilds: {} }, sha: null };
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload?.message || `GitHub read failed (${response.status})`));
+  }
+
+  const b64 = String(payload?.content || "").replace(/\n/g, "");
+  const decoded = b64 ? Buffer.from(b64, "base64").toString("utf8") : "{}";
+  const parsed = JSON.parse(decoded || "{}");
+  return {
+    state: normalizeWickSettingsState(parsed),
+    sha: String(payload?.sha || "") || null
+  };
+}
+
+async function saveWickSettingsToGithub(state) {
+  const contentB64 = Buffer.from(JSON.stringify(state, null, 2), "utf8").toString("base64");
+  const apiUrl = `https://api.github.com/repos/${WICK_SETTINGS_GITHUB_REPO}/contents/${encodeURIComponent(WICK_SETTINGS_GITHUB_PATH).replace(/%2F/g, "/")}`;
+  const body = {
+    message: `update wick settings (${new Date().toISOString()})`,
+    content: contentB64,
+    branch: WICK_SETTINGS_GITHUB_BRANCH
+  };
+  if (wickSettingsGithubSha) body.sha = wickSettingsGithubSha;
+
+  const response = await fetch(apiUrl, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${WICK_SETTINGS_GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "hanno-wick-storage"
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000)
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload?.message || `GitHub write failed (${response.status})`));
+  }
+
+  wickSettingsGithubSha = String(payload?.content?.sha || payload?.commit?.sha || "") || wickSettingsGithubSha;
+}
+
+async function loadWickSettings() {
+  if (wickSettingsCache && typeof wickSettingsCache === "object") return JSON.parse(JSON.stringify(wickSettingsCache));
+
+  if (canUseGithubWickStorage()) {
+    try {
+      const remote = await fetchWickSettingsFromGithub();
+      wickSettingsCache = remote.state;
+      wickSettingsGithubSha = remote.sha || null;
+      wickSettingsPersistOk = true;
+      wickSettingsPersistError = null;
+      wickSettingsPersistPath = wickSettingsStorageLabel();
+      return JSON.parse(JSON.stringify(wickSettingsCache));
+    } catch (error) {
+      wickSettingsPersistOk = false;
+      wickSettingsPersistError = `GitHub read failed, fallback active: ${String(error?.message || error)}`;
+    }
+  }
+
+  let raw = scrimsLoadJson(WICK_SETTINGS_PATH, null);
+  if (!raw || typeof raw !== "object") {
+    raw = scrimsLoadJson(WICK_SETTINGS_FALLBACK_PATH, { guilds: {} });
+    if (raw && typeof raw === "object") wickSettingsPersistPath = WICK_SETTINGS_FALLBACK_PATH;
+  }
+
+  wickSettingsCache = normalizeWickSettingsState(raw || { guilds: {} });
+  return JSON.parse(JSON.stringify(wickSettingsCache));
+}
+
+async function saveWickSettings(inputState) {
+  const state = normalizeWickSettingsState(inputState);
+  wickSettingsCache = state;
+
+  if (canUseGithubWickStorage()) {
+    try {
+      if (!wickSettingsGithubSha) {
+        const current = await fetchWickSettingsFromGithub();
+        wickSettingsGithubSha = current.sha || null;
+      }
+      await saveWickSettingsToGithub(state);
+      wickSettingsPersistOk = true;
+      wickSettingsPersistError = null;
+      wickSettingsPersistPath = wickSettingsStorageLabel();
+      return JSON.parse(JSON.stringify(state));
+    } catch (error) {
+      wickSettingsPersistOk = false;
+      wickSettingsPersistError = `GitHub write failed, fallback active: ${String(error?.message || error)}`;
+    }
+  }
+
+  const wrotePrimary = scrimsSaveJson(WICK_SETTINGS_PATH, state);
+  if (wrotePrimary) {
+    wickSettingsPersistOk = true;
+    wickSettingsPersistError = null;
+    wickSettingsPersistPath = WICK_SETTINGS_PATH;
+    return JSON.parse(JSON.stringify(state));
+  }
+
+  const wroteFallback = scrimsSaveJson(WICK_SETTINGS_FALLBACK_PATH, state);
+  if (wroteFallback) {
+    wickSettingsPersistOk = true;
+    wickSettingsPersistError = `Primary path not writable, using fallback: ${WICK_SETTINGS_FALLBACK_PATH}`;
+    wickSettingsPersistPath = WICK_SETTINGS_FALLBACK_PATH;
+    return JSON.parse(JSON.stringify(state));
+  }
+
+  wickSettingsPersistOk = false;
+  wickSettingsPersistError = "Failed to write Wick settings file on primary and fallback paths (using in-memory cache).";
+  return JSON.parse(JSON.stringify(state));
+}
+
+async function notifyBotWickSettingsRefresh() {
+  if (!BOT_WICK_SETTINGS_REFRESH_URL) {
+    return { attempted: false, ok: false, error: "BOT_WICK_SETTINGS_REFRESH_URL not configured" };
+  }
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (BOT_WICK_SETTINGS_REFRESH_KEY) headers["x-refresh-key"] = BOT_WICK_SETTINGS_REFRESH_KEY;
+    const response = await fetch(BOT_WICK_SETTINGS_REFRESH_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ reason: "wick_settings_save" }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        attempted: true,
+        ok: false,
+        error: String(payload?.error || `HTTP ${response.status}`)
+      };
+    }
+    return {
+      attempted: true,
+      ok: true,
+      status: response.status,
+      source: payload?.source || null
+    };
+  } catch (error) {
+    return {
+      attempted: true,
+      ok: false,
+      error: String(error?.message || "refresh notify failed")
+    };
+  }
 }
 
 async function fetchDiscordCommandsFromGithub() {
@@ -791,6 +1029,29 @@ app.get("/api/discord-commands", async (req, res) => {
     persisted: discordCommandsPersistOk,
     persistError: discordCommandsPersistError,
     persistPath: discordCommandsPersistPath
+  });
+});
+
+app.get("/api/wick-settings", async (req, res) => {
+  const provided = String(req.get("x-bot-key") || req.query.key || "").trim();
+  const hasConfiguredKey = !!DISCORD_COMMANDS_BOT_KEY;
+  const keyMatches = hasConfiguredKey && !!provided && provided === DISCORD_COMMANDS_BOT_KEY;
+
+  if (!keyMatches) {
+    if (!(DISCORD_COMMANDS_ALLOW_PUBLIC_READ || !hasConfiguredKey)) {
+      res.status(401).json({ ok: false, error: "Unauthorized bot key." });
+      return;
+    }
+  }
+
+  const state = await loadWickSettings();
+  res.json({
+    ok: true,
+    settings: state,
+    authMode: keyMatches ? "key" : "public",
+    persisted: wickSettingsPersistOk,
+    persistError: wickSettingsPersistError,
+    persistPath: wickSettingsPersistPath
   });
 });
 
@@ -1769,6 +2030,57 @@ app.post("/api/admin/discord-commands", async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: String(error?.message || "Failed to save commands") });
+  }
+});
+
+app.get("/api/admin/wick-settings", async (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+  const settings = await loadWickSettings();
+  res.json({
+    ok: true,
+    settings,
+    persisted: wickSettingsPersistOk,
+    persistError: wickSettingsPersistError,
+    persistPath: wickSettingsPersistPath
+  });
+});
+
+app.post("/api/admin/wick-settings", async (req, res) => {
+  const auth = requireAdminRole(req, res, "editor");
+  if (!auth) return;
+
+  const session = scrimsGetSession(req);
+  if (!session) {
+    res.status(401).json({ ok: false, error: "Bitte zuerst mit Discord einloggen." });
+    return;
+  }
+
+  const rawSettings = req.body?.settings;
+  if (!rawSettings || typeof rawSettings !== "object") {
+    res.status(400).json({ ok: false, error: "settings must be an object." });
+    return;
+  }
+
+  try {
+    const saved = await saveWickSettings(rawSettings);
+    const sync = await notifyBotWickSettingsRefresh();
+    logModerationAction("wick_settings_update", {
+      by: `${auth.source || "admin"} (${session.username}/${session.id})`,
+      guilds: Object.keys(saved.guilds || {}).length,
+      sync: sync.ok ? "ok" : (sync.attempted ? "failed" : "skipped")
+    });
+
+    res.json({
+      ok: true,
+      settings: saved,
+      sync,
+      persisted: wickSettingsPersistOk,
+      persistError: wickSettingsPersistError,
+      persistPath: wickSettingsPersistPath
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: String(error?.message || "Failed to save Wick settings") });
   }
 });
 
