@@ -1996,10 +1996,7 @@ app.post("/api/admin/discord-commands", async (req, res) => {
   if (!auth) return;
 
   const session = scrimsGetSession(req);
-  if (!session) {
-    res.status(401).json({ ok: false, error: "Bitte zuerst mit Discord einloggen." });
-    return;
-  }
+  const actor = session ? `${auth.source || "admin"} (${session.username}/${session.id})` : (auth.source || "admin");
 
   const rawCommands = Array.isArray(req.body?.commands) ? req.body.commands : null;
   if (!rawCommands) {
@@ -2016,7 +2013,7 @@ app.post("/api/admin/discord-commands", async (req, res) => {
     const saved = await saveDiscordCommands(rawCommands);
     const sync = await notifyBotDynamicCommandsRefresh();
     logModerationAction("discord_commands_update", {
-      by: `${auth.source || "admin"} (${session.username}/${session.id})`,
+      by: actor,
       count: saved.length,
       sync: sync.ok ? "ok" : (sync.attempted ? "failed" : "skipped")
     });
@@ -2051,10 +2048,7 @@ app.post("/api/admin/wick-settings", async (req, res) => {
   if (!auth) return;
 
   const session = scrimsGetSession(req);
-  if (!session) {
-    res.status(401).json({ ok: false, error: "Bitte zuerst mit Discord einloggen." });
-    return;
-  }
+  const actor = session ? `${auth.source || "admin"} (${session.username}/${session.id})` : (auth.source || "admin");
 
   const rawSettings = req.body?.settings;
   if (!rawSettings || typeof rawSettings !== "object") {
@@ -2066,7 +2060,7 @@ app.post("/api/admin/wick-settings", async (req, res) => {
     const saved = await saveWickSettings(rawSettings);
     const sync = await notifyBotWickSettingsRefresh();
     logModerationAction("wick_settings_update", {
-      by: `${auth.source || "admin"} (${session.username}/${session.id})`,
+      by: actor,
       guilds: Object.keys(saved.guilds || {}).length,
       sync: sync.ok ? "ok" : (sync.attempted ? "failed" : "skipped")
     });
