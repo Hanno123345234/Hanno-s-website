@@ -60,6 +60,7 @@ const SCRIMS_DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || "
 const SCRIMS_DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || process.env.TOKEN || process.env.BOT_TOKEN || process.env.DISCORD_BOT_TOKEN || "").trim();
 const SCRIMS_GUILD_ID = String(process.env.SCRIMS_GUILD_ID || process.env.DISCORD_GUILD_ID || process.env.GUILD_ID || "").trim();
 const SCRIMS_DROPMAP_PATH = path.join(__dirname, "dropmap_web_marks.json");
+const SCRIMS_CREATE_HISTORY_PATH = path.join(__dirname, "scrims_create_history.json");
 const DISCORD_COMMANDS_PATH = path.join(__dirname, "discord_commands.json");
 const DISCORD_COMMANDS_FALLBACK_PATH = path.join(os.tmpdir(), "hanno_discord_commands.json");
 const DISCORD_COMMANDS_STORAGE = String(process.env.DISCORD_COMMANDS_STORAGE || "github").trim().toLowerCase();
@@ -174,6 +175,15 @@ function scrimsSaveJson(filePath, data) {
   } catch (error) {
     return false;
   }
+}
+
+function appendScrimsCreateHistory(entry) {
+  const maxEntries = 2000;
+  const state = scrimsLoadJson(SCRIMS_CREATE_HISTORY_PATH, { entries: [] });
+  const list = Array.isArray(state && state.entries) ? state.entries : [];
+  list.push({ at: new Date().toISOString(), ...entry });
+  if (list.length > maxEntries) list.splice(0, list.length - maxEntries);
+  return scrimsSaveJson(SCRIMS_CREATE_HISTORY_PATH, { entries: list });
 }
 
 function normalizeHexColor(raw, fallback = "#87CEFA") {
@@ -884,9 +894,26 @@ app.post("/api/dropmap/clear", async (req, res) => {
 });
 
 app.post("/api/scrims/create-lobby", async (req, res) => {
+  const session = scrimsGetSession(req);
+  if (!session) {
+    res.status(401).json({
+      ok: false,
+      error: "Bitte zuerst mit deinem Discord Account verbinden."
+    });
+    return;
+  }
+
   try {
     const missing = scrimsMissingConfig(req.body || {});
     if (missing.length) {
+      appendScrimsCreateHistory({
+        ok: false,
+        userId: session.id,
+        username: session.username,
+        reason: "missing_config",
+        missing,
+        payload: req.body || {}
+      });
       res.status(400).json({
         ok: false,
         error: `Fehlende Konfiguration: ${missing.join(", ")}`,
@@ -895,8 +922,22 @@ app.post("/api/scrims/create-lobby", async (req, res) => {
       return;
     }
     const out = await scrimsCreateLobbyLocal(req.body || {});
+    appendScrimsCreateHistory({
+      ok: true,
+      userId: session.id,
+      username: session.username,
+      payload: req.body || {},
+      result: out
+    });
     res.status(200).json(out);
   } catch (error) {
+    appendScrimsCreateHistory({
+      ok: false,
+      userId: session.id,
+      username: session.username,
+      reason: String(error?.message || "Lobby creation failed"),
+      payload: req.body || {}
+    });
     res.status(400).json({
       ok: false,
       error: String(error?.message || "Lobby creation failed")
@@ -1693,6 +1734,12 @@ app.post("/api/admin/discord-commands", async (req, res) => {
   const auth = requireAdminRole(req, res, "editor");
   if (!auth) return;
 
+  const session = scrimsGetSession(req);
+  if (!session) {
+    res.status(401).json({ ok: false, error: "Bitte zuerst mit Discord einloggen." });
+    return;
+  }
+
   const rawCommands = Array.isArray(req.body?.commands) ? req.body.commands : null;
   if (!rawCommands) {
     res.status(400).json({ ok: false, error: "commands must be an array." });
@@ -1708,7 +1755,7 @@ app.post("/api/admin/discord-commands", async (req, res) => {
     const saved = await saveDiscordCommands(rawCommands);
     const sync = await notifyBotDynamicCommandsRefresh();
     logModerationAction("discord_commands_update", {
-      by: auth.source || "admin",
+      by: `${auth.source || "admin"} (${session.username}/${session.id})`,
       count: saved.length,
       sync: sync.ok ? "ok" : (sync.attempted ? "failed" : "skipped")
     });

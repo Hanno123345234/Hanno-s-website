@@ -10,6 +10,7 @@ const submitBtn = form.querySelector('button[type="submit"]');
 
 const API_BASE = String(window.SCRIMS_API_BASE || "").trim().replace(/\/+$/, "");
 const SCRIMS_GUILD_ID = String(window.SCRIMS_GUILD_ID || "").trim();
+let isDiscordConnected = false;
 
 function apiUrl(path) {
   return API_BASE ? `${API_BASE}${path}` : path;
@@ -44,6 +45,12 @@ resetBtn.addEventListener("click", () => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+
+  if (!isDiscordConnected) {
+    resultText.textContent = "Bitte zuerst mit Discord verbinden: /auth/discord";
+    resultBox.hidden = false;
+    return;
+  }
 
   const payload = {
     session: Number(document.getElementById("session").value),
@@ -81,6 +88,26 @@ form.addEventListener("submit", async (event) => {
 
 refreshPriorityTimes();
 
+async function loadDiscordSession() {
+  try {
+    const response = await fetch(apiUrl("/api/me"), { credentials: "include" });
+    const data = await response.json().catch(() => ({}));
+    isDiscordConnected = Boolean(response.ok && data && data.user && data.user.id);
+    if (!isDiscordConnected) {
+      submitBtn.disabled = true;
+      resultText.textContent = "Discord nicht verbunden. Bitte zuerst einloggen: /auth/discord";
+      resultBox.hidden = false;
+      return;
+    }
+    submitBtn.disabled = false;
+  } catch (error) {
+    isDiscordConnected = false;
+    submitBtn.disabled = true;
+    resultText.textContent = "Discord-Session konnte nicht geprueft werden. Bitte erneut einloggen.";
+    resultBox.hidden = false;
+  }
+}
+
 async function checkScrimsHealth() {
   try {
     const response = await fetch(apiUrl("/api/scrims/health"));
@@ -98,3 +125,4 @@ async function checkScrimsHealth() {
 }
 
 checkScrimsHealth();
+loadDiscordSession();
