@@ -29,6 +29,30 @@
         color: #cae8ff;
       }
 
+      .promo-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .promo-card {
+        border: 1px solid rgba(109, 208, 255, 0.28);
+        border-radius: 12px;
+        background: rgba(8, 22, 44, 0.7);
+        padding: 10px;
+      }
+
+      .promo-card h3 {
+        margin: 0 0 6px;
+        font-size: 0.95rem;
+      }
+
+      .promo-card p {
+        margin: 0;
+        font-size: 0.84rem;
+        color: var(--muted);
+      }
+
       .clip-header {
         display: flex;
         justify-content: space-between;
@@ -157,6 +181,48 @@
         font-size: 0.85rem;
       }
 
+      .gallery-tools {
+        display: grid;
+        gap: 10px;
+      }
+
+      .gallery-search {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(7, 13, 30, 0.76);
+        color: var(--text);
+        min-height: 40px;
+        padding: 8px 10px;
+      }
+
+      .gallery-admin-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+      }
+
+      .gallery-admin-key {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(7, 13, 30, 0.76);
+        color: var(--text);
+        min-height: 40px;
+        padding: 8px 10px;
+      }
+
+      .gallery-admin-btn {
+        border: 1px solid rgba(120, 200, 255, 0.35);
+        border-radius: 10px;
+        background: rgba(8, 24, 48, 0.75);
+        color: #d2e9ff;
+        min-height: 40px;
+        padding: 8px 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
       .gallery-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -194,7 +260,7 @@
 
       .clip-card-actions {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
         gap: 8px;
       }
 
@@ -220,6 +286,12 @@
         border: 1px dashed rgba(161, 196, 255, 0.35);
         border-radius: 10px;
         padding: 10px;
+      }
+
+      .gallery-admin-info {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
       }
 
       .modmail-shell {
@@ -286,6 +358,14 @@
           grid-template-columns: 1fr;
         }
 
+        .promo-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .gallery-admin-row {
+          grid-template-columns: 1fr;
+        }
+
         .modmail-grid {
           grid-template-columns: 1fr;
         }
@@ -306,12 +386,26 @@
             <h1 class="clip-title">ClipDrop</h1>
             <p class="clip-subtitle">Upload your gameplay clip and instantly get a public share link.</p>
           </div>
-          <span class="home-link" aria-label="Service mode">Public Clip Hosting</span>
         </header>
 
         <section class="promo-strip" aria-label="Promotion">
           Built for creators, teams, and communities.
-          <small>Fast upload. Instant link. Mobile-friendly player. No account needed.</small>
+          <small>Fast upload. Instant share link. Mobile-friendly player. No account needed.</small>
+        </section>
+
+        <section class="promo-grid" aria-label="Why ClipDrop">
+          <article class="promo-card">
+            <h3>Share in Seconds</h3>
+            <p>Drop your clip, copy one clean link, and send it everywhere instantly.</p>
+          </article>
+          <article class="promo-card">
+            <h3>Always on Brand</h3>
+            <p>Professional clip pages that look premium on desktop and mobile.</p>
+          </article>
+          <article class="promo-card">
+            <h3>Auto Cleanup</h3>
+            <p>Your storage stays clean with automatic retention and managed lifecycle.</p>
+          </article>
         </section>
 
         <section class="modmail-shell" aria-label="Report issue or request changes">
@@ -375,10 +469,6 @@
             <label for="shareUrl">Share link</label>
             <input id="shareUrl" type="text" readonly />
           </div>
-          <div class="clip-result-row">
-            <label for="videoUrl">Direct video URL</label>
-            <input id="videoUrl" type="text" readonly />
-          </div>
           <button id="copyBtn" class="home-link" type="button">Copy share link</button>
         </section>
 
@@ -387,6 +477,14 @@
             <h2 class="gallery-title">Latest Clips</h2>
             <p id="retentionInfo" class="gallery-meta"></p>
           </header>
+          <div class="gallery-tools">
+            <input id="gallerySearchInput" class="gallery-search" type="search" placeholder="Search clips by title or filename" autocomplete="off" />
+            <div class="gallery-admin-row">
+              <input id="galleryAdminKeyInput" class="gallery-admin-key" type="password" placeholder="Admin key (required for delete)" autocomplete="off" />
+              <button id="galleryAdminKeyBtn" class="gallery-admin-btn" type="button">Unlock Delete</button>
+            </div>
+            <p id="galleryAdminInfo" class="gallery-admin-info">Delete actions are protected. Use admin key to unlock clip deletion.</p>
+          </div>
           <p id="galleryEmpty" class="gallery-empty">Loading gallery...</p>
           <div id="galleryGrid" class="gallery-grid" hidden></div>
         </section>
@@ -401,11 +499,14 @@
       const clipResult = document.getElementById("clipResult");
       const clipError = document.getElementById("clipError");
       const shareUrlInput = document.getElementById("shareUrl");
-      const videoUrlInput = document.getElementById("videoUrl");
       const copyBtn = document.getElementById("copyBtn");
       const galleryGrid = document.getElementById("galleryGrid");
       const galleryEmpty = document.getElementById("galleryEmpty");
       const retentionInfo = document.getElementById("retentionInfo");
+      const gallerySearchInput = document.getElementById("gallerySearchInput");
+      const galleryAdminKeyInput = document.getElementById("galleryAdminKeyInput");
+      const galleryAdminKeyBtn = document.getElementById("galleryAdminKeyBtn");
+      const galleryAdminInfo = document.getElementById("galleryAdminInfo");
       const modmailForm = document.getElementById("modmailForm");
       const modmailType = document.getElementById("modmailType");
       const modmailContact = document.getElementById("modmailContact");
@@ -413,6 +514,10 @@
       const modmailMessage = document.getElementById("modmailMessage");
       const modmailResult = document.getElementById("modmailResult");
       const modmailSubmitBtn = document.getElementById("modmailSubmitBtn");
+      const ADMIN_KEY_STORAGE = "clip_admin_key_v1";
+      let galleryClips = [];
+      let adminKey = String(window.localStorage.getItem(ADMIN_KEY_STORAGE) || "").trim();
+      if (adminKey) galleryAdminKeyInput.value = adminKey;
 
       function showError(message) {
         clipError.textContent = String(message || "Unknown error.");
@@ -426,7 +531,6 @@
 
       function showResult(data) {
         shareUrlInput.value = data.shareUrl || "";
-        videoUrlInput.value = data.videoUrl || "";
         clipResult.classList.add("show");
       }
 
@@ -469,6 +573,49 @@
             fallbackInput.select();
           }
         }
+      }
+
+      function normalizeSearch(text) {
+        return String(text || "").trim().toLowerCase();
+      }
+
+      function getFilteredClips() {
+        const q = normalizeSearch(gallerySearchInput.value);
+        if (!q) return galleryClips.slice();
+        return galleryClips.filter((item) => {
+          const title = String(item.title || "").toLowerCase();
+          const original = String(item.originalName || "").toLowerCase();
+          const id = String(item.id || "").toLowerCase();
+          return title.includes(q) || original.includes(q) || id.includes(q);
+        });
+      }
+
+      function updateGalleryAdminInfo() {
+        const hasKey = !!String(adminKey || "").trim();
+        galleryAdminInfo.textContent = hasKey
+          ? "Delete unlocked. You can remove clips from storage."
+          : "Delete actions are protected. Use admin key to unlock clip deletion.";
+      }
+
+      async function deleteClipById(clipId) {
+        const key = String(adminKey || "").trim();
+        if (!key) {
+          showError("Admin key is required to delete clips.");
+          return false;
+        }
+        const response = await fetch("/api/admin/clips/delete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-key": key
+          },
+          body: JSON.stringify({ id: clipId })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "Could not delete clip.");
+        }
+        return true;
       }
 
       function createClipCard(item) {
@@ -516,22 +663,48 @@
         });
         actions.appendChild(copyBtnInline);
 
+        const deleteBtnInline = document.createElement("button");
+        deleteBtnInline.className = "clip-action";
+        deleteBtnInline.type = "button";
+        deleteBtnInline.textContent = "Delete";
+        deleteBtnInline.disabled = !String(adminKey || "").trim();
+        deleteBtnInline.addEventListener("click", async () => {
+          if (!window.confirm("Delete this clip permanently?")) return;
+          try {
+            deleteBtnInline.disabled = true;
+            await deleteClipById(item.id);
+            galleryClips = galleryClips.filter((entry) => entry.id !== item.id);
+            renderGallery();
+          } catch (error) {
+            showError(error && error.message ? error.message : "Delete failed.");
+          } finally {
+            deleteBtnInline.disabled = !String(adminKey || "").trim();
+          }
+        });
+        actions.appendChild(deleteBtnInline);
+
         article.appendChild(actions);
         return article;
       }
 
       function renderGallery(payload) {
-        const clips = Array.isArray(payload && payload.clips) ? payload.clips : [];
-        const retentionDays = Number(payload && payload.retentionDays);
-        retentionInfo.textContent = Number.isFinite(retentionDays)
-          ? `Auto-delete after ${retentionDays} days`
-          : "Auto-delete active";
+        if (payload && Array.isArray(payload.clips)) {
+          galleryClips = payload.clips.slice();
+          const retentionDays = Number(payload.retentionDays);
+          retentionInfo.textContent = Number.isFinite(retentionDays)
+            ? `Auto-delete after ${retentionDays} days`
+            : "Auto-delete active";
+        }
+
+        const clips = getFilteredClips();
 
         galleryGrid.replaceChildren();
         if (!clips.length) {
           galleryGrid.hidden = true;
           galleryEmpty.hidden = false;
-          galleryEmpty.textContent = "No clips uploaded yet.";
+          galleryEmpty.textContent = galleryClips.length
+            ? "No clips match your search."
+            : "No clips uploaded yet.";
           return;
         }
 
@@ -662,6 +835,22 @@
         }
       });
 
+      gallerySearchInput.addEventListener("input", () => {
+        renderGallery();
+      });
+
+      galleryAdminKeyBtn.addEventListener("click", () => {
+        adminKey = String(galleryAdminKeyInput.value || "").trim();
+        if (adminKey) {
+          window.localStorage.setItem(ADMIN_KEY_STORAGE, adminKey);
+        } else {
+          window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+        }
+        updateGalleryAdminInfo();
+        renderGallery();
+      });
+
+      updateGalleryAdminInfo();
       loadGallery();
     </script>
   </body>

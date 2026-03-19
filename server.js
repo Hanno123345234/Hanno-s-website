@@ -308,6 +308,22 @@ function clipsPurgeExpired(reason = "scheduled") {
   }
 }
 
+function clipsDeleteById(clipId = "", reason = "manual", deletedBy = "admin") {
+  const id = String(clipId || "").trim();
+  if (!id) return { ok: false, error: "Missing clip id." };
+
+  const index = clipsLoadIndex();
+  const item = index?.items?.[id];
+  if (!item) return { ok: false, error: "Clip not found." };
+
+  clipsTryDeleteFile(item.fileName);
+  delete index.items[id];
+  clipsSaveIndex(index);
+  console.log(`[clips] Deleted ${id} (${reason}) by ${deletedBy}`);
+
+  return { ok: true, item };
+}
+
 function modmailLoadState() {
   const state = scrimsLoadJson(MODMAIL_STORE_PATH, { items: [] });
   if (!state || typeof state !== "object") return { items: [] };
@@ -2463,6 +2479,47 @@ app.get("/api/admin/modmail", (req, res) => {
     },
     items: items.slice(0, 500)
   });
+});
+
+app.get("/api/admin/clips", (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+
+  clipsPurgeExpired("admin-list");
+  const index = clipsLoadIndex();
+  const list = clipsListLatest(index, req.query.limit || 100);
+  res.json({
+    ok: true,
+    access: {
+      role: auth.role,
+      canEdit: hasAdminRole(auth.role, "editor")
+    },
+    clips: list.map((item) => ({
+      id: item.id,
+      title: item.title || "",
+      originalName: item.originalName || "",
+      uploadedAt: item.uploadedAt || "",
+      size: Number(item.size || 0),
+      mimeType: item.mimeType || "video/mp4",
+      sharePath: clipsBuildSharePath(item.id),
+      videoPath: clipsBuildVideoPath(item.fileName)
+    }))
+  });
+});
+
+app.post("/api/admin/clips/delete", (req, res) => {
+  const auth = requireAdminRole(req, res, "editor");
+  if (!auth) return;
+
+  const id = String(req.body?.id || "").trim();
+  const out = clipsDeleteById(id, "admin", auth.role);
+  if (!out.ok) {
+    const status = String(out.error || "").toLowerCase().includes("not found") ? 404 : 400;
+    res.status(status).json({ ok: false, error: out.error || "Could not delete clip." });
+    return;
+  }
+
+  res.json({ ok: true, deletedId: id });
 });
 
 app.post("/api/admin/modmail", (req, res) => {
