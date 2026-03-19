@@ -85,6 +85,7 @@
             <p class="subtitle">Platzhalter: {user}, {username}, {server}, {channel}, {args}, {arg1} ... {arg5}</p>
 
             <label><input id="cmdEnabledInput" type="checkbox" checked /> Aktiv</label>
+            <label><input id="cmdDeleteTriggerInput" type="checkbox" /> Trigger-Nachricht loeschen (del msg)</label>
 
             <div class="stack">
               <button id="cmdSaveBtn" class="primary" type="button">Command speichern</button>
@@ -166,6 +167,27 @@
 
             <ul id="wickGuildList" class="player-list command-card-grid"></ul>
             <p id="wickStatusInfo" class="subtitle"></p>
+          </div>
+
+          <div id="modmailSection" class="admin-box">
+            <h3>Modmail Inbox</h3>
+            <p class="subtitle">Bug reports and change requests sent from the public clip page.</p>
+
+            <label for="modmailStatusFilter">Status filter</label>
+            <select id="modmailStatusFilter">
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+
+            <div class="stack">
+              <button id="modmailReloadBtn" class="mini-btn" type="button">Reload Inbox</button>
+            </div>
+
+            <ul id="modmailList" class="player-list command-card-grid"></ul>
+            <p id="modmailStatusInfo" class="subtitle"></p>
           </div>
 
           <div class="player-list-wrap">

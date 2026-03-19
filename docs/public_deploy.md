@@ -61,6 +61,12 @@ Clip-Endpunkte:
 - Galerie (neueste Clips): `GET /api/clips/latest?limit=12`
 - Share-Link: `GET /clip/:id`
 
+Modmail-Endpunkte:
+
+- Public submit: `POST /api/modmail/create`
+- Admin inbox: `GET /api/admin/modmail`
+- Admin update: `POST /api/admin/modmail`
+
 ### KI aktivieren (Render) - GitHub kostenlos (empfohlen)
 
 Der Server unterstuetzt zwei Provider: `github` (Standard) und `openai`.

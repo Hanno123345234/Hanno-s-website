@@ -123,6 +123,7 @@ Clip Upload ist ebenfalls produktionsbereit enthalten:
 - Auto-Delete nach 10 Tagen
 - Galerie der zuletzt hochgeladenen Clips
 - Persistente Speicherung über Render Disk (`/var/data`)
+- Modmail-Form auf der Clip-Seite (Bug/Change Requests direkt ins Admin-Dashboard)
 
 Relevante ENV Variablen:
 

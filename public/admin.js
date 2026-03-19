@@ -20,6 +20,7 @@ const cmdEmbedTitleInput = document.getElementById("cmdEmbedTitleInput");
 const cmdEmbedColorInput = document.getElementById("cmdEmbedColorInput");
 const cmdResponseInput = document.getElementById("cmdResponseInput");
 const cmdEnabledInput = document.getElementById("cmdEnabledInput");
+const cmdDeleteTriggerInput = document.getElementById("cmdDeleteTriggerInput");
 const cmdSaveBtn = document.getElementById("cmdSaveBtn");
 const cmdResetBtn = document.getElementById("cmdResetBtn");
 const cmdStatusInfo = document.getElementById("cmdStatusInfo");
@@ -44,6 +45,10 @@ const wickSaveBtn = document.getElementById("wickSaveBtn");
 const wickResetBtn = document.getElementById("wickResetBtn");
 const wickGuildList = document.getElementById("wickGuildList");
 const wickStatusInfo = document.getElementById("wickStatusInfo");
+const modmailStatusFilter = document.getElementById("modmailStatusFilter");
+const modmailReloadBtn = document.getElementById("modmailReloadBtn");
+const modmailList = document.getElementById("modmailList");
+const modmailStatusInfo = document.getElementById("modmailStatusInfo");
 
 let adminKey = window.localStorage.getItem(ADMIN_KEY_STORAGE) || "";
 const draftKey = window.localStorage.getItem(ADMIN_KEY_DRAFT_STORAGE) || "";
@@ -53,6 +58,7 @@ let canEditAdmin = false;
 let discordCommands = [];
 let editingTrigger = null;
 let wickSettingsState = { guilds: {} };
+let modmailItems = [];
 
 function setInfo(text) {
   adminInfo.textContent = String(text || "");
@@ -66,6 +72,11 @@ function setCommandStatus(text) {
 function setWickStatus(text) {
   if (!wickStatusInfo) return;
   wickStatusInfo.textContent = String(text || "");
+}
+
+function setModmailStatus(text) {
+  if (!modmailStatusInfo) return;
+  modmailStatusInfo.textContent = String(text || "");
 }
 
 function setLoggedIn(isLoggedIn) {
@@ -172,6 +183,7 @@ function resetCommandForm() {
   cmdEmbedColorInput.value = "#87CEFA";
   cmdResponseInput.value = "";
   cmdEnabledInput.checked = true;
+  if (cmdDeleteTriggerInput) cmdDeleteTriggerInput.checked = false;
   cmdSaveBtn.textContent = "Command speichern";
   updateCommandModeUI();
   setCommandStatus("Bereit. Neuen Command anlegen oder bestehenden bearbeiten.");
@@ -184,6 +196,7 @@ function setCommandEditorEnabled(enabled) {
   cmdEmbedColorInput.disabled = !enabled;
   cmdResponseInput.disabled = !enabled;
   cmdEnabledInput.disabled = !enabled;
+  if (cmdDeleteTriggerInput) cmdDeleteTriggerInput.disabled = !enabled;
   cmdSaveBtn.disabled = !enabled;
   cmdResetBtn.disabled = !enabled;
   if (wickGuildIdInput) wickGuildIdInput.disabled = !enabled;
@@ -205,6 +218,126 @@ function setCommandEditorEnabled(enabled) {
   if (wickWhitelistDomainsInput) wickWhitelistDomainsInput.disabled = !enabled;
   if (wickSaveBtn) wickSaveBtn.disabled = !enabled;
   if (wickResetBtn) wickResetBtn.disabled = !enabled;
+  if (modmailReloadBtn) modmailReloadBtn.disabled = !enabled;
+}
+
+function modmailStatusLabel(status) {
+  const value = String(status || "open").toLowerCase();
+  if (value === "in_progress") return "In progress";
+  if (value === "resolved") return "Resolved";
+  if (value === "closed") return "Closed";
+  return "Open";
+}
+
+function renderModmailInbox() {
+  if (!modmailList) return;
+  modmailList.innerHTML = "";
+
+  if (!modmailItems.length) {
+    const li = document.createElement("li");
+    li.className = "command-empty";
+    li.textContent = "No modmail messages yet.";
+    modmailList.appendChild(li);
+    setModmailStatus("Inbox is empty.");
+    return;
+  }
+
+  setModmailStatus(`${modmailItems.length} message(s) loaded.`);
+
+  modmailItems.forEach((entry) => {
+    const li = document.createElement("li");
+    li.className = "command-card";
+
+    const header = document.createElement("div");
+    header.className = "command-card-header";
+
+    const title = document.createElement("h4");
+    title.className = "command-card-title";
+    title.textContent = `${String(entry.title || "No title").slice(0, 120)} (${entry.type || "other"})`;
+
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `command-chip ${entry.status === "resolved" || entry.status === "closed" ? "chip-enabled" : "chip-rate"}`;
+    statusBadge.textContent = modmailStatusLabel(entry.status);
+
+    header.appendChild(title);
+    header.appendChild(statusBadge);
+
+    const meta = document.createElement("div");
+    meta.className = "command-card-preview";
+    const at = entry.createdAt ? new Date(entry.createdAt).toLocaleString("en-US") : "-";
+    meta.textContent = `ID: ${entry.id || "-"} | ${at} | Contact: ${entry.contact || "n/a"}`;
+
+    const body = document.createElement("div");
+    body.className = "command-card-preview";
+    body.textContent = String(entry.message || "").slice(0, 1000);
+
+    const noteLabel = document.createElement("label");
+    noteLabel.textContent = "Admin note";
+
+    const noteInput = document.createElement("textarea");
+    noteInput.rows = 3;
+    noteInput.maxLength = 1000;
+    noteInput.value = String(entry.adminNote || "");
+    noteInput.disabled = !canEditAdmin;
+
+    const statusSelect = document.createElement("select");
+    ["open", "in_progress", "resolved", "closed"].forEach((status) => {
+      const option = document.createElement("option");
+      option.value = status;
+      option.textContent = modmailStatusLabel(status);
+      if (String(entry.status || "open") === status) option.selected = true;
+      statusSelect.appendChild(option);
+    });
+    statusSelect.disabled = !canEditAdmin;
+
+    const actions = document.createElement("div");
+    actions.className = "command-card-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "primary command-card-btn";
+    saveBtn.textContent = "Save";
+    saveBtn.disabled = !canEditAdmin;
+    saveBtn.addEventListener("click", async () => {
+      try {
+        saveBtn.disabled = true;
+        const out = await postAdmin("/api/admin/modmail", {
+          id: entry.id,
+          status: statusSelect.value,
+          adminNote: noteInput.value
+        });
+        const idx = modmailItems.findIndex((item) => item.id === entry.id);
+        if (idx >= 0) modmailItems[idx] = out.item;
+        renderModmailInbox();
+        setInfo(`Modmail ${entry.id} updated.`);
+      } catch (error) {
+        setInfo(error.message || "Could not update modmail entry.");
+      } finally {
+        saveBtn.disabled = !canEditAdmin;
+      }
+    });
+
+    actions.appendChild(saveBtn);
+    li.appendChild(header);
+    li.appendChild(meta);
+    li.appendChild(body);
+    li.appendChild(noteLabel);
+    li.appendChild(noteInput);
+    li.appendChild(statusSelect);
+    li.appendChild(actions);
+    modmailList.appendChild(li);
+  });
+}
+
+async function loadModmailInbox() {
+  const status = String(modmailStatusFilter?.value || "all");
+  const response = await adminFetch(`/api/admin/modmail?status=${encodeURIComponent(status)}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Could not load modmail inbox.");
+  }
+  modmailItems = Array.isArray(data.items) ? data.items : [];
+  renderModmailInbox();
 }
 
 function normalizeGuildId(input) {
@@ -378,6 +511,7 @@ async function saveDiscordCommands() {
       trigger: entry.trigger,
       response: entry.response,
       enabled: entry.enabled !== false,
+      deleteTriggerMessage: entry.deleteTriggerMessage === true,
       mode: entry.mode || "text",
       embedTitle: entry.embedTitle || "",
       embedColor: sanitizeHexColor(entry.embedColor || "#87CEFA")
@@ -463,8 +597,13 @@ function renderDiscordCommands() {
       stateChip.className = `command-chip ${entry.enabled === false ? "chip-disabled" : "chip-enabled"}`;
       stateChip.textContent = entry.enabled === false ? "Disabled" : "Enabled";
 
+      const delChip = document.createElement("span");
+      delChip.className = `command-chip ${entry.deleteTriggerMessage === true ? "chip-enabled" : "chip-disabled"}`;
+      delChip.textContent = entry.deleteTriggerMessage === true ? "Del Msg" : "Keep Msg";
+
       chips.appendChild(rateChip);
       chips.appendChild(stateChip);
+      chips.appendChild(delChip);
 
       const preview = document.createElement("div");
       preview.className = "command-card-preview";
@@ -487,6 +626,7 @@ function renderDiscordCommands() {
         cmdEmbedColorInput.value = sanitizeHexColor(entry.embedColor || "#87CEFA");
         cmdResponseInput.value = entry.response || "";
         cmdEnabledInput.checked = entry.enabled !== false;
+        if (cmdDeleteTriggerInput) cmdDeleteTriggerInput.checked = entry.deleteTriggerMessage === true;
         cmdSaveBtn.textContent = "Command aktualisieren";
         updateCommandModeUI();
       });
@@ -558,6 +698,7 @@ async function loadAdmin() {
     setCommandEditorEnabled(canEditAdmin);
     await loadDiscordCommands();
     await loadWickSettings();
+    await loadModmailInbox();
     setInfo(`Aktualisiert (${adminData?.access?.role || "viewer"})`);
     setLoggedIn(true);
   } catch (error) {
@@ -635,6 +776,7 @@ cmdSaveBtn.addEventListener("click", async () => {
     trigger,
     response,
     enabled: !!cmdEnabledInput.checked,
+    deleteTriggerMessage: !!(cmdDeleteTriggerInput && cmdDeleteTriggerInput.checked),
     mode: normalizedMode,
     embedTitle,
     embedColor
@@ -747,6 +889,27 @@ if (cmdFilterAction) {
     renderDiscordCommands();
     const mode = String(cmdFilterAction.value || "all");
     setCommandStatus(mode === "all" ? "Filter entfernt. Alle Aktionen sichtbar." : `Filter aktiv: ${mode}`);
+  });
+}
+
+if (modmailStatusFilter) {
+  modmailStatusFilter.addEventListener("change", async () => {
+    try {
+      await loadModmailInbox();
+    } catch (error) {
+      setInfo(error.message || "Could not refresh modmail inbox.");
+    }
+  });
+}
+
+if (modmailReloadBtn) {
+  modmailReloadBtn.addEventListener("click", async () => {
+    try {
+      await loadModmailInbox();
+      setInfo("Modmail inbox refreshed.");
+    } catch (error) {
+      setInfo(error.message || "Could not refresh modmail inbox.");
+    }
   });
 }
 

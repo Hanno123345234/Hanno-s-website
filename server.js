@@ -107,6 +107,11 @@ const CLIPS_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const CLIPS_GALLERY_DEFAULT_LIMIT = 12;
 const CLIPS_GALLERY_MAX_LIMIT = 50;
 const CLIPS_PUBLIC_LOCKDOWN = String(process.env.CLIPS_PUBLIC_LOCKDOWN || "false").trim().toLowerCase() === "true";
+const MODMAIL_STORE_PATH = path.join(CLIPS_STORAGE_DIR, "modmail_messages.json");
+const MODMAIL_MAX_ENTRIES = 3000;
+const MODMAIL_RATE_LIMIT_WINDOW_MS = 1000 * 60 * 10;
+const MODMAIL_RATE_LIMIT_MAX = 6;
+const modmailRateLimit = new Map();
 const ALLOWED_VIDEO_MIME_TYPES = new Set([
   "video/mp4",
   "video/webm",
@@ -143,15 +148,22 @@ app.use((req, res, next) => {
 
   const allowedExactPaths = new Set([
     "/clips.html",
+    "/admin.html",
+    "/admin.js",
     "/styles.css",
+    "/pwa.js",
+    "/manifest.webmanifest",
+    "/api/admin",
     "/api/clips/upload",
-    "/api/clips/latest"
+    "/api/clips/latest",
+    "/api/modmail/create"
   ]);
 
   const allowedPrefixPaths = [
     "/clip/",
     "/clips/",
-    "/api/clips/"
+    "/api/clips/",
+    "/api/admin/"
   ];
 
   const isAllowed = allowedExactPaths.has(req.path)
@@ -294,6 +306,41 @@ function clipsPurgeExpired(reason = "scheduled") {
       console.log(`[clips] Purged ${deletedCount} entries (${reason}). Retention=${CLIPS_RETENTION_DAYS}d`);
     }
   }
+}
+
+function modmailLoadState() {
+  const state = scrimsLoadJson(MODMAIL_STORE_PATH, { items: [] });
+  if (!state || typeof state !== "object") return { items: [] };
+  if (!Array.isArray(state.items)) state.items = [];
+  return state;
+}
+
+function modmailSaveState(state) {
+  return scrimsSaveJson(MODMAIL_STORE_PATH, state);
+}
+
+function modmailNewId() {
+  return `mm_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`;
+}
+
+function modmailNormalizeType(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (["bug", "change", "feedback", "other"].includes(value)) return value;
+  return "other";
+}
+
+function modmailIsRateLimited(ipRaw) {
+  const ip = String(ipRaw || "unknown").trim();
+  const now = Date.now();
+  const prev = modmailRateLimit.get(ip) || [];
+  const kept = prev.filter((ts) => ts > now - MODMAIL_RATE_LIMIT_WINDOW_MS);
+  kept.push(now);
+  modmailRateLimit.set(ip, kept);
+  return kept.length > MODMAIL_RATE_LIMIT_MAX;
+}
+
+function modmailSanitizeText(raw, max = 800) {
+  return String(raw || "").trim().slice(0, max);
 }
 
 const clipsStorage = multer.diskStorage({
@@ -1159,6 +1206,47 @@ app.post("/api/clips/upload", (req, res) => {
       videoUrl: `${base}${videoPath}`
     });
   });
+});
+
+app.post("/api/modmail/create", (req, res) => {
+  if (modmailIsRateLimited(req.ip)) {
+    res.status(429).json({ ok: false, error: "Too many requests. Please try again later." });
+    return;
+  }
+
+  const type = modmailNormalizeType(req.body?.type);
+  const title = modmailSanitizeText(req.body?.title, 140);
+  const message = modmailSanitizeText(req.body?.message, 3000);
+  const contact = modmailSanitizeText(req.body?.contact, 160);
+  const pageUrl = modmailSanitizeText(req.body?.pageUrl || req.get("referer"), 300);
+
+  if (!title || !message) {
+    res.status(400).json({ ok: false, error: "Title and message are required." });
+    return;
+  }
+
+  const state = modmailLoadState();
+  const item = {
+    id: modmailNewId(),
+    createdAt: new Date().toISOString(),
+    type,
+    title,
+    message,
+    contact,
+    pageUrl,
+    status: "open",
+    adminNote: "",
+    updatedAt: new Date().toISOString(),
+    sourceIp: String(req.ip || "")
+  };
+
+  state.items.unshift(item);
+  if (state.items.length > MODMAIL_MAX_ENTRIES) {
+    state.items.splice(MODMAIL_MAX_ENTRIES);
+  }
+  modmailSaveState(state);
+
+  res.json({ ok: true, id: item.id, message: "Your request has been sent to the admin inbox." });
 });
 
 app.get("/api/clips/latest", (req, res) => {
@@ -2351,6 +2439,68 @@ app.get("/api/admin/ai/logs", (req, res) => {
     model: AI_PROVIDER === "github" ? GITHUB_MODEL : OPENAI_MODEL,
     logs: [...aiChatLogs].reverse()
   });
+});
+
+app.get("/api/admin/modmail", (req, res) => {
+  const auth = requireAdminRole(req, res, "viewer");
+  if (!auth) return;
+
+  const statusFilter = String(req.query?.status || "all").trim().toLowerCase();
+  const allowedStatus = new Set(["all", "open", "in_progress", "resolved", "closed"]);
+  const selectedStatus = allowedStatus.has(statusFilter) ? statusFilter : "all";
+
+  const state = modmailLoadState();
+  let items = Array.isArray(state.items) ? state.items : [];
+  if (selectedStatus !== "all") {
+    items = items.filter((entry) => String(entry?.status || "open") === selectedStatus);
+  }
+
+  res.json({
+    ok: true,
+    access: {
+      role: auth.role,
+      canEdit: hasAdminRole(auth.role, "editor")
+    },
+    items: items.slice(0, 500)
+  });
+});
+
+app.post("/api/admin/modmail", (req, res) => {
+  const auth = requireAdminRole(req, res, "editor");
+  if (!auth) return;
+
+  const id = String(req.body?.id || "").trim();
+  const status = String(req.body?.status || "").trim().toLowerCase();
+  const adminNote = modmailSanitizeText(req.body?.adminNote, 1000);
+  const validStatus = new Set(["open", "in_progress", "resolved", "closed"]);
+
+  if (!id) {
+    res.status(400).json({ ok: false, error: "Missing modmail id." });
+    return;
+  }
+  if (status && !validStatus.has(status)) {
+    res.status(400).json({ ok: false, error: "Invalid status." });
+    return;
+  }
+
+  const state = modmailLoadState();
+  const idx = state.items.findIndex((entry) => String(entry?.id || "") === id);
+  if (idx < 0) {
+    res.status(404).json({ ok: false, error: "Modmail entry not found." });
+    return;
+  }
+
+  const current = state.items[idx] || {};
+  state.items[idx] = {
+    ...current,
+    status: status || current.status || "open",
+    adminNote,
+    updatedAt: new Date().toISOString(),
+    updatedBy: auth.role
+  };
+
+  modmailSaveState(state);
+  res.json({ ok: true, item: state.items[idx] });
 });
 
 app.post("/api/admin/ai/toggle", (req, res) => {
