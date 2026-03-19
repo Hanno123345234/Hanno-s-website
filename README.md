@@ -129,6 +129,7 @@ Relevante ENV Variablen:
 - `CLIPS_STORAGE_DIR` (empfohlen: `/var/data/clips`)
 - `CLIPS_RETENTION_DAYS` (Standard: `10`)
 - `CLIPS_MAX_SIZE_MB` (Standard: `200`)
+- `CLIPS_PUBLIC_LOCKDOWN` (`true` = nur Clip-Service ist erreichbar)
 
 Setup und Schritte stehen in:
 

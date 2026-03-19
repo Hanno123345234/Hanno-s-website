@@ -106,6 +106,7 @@ const CLIPS_RETENTION_MS = CLIPS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const CLIPS_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const CLIPS_GALLERY_DEFAULT_LIMIT = 12;
 const CLIPS_GALLERY_MAX_LIMIT = 50;
+const CLIPS_PUBLIC_LOCKDOWN = String(process.env.CLIPS_PUBLIC_LOCKDOWN || "false").trim().toLowerCase() === "true";
 const ALLOWED_VIDEO_MIME_TYPES = new Set([
   "video/mp4",
   "video/webm",
@@ -127,6 +128,47 @@ app.use((req, res, next) => {
     res.set("Expires", "0");
   }
   next();
+});
+
+app.use((req, res, next) => {
+  if (!CLIPS_PUBLIC_LOCKDOWN) {
+    next();
+    return;
+  }
+
+  if (req.path === "/") {
+    res.redirect(302, "/clips.html");
+    return;
+  }
+
+  const allowedExactPaths = new Set([
+    "/clips.html",
+    "/styles.css",
+    "/api/clips/upload",
+    "/api/clips/latest"
+  ]);
+
+  const allowedPrefixPaths = [
+    "/clip/",
+    "/clips/",
+    "/api/clips/"
+  ];
+
+  const isAllowed = allowedExactPaths.has(req.path)
+    || allowedPrefixPaths.some((prefix) => req.path.startsWith(prefix));
+
+  if (isAllowed) {
+    next();
+    return;
+  }
+
+  const wantsJson = String(req.headers.accept || "").includes("application/json") || req.path.startsWith("/api/");
+  if (wantsJson) {
+    res.status(403).json({ ok: false, error: "This service only allows clip upload and clip viewing." });
+    return;
+  }
+
+  res.status(403).type("text/plain; charset=utf-8").send("Access denied. This service is limited to the clip upload area.");
 });
 
 app.use(express.static("public"));

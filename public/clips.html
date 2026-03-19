@@ -1,15 +1,32 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f1220" />
-    <title>Clip Upload</title>
+    <title>ClipDrop - Share Your Best Plays</title>
     <link rel="stylesheet" href="styles.css" />
     <style>
       .clip-shell {
         display: grid;
         gap: 14px;
+      }
+
+      .promo-strip {
+        border: 1px solid rgba(125, 245, 206, 0.35);
+        background: linear-gradient(115deg, rgba(19, 62, 68, 0.85), rgba(8, 35, 55, 0.88));
+        border-radius: 12px;
+        padding: 10px 12px;
+        color: #b6fff1;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .promo-strip small {
+        display: block;
+        margin-top: 4px;
+        font-weight: 500;
+        color: #cae8ff;
       }
 
       .clip-header {
@@ -227,49 +244,54 @@
       <section class="card active clip-shell">
         <header class="clip-header">
           <div>
-            <h1 class="clip-title">Clip Upload</h1>
-            <p class="clip-subtitle">Lade ein Video hoch und teile den automatisch erzeugten Link.</p>
+            <h1 class="clip-title">ClipDrop</h1>
+            <p class="clip-subtitle">Upload your gameplay clip and instantly get a public share link.</p>
           </div>
-          <a class="home-link" href="index.html">Zur Startseite</a>
+          <span class="home-link" aria-label="Service mode">Public Clip Hosting</span>
         </header>
+
+        <section class="promo-strip" aria-label="Promotion">
+          Built for creators, teams, and communities.
+          <small>Fast upload. Instant link. Mobile-friendly player. No account needed.</small>
+        </section>
 
         <form id="clipForm" class="clip-form" novalidate>
           <label class="clip-label" for="clipTitle">
-            Titel (optional)
-            <input id="clipTitle" name="title" class="clip-input" type="text" maxlength="120" placeholder="z. B. 1v3 clutch auf Ascent" />
+            Title (optional)
+            <input id="clipTitle" name="title" class="clip-input" type="text" maxlength="120" placeholder="Example: 1v3 Ascent clutch" />
           </label>
 
           <label class="clip-label" for="clipFile">
-            Video-Datei
+            Video file
             <input id="clipFile" name="clip" class="clip-file" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/ogg,.mp4,.webm,.mov,.mkv,.ogv" required />
           </label>
 
-          <p class="clip-meta">Unterstuetzte Formate: mp4, webm, mov, mkv, ogv. Maximal 200 MB (Server-Standard).</p>
+          <p class="clip-meta">Supported formats: mp4, webm, mov, mkv, ogv. Max 200 MB by default.</p>
 
-          <button id="submitBtn" class="clip-submit" type="submit">Clip hochladen</button>
+          <button id="submitBtn" class="clip-submit" type="submit">Upload Clip</button>
         </form>
 
         <p id="clipError" class="clip-error" role="alert"></p>
 
         <section id="clipResult" class="clip-result" aria-live="polite">
-          <strong>Clip wurde hochgeladen.</strong>
+          <strong>Clip uploaded successfully.</strong>
           <div class="clip-result-row">
-            <label for="shareUrl">Share-Link</label>
+            <label for="shareUrl">Share link</label>
             <input id="shareUrl" type="text" readonly />
           </div>
           <div class="clip-result-row">
-            <label for="videoUrl">Direkter Video-Link</label>
+            <label for="videoUrl">Direct video URL</label>
             <input id="videoUrl" type="text" readonly />
           </div>
-          <button id="copyBtn" class="home-link" type="button">Share-Link kopieren</button>
+          <button id="copyBtn" class="home-link" type="button">Copy share link</button>
         </section>
 
-        <section class="gallery-shell" aria-label="Zuletzt hochgeladene Clips">
+        <section class="gallery-shell" aria-label="Recently uploaded clips">
           <header class="gallery-head">
-            <h2 class="gallery-title">Letzte hochgeladene Clips</h2>
+            <h2 class="gallery-title">Latest Clips</h2>
             <p id="retentionInfo" class="gallery-meta"></p>
           </header>
-          <p id="galleryEmpty" class="gallery-empty">Lade Galerie...</p>
+          <p id="galleryEmpty" class="gallery-empty">Loading gallery...</p>
           <div id="galleryGrid" class="gallery-grid" hidden></div>
         </section>
       </section>
@@ -290,7 +312,7 @@
       const retentionInfo = document.getElementById("retentionInfo");
 
       function showError(message) {
-        clipError.textContent = String(message || "Unbekannter Fehler.");
+        clipError.textContent = String(message || "Unknown error.");
         clipError.classList.add("show");
       }
 
@@ -307,7 +329,7 @@
 
       function setLoading(loading) {
         submitBtn.disabled = loading;
-        submitBtn.textContent = loading ? "Upload laeuft..." : "Clip hochladen";
+        submitBtn.textContent = loading ? "Uploading..." : "Upload Clip";
       }
 
       function formatSize(bytes) {
@@ -322,8 +344,8 @@
 
       function formatUploadedAt(iso) {
         const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return "unbekannt";
-        return d.toLocaleString("de-DE", {
+        if (Number.isNaN(d.getTime())) return "unknown";
+        return d.toLocaleString("en-US", {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
@@ -359,7 +381,7 @@
         article.appendChild(player);
 
         const title = document.createElement("h3");
-        title.textContent = item.title || item.originalName || "Unbenannter Clip";
+        title.textContent = item.title || item.originalName || "Untitled clip";
         article.appendChild(title);
 
         const info = document.createElement("p");
@@ -372,7 +394,7 @@
         const openLink = document.createElement("a");
         openLink.className = "clip-action";
         openLink.href = item.sharePath;
-        openLink.textContent = "Oeffnen";
+        openLink.textContent = "Open";
         openLink.target = "_blank";
         openLink.rel = "noopener noreferrer";
         actions.appendChild(openLink);
@@ -380,13 +402,13 @@
         const copyBtnInline = document.createElement("button");
         copyBtnInline.className = "clip-action";
         copyBtnInline.type = "button";
-        copyBtnInline.textContent = "Link kopieren";
+        copyBtnInline.textContent = "Copy link";
         copyBtnInline.addEventListener("click", async () => {
           const absolute = new URL(item.sharePath, window.location.href).toString();
           await copyText(absolute, shareUrlInput);
-          copyBtnInline.textContent = "Kopiert";
+          copyBtnInline.textContent = "Copied";
           setTimeout(() => {
-            copyBtnInline.textContent = "Link kopieren";
+            copyBtnInline.textContent = "Copy link";
           }, 1200);
         });
         actions.appendChild(copyBtnInline);
@@ -399,14 +421,14 @@
         const clips = Array.isArray(payload && payload.clips) ? payload.clips : [];
         const retentionDays = Number(payload && payload.retentionDays);
         retentionInfo.textContent = Number.isFinite(retentionDays)
-          ? `Auto-Delete nach ${retentionDays} Tagen`
-          : "Auto-Delete aktiv";
+          ? `Auto-delete after ${retentionDays} days`
+          : "Auto-delete active";
 
         galleryGrid.replaceChildren();
         if (!clips.length) {
           galleryGrid.hidden = true;
           galleryEmpty.hidden = false;
-          galleryEmpty.textContent = "Noch keine Clips vorhanden.";
+          galleryEmpty.textContent = "No clips uploaded yet.";
           return;
         }
 
@@ -423,13 +445,13 @@
           const response = await fetch("/api/clips/latest?limit=12");
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || !payload.ok) {
-            throw new Error(payload.error || "Galerie konnte nicht geladen werden.");
+            throw new Error(payload.error || "Could not load the gallery.");
           }
           renderGallery(payload);
         } catch (error) {
           galleryGrid.hidden = true;
           galleryEmpty.hidden = false;
-          galleryEmpty.textContent = error && error.message ? error.message : "Galerie-Fehler.";
+          galleryEmpty.textContent = error && error.message ? error.message : "Gallery error.";
         }
       }
 
@@ -440,7 +462,7 @@
 
         const file = clipFile.files && clipFile.files[0];
         if (!file) {
-          showError("Bitte waehle zuerst eine Video-Datei aus.");
+          showError("Please choose a video file first.");
           return;
         }
 
@@ -457,14 +479,14 @@
 
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || !payload.ok) {
-            showError(payload.error || "Upload fehlgeschlagen.");
+            showError(payload.error || "Upload failed.");
             return;
           }
 
           showResult(payload);
           await loadGallery();
         } catch (error) {
-          showError(error && error.message ? error.message : "Netzwerkfehler beim Upload.");
+          showError(error && error.message ? error.message : "Network error during upload.");
         } finally {
           setLoading(false);
         }
@@ -475,9 +497,9 @@
         if (!value) return;
         try {
           await copyText(value, shareUrlInput);
-          copyBtn.textContent = "Kopiert";
+          copyBtn.textContent = "Copied";
           setTimeout(() => {
-            copyBtn.textContent = "Share-Link kopieren";
+            copyBtn.textContent = "Copy share link";
           }, 1300);
         } catch (error) {
           shareUrlInput.focus();

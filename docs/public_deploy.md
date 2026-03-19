@@ -46,12 +46,14 @@ Neu konfiguriert:
 - `CLIPS_STORAGE_DIR=/var/data/clips`
 - `CLIPS_RETENTION_DAYS=10`
 - `CLIPS_MAX_SIZE_MB=200`
+- `CLIPS_PUBLIC_LOCKDOWN=true`
 
 Wichtig:
 
 - In `render.yaml` ist eine Persistent Disk unter `/var/data` eingetragen.
 - Dadurch bleiben hochgeladene Videos und Index-Daten auch nach Redeploys erhalten.
 - Alte Clips werden automatisch geloescht (Auto-Delete nach 10 Tagen).
+- Bei aktiviertem Lockdown sind nur Clip-Seiten und Clip-APIs erreichbar.
 
 Clip-Endpunkte:
 
