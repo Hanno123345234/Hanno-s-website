@@ -8,6 +8,10 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /
+    disks:
+      - name: clip-storage
+        mountPath: /var/data
+        sizeGB: 1
     envVars:
       - key: AI_PROVIDER
         value: github
@@ -47,4 +51,10 @@ services:
         sync: false
       - key: SOCKET_IO_CORS_ORIGIN
         value: ""
+      - key: CLIPS_STORAGE_DIR
+        value: /var/data/clips
+      - key: CLIPS_RETENTION_DAYS
+        value: "10"
+      - key: CLIPS_MAX_SIZE_MB
+        value: "200"
 

@@ -4,6 +4,8 @@ const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
+const multer = require("multer");
 
 const app = express();
 const server = http.createServer(app);
@@ -94,6 +96,29 @@ const scrimsWebSessions = new Map();
 const scrimsOAuthStates = new Map();
 const SCRIMS_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 const SCRIMS_OAUTH_STATE_MAX_AGE_MS = 1000 * 60 * 10;
+const CLIPS_STORAGE_DIR = path.resolve(String(process.env.CLIPS_STORAGE_DIR || path.join(__dirname, "data", "clips")).trim());
+const CLIPS_PUBLIC_DIR = path.join(CLIPS_STORAGE_DIR, "files");
+const CLIPS_INDEX_PATH = path.join(CLIPS_STORAGE_DIR, "index.json");
+const CLIPS_MAX_SIZE_MB = Math.max(10, Math.min(2048, Number(process.env.CLIPS_MAX_SIZE_MB || 200)));
+const CLIPS_MAX_FILE_SIZE_BYTES = CLIPS_MAX_SIZE_MB * 1024 * 1024;
+const CLIPS_RETENTION_DAYS = Math.max(1, Math.min(365, Number(process.env.CLIPS_RETENTION_DAYS || 10)));
+const CLIPS_RETENTION_MS = CLIPS_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const CLIPS_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
+const CLIPS_GALLERY_DEFAULT_LIMIT = 12;
+const CLIPS_GALLERY_MAX_LIMIT = 50;
+const ALLOWED_VIDEO_MIME_TYPES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/x-matroska",
+  "video/ogg"
+]);
+
+try {
+  fs.mkdirSync(CLIPS_PUBLIC_DIR, { recursive: true });
+} catch (error) {
+  console.error("Failed to create clips directory:", error);
+}
 
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -105,6 +130,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.static("public"));
+app.use("/clips", express.static(CLIPS_PUBLIC_DIR));
 app.use(express.json());
 
 function scrimsNowMs() {
@@ -112,8 +138,149 @@ function scrimsNowMs() {
 }
 
 function scrimsRandomToken(bytes = 24) {
-  return require("crypto").randomBytes(bytes).toString("hex");
+  return crypto.randomBytes(bytes).toString("hex");
 }
+
+function clipsLoadIndex() {
+  const state = scrimsLoadJson(CLIPS_INDEX_PATH, { items: {} });
+  if (!state || typeof state !== "object") return { items: {} };
+  if (!state.items || typeof state.items !== "object") state.items = {};
+  return state;
+}
+
+function clipsSaveIndex(data) {
+  return scrimsSaveJson(CLIPS_INDEX_PATH, data);
+}
+
+function clipsCreateId() {
+  return crypto.randomBytes(9).toString("hex");
+}
+
+function clipsSafeFileExt(file = {}) {
+  const byMime = {
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+    "video/x-matroska": ".mkv",
+    "video/ogg": ".ogv"
+  };
+
+  if (byMime[file.mimetype]) return byMime[file.mimetype];
+
+  const ext = path.extname(String(file.originalname || "")).toLowerCase();
+  if ([".mp4", ".webm", ".mov", ".mkv", ".ogv"].includes(ext)) return ext;
+  return ".mp4";
+}
+
+function clipsEscapeHtml(raw) {
+  return String(raw || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function clipsBaseUrl(req) {
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function clipsParseTimestamp(value) {
+  const ts = Date.parse(String(value || ""));
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function clipsBuildVideoPath(fileName = "") {
+  return `/clips/${encodeURIComponent(String(fileName || ""))}`;
+}
+
+function clipsBuildSharePath(id = "") {
+  return `/clip/${encodeURIComponent(String(id || ""))}`;
+}
+
+function clipsListLatest(index, limit = CLIPS_GALLERY_DEFAULT_LIMIT) {
+  const max = Math.max(1, Math.min(CLIPS_GALLERY_MAX_LIMIT, Number(limit) || CLIPS_GALLERY_DEFAULT_LIMIT));
+  return Object.values(index.items || {})
+    .filter((item) => item && item.id && item.fileName)
+    .sort((a, b) => clipsParseTimestamp(b.uploadedAt) - clipsParseTimestamp(a.uploadedAt))
+    .slice(0, max);
+}
+
+function clipsTryDeleteFile(fileName = "") {
+  try {
+    const safeName = path.basename(String(fileName || ""));
+    if (!safeName) return false;
+    const absPath = path.join(CLIPS_PUBLIC_DIR, safeName);
+    if (!fs.existsSync(absPath)) return false;
+    fs.unlinkSync(absPath);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function clipsPurgeExpired(reason = "scheduled") {
+  const now = Date.now();
+  const threshold = now - CLIPS_RETENTION_MS;
+  const index = clipsLoadIndex();
+  let changed = false;
+  let deletedCount = 0;
+
+  for (const [clipId, item] of Object.entries(index.items || {})) {
+    if (!item || !item.fileName) {
+      delete index.items[clipId];
+      changed = true;
+      continue;
+    }
+
+    const uploadedAtMs = clipsParseTimestamp(item.uploadedAt);
+    const isExpired = uploadedAtMs > 0 && uploadedAtMs <= threshold;
+    const filePath = path.join(CLIPS_PUBLIC_DIR, path.basename(String(item.fileName || "")));
+    const fileMissing = !fs.existsSync(filePath);
+
+    if (!isExpired && !fileMissing) continue;
+
+    clipsTryDeleteFile(item.fileName);
+    delete index.items[clipId];
+    changed = true;
+    deletedCount += 1;
+  }
+
+  if (changed) {
+    clipsSaveIndex(index);
+    if (deletedCount > 0) {
+      console.log(`[clips] Purged ${deletedCount} entries (${reason}). Retention=${CLIPS_RETENTION_DAYS}d`);
+    }
+  }
+}
+
+const clipsStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, CLIPS_PUBLIC_DIR);
+  },
+  filename: (req, file, cb) => {
+    const clipId = clipsCreateId();
+    req.clipId = clipId;
+    cb(null, `${clipId}${clipsSafeFileExt(file)}`);
+  }
+});
+
+const clipsUpload = multer({
+  storage: clipsStorage,
+  limits: {
+    fileSize: CLIPS_MAX_FILE_SIZE_BYTES
+  },
+  fileFilter: (_req, file, cb) => {
+    const mimetype = String(file.mimetype || "").toLowerCase();
+    const ext = path.extname(String(file.originalname || "")).toLowerCase();
+    const validExt = [".mp4", ".webm", ".mov", ".mkv", ".ogv"].includes(ext);
+    if (ALLOWED_VIDEO_MIME_TYPES.has(mimetype) || validExt) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Unsupported file type. Allowed: mp4, webm, mov, mkv, ogv"));
+  }
+});
 
 function scrimsParseCookies(req) {
   const out = {};
@@ -229,6 +396,7 @@ function normalizeDiscordCommandEntry(entry, index = 0) {
     trigger,
     response,
     enabled: entry?.enabled !== false,
+    deleteTriggerMessage: entry?.deleteTriggerMessage === true,
     mode,
     embedTitle,
     embedColor,
@@ -898,6 +1066,192 @@ async function proxyScrimsApi(req, res, upstreamPath) {
     res.status(502).json({ ok: false, error: `Scrims API proxy error: ${String(error?.message || "unknown")}` });
   }
 }
+
+app.post("/api/clips/upload", (req, res) => {
+  clipsPurgeExpired("pre-upload");
+  clipsUpload.single("clip")(req, res, (uploadError) => {
+    if (uploadError) {
+      const isLimit = uploadError.code === "LIMIT_FILE_SIZE";
+      res.status(400).json({
+        ok: false,
+        error: isLimit
+          ? `Datei zu gross. Maximal ${CLIPS_MAX_SIZE_MB} MB erlaubt.`
+          : String(uploadError.message || "Upload failed")
+      });
+      return;
+    }
+
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ ok: false, error: "Keine Video-Datei erhalten." });
+      return;
+    }
+
+    const clipId = String(req.clipId || path.parse(file.filename).name);
+    const title = String((req.body && req.body.title) || "").trim().slice(0, 120);
+    const uploadedAt = new Date().toISOString();
+    const index = clipsLoadIndex();
+    if (!index.items || typeof index.items !== "object") index.items = {};
+
+    index.items[clipId] = {
+      id: clipId,
+      fileName: file.filename,
+      originalName: String(file.originalname || "").slice(0, 180),
+      title,
+      mimeType: String(file.mimetype || "video/mp4"),
+      size: Number(file.size || 0),
+      uploadedAt
+    };
+
+    clipsSaveIndex(index);
+
+    const base = clipsBaseUrl(req);
+    const sharePath = clipsBuildSharePath(clipId);
+    const videoPath = clipsBuildVideoPath(file.filename);
+    res.json({
+      ok: true,
+      id: clipId,
+      sharePath,
+      videoPath,
+      shareUrl: `${base}${sharePath}`,
+      videoUrl: `${base}${videoPath}`
+    });
+  });
+});
+
+app.get("/api/clips/latest", (req, res) => {
+  clipsPurgeExpired("latest-api");
+  const index = clipsLoadIndex();
+  const list = clipsListLatest(index, req.query.limit);
+  res.json({
+    ok: true,
+    retentionDays: CLIPS_RETENTION_DAYS,
+    clips: list.map((item) => ({
+      id: item.id,
+      title: item.title || "",
+      originalName: item.originalName || "",
+      uploadedAt: item.uploadedAt || "",
+      size: Number(item.size || 0),
+      mimeType: item.mimeType || "video/mp4",
+      sharePath: clipsBuildSharePath(item.id),
+      videoPath: clipsBuildVideoPath(item.fileName)
+    }))
+  });
+});
+
+app.get("/api/clips/:id", (req, res) => {
+  clipsPurgeExpired("clip-detail");
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    res.status(400).json({ ok: false, error: "Missing clip id." });
+    return;
+  }
+
+  const index = clipsLoadIndex();
+  const item = index?.items?.[id];
+  if (!item) {
+    res.status(404).json({ ok: false, error: "Clip not found." });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    clip: {
+      id: item.id,
+      title: item.title || "",
+      uploadedAt: item.uploadedAt || "",
+      size: Number(item.size || 0),
+      mimeType: item.mimeType || "video/mp4",
+      sharePath: clipsBuildSharePath(item.id),
+      videoPath: clipsBuildVideoPath(item.fileName)
+    }
+  });
+});
+
+app.get("/clip/:id", (req, res) => {
+  clipsPurgeExpired("share-view");
+  const id = String(req.params.id || "").trim();
+  const index = clipsLoadIndex();
+  const item = index?.items?.[id];
+
+  if (!item) {
+    res.status(404).send("Clip not found.");
+    return;
+  }
+
+  const filePath = path.join(CLIPS_PUBLIC_DIR, path.basename(String(item.fileName || "")));
+  if (!fs.existsSync(filePath)) {
+    delete index.items[id];
+    clipsSaveIndex(index);
+    res.status(404).send("Clip file missing.");
+    return;
+  }
+
+  const videoPath = clipsBuildVideoPath(item.fileName);
+  const title = clipsEscapeHtml(item.title || item.originalName || "Clip");
+  const uploaded = clipsEscapeHtml(item.uploadedAt || "");
+  const html = `<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title}</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Segoe UI, Arial, sans-serif;
+        color: #f0f4ff;
+        background:
+          radial-gradient(900px 460px at 15% -10%, rgba(88, 141, 255, 0.25), transparent 48%),
+          radial-gradient(760px 420px at 110% 15%, rgba(52, 255, 200, 0.18), transparent 52%),
+          #0d1428;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+      .shell {
+        width: min(100%, 920px);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 18px;
+        background: rgba(7, 14, 30, 0.86);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        padding: 14px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+      }
+      p {
+        margin: 0 0 12px;
+        color: #bfd2ff;
+        font-size: 0.9rem;
+      }
+      video {
+        width: 100%;
+        border-radius: 12px;
+        background: #010307;
+        max-height: 78vh;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <h1>${title}</h1>
+      <p>Hochgeladen: ${uploaded}</p>
+      <video controls autoplay preload="metadata" src="${videoPath}"></video>
+    </main>
+  </body>
+</html>`;
+
+  res.set("Content-Type", "text/html; charset=utf-8").send(html);
+});
+
+setInterval(() => {
+  clipsPurgeExpired("interval");
+}, CLIPS_CLEANUP_INTERVAL_MS);
+clipsPurgeExpired("startup");
 
 app.get("/auth/discord", async (req, res) => {
   if (!SCRIMS_DISCORD_CLIENT_ID || !SCRIMS_DISCORD_CLIENT_SECRET) {

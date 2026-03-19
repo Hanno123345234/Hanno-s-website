@@ -37,6 +37,28 @@ läuft Socket.IO auf Render und die Webseite verbindet sich cross-origin.
 - `ADMIN_OWNER_KEY` (empfohlen setzen)
 - `ADMIN_ACCESS_CODES` (optional)
 
+### Clip Upload (Render + GitHub Workflow)
+
+Der Clip-Upload laeuft serverseitig auf Render und ist fuer oeffentliche Share-Links gedacht.
+
+Neu konfiguriert:
+
+- `CLIPS_STORAGE_DIR=/var/data/clips`
+- `CLIPS_RETENTION_DAYS=10`
+- `CLIPS_MAX_SIZE_MB=200`
+
+Wichtig:
+
+- In `render.yaml` ist eine Persistent Disk unter `/var/data` eingetragen.
+- Dadurch bleiben hochgeladene Videos und Index-Daten auch nach Redeploys erhalten.
+- Alte Clips werden automatisch geloescht (Auto-Delete nach 10 Tagen).
+
+Clip-Endpunkte:
+
+- Upload: `POST /api/clips/upload`
+- Galerie (neueste Clips): `GET /api/clips/latest?limit=12`
+- Share-Link: `GET /clip/:id`
+
 ### KI aktivieren (Render) - GitHub kostenlos (empfohlen)
 
 Der Server unterstuetzt zwei Provider: `github` (Standard) und `openai`.

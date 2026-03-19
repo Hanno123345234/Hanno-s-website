@@ -118,6 +118,18 @@ Für dieses Repo ist Deploy auf beide Plattformen vorbereitet:
 - **Render**: Node Web Service über `render.yaml` (`npm install` + `npm start`)
 - **GitHub Pages**: statisches Frontend aus `public/` via `.github/workflows/web-pages.yml`
 
+Clip Upload ist ebenfalls produktionsbereit enthalten:
+
+- Auto-Delete nach 10 Tagen
+- Galerie der zuletzt hochgeladenen Clips
+- Persistente Speicherung über Render Disk (`/var/data`)
+
+Relevante ENV Variablen:
+
+- `CLIPS_STORAGE_DIR` (empfohlen: `/var/data/clips`)
+- `CLIPS_RETENTION_DAYS` (Standard: `10`)
+- `CLIPS_MAX_SIZE_MB` (Standard: `200`)
+
 Setup und Schritte stehen in:
 
 - `docs/public_deploy.md`

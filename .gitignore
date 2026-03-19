@@ -33,6 +33,11 @@ migrate_working_dir/
 /build/
 /coverage/
 node_modules/
+.env
+.env.*
+data/clips/
+public/clips/
+clips_index.json
 
 # Symbolication related
 app.*.symbols
