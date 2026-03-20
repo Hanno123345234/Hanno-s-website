@@ -14,11 +14,11 @@
         <header class="home-topbar">
           <p class="home-brand">Hanno Platform</p>
           <nav class="home-links" aria-label="Schnellnavigation">
-            <a id="scrimsTopLink" class="home-link" href="scrims.html">Scrims</a>
-            <a class="home-link home-link-primary" href="quiz.html">Quiz-Duell</a>
-            <a class="home-link" href="clips.html">Clip Upload</a>
-            <a class="home-link" href="hannos-ki.html">Hannos KI</a>
-            <a class="home-link" href="admin.html">Admin</a>
+            <a id="scrimsTopLink" class="home-link" href="/scrims">Scrims</a>
+            <a class="home-link home-link-primary" href="/quiz">Quiz-Duell</a>
+            <a id="clipTopLink" class="home-link" href="/clips">Clip Upload</a>
+            <a class="home-link" href="/hannos-ki">Hannos KI</a>
+            <a class="home-link" href="/admin">Admin</a>
           </nav>
         </header>
 
@@ -50,12 +50,12 @@
           </div>
 
           <div class="stack home-stack">
-            <a id="scrimsLink" class="mode-link mode-link-scrims" href="scrims.html">Scrims Creator</a>
-            <a id="impostorLink" class="mode-link" href="impostor.html">Impostor Pro</a>
-            <a class="mode-link" href="clips.html">Clip Upload</a>
-            <a class="mode-link" href="quiz.html">Quiz-Duell</a>
-            <a class="mode-link" href="admin.html">Admin Dashboard</a>
-            <a class="mode-link" href="hannos-ki.html">Hannos KI</a>
+            <a id="scrimsLink" class="mode-link mode-link-scrims" href="/scrims">Scrims Creator</a>
+            <a id="impostorLink" class="mode-link" href="/impostor">Impostor Pro</a>
+            <a id="clipMainLink" class="mode-link" href="/clips">Clip Upload</a>
+            <a class="mode-link" href="/quiz">Quiz-Duell</a>
+            <a class="mode-link" href="/admin">Admin Dashboard</a>
+            <a class="mode-link" href="/hannos-ki">Hannos KI</a>
           </div>
         </section>
 
@@ -98,17 +98,52 @@
       const impostorLink = document.getElementById("impostorLink");
       const scrimsLink = document.getElementById("scrimsLink");
       const scrimsTopLink = document.getElementById("scrimsTopLink");
-      const scrimsUrl = String(window.SCRIMS_DASHBOARD_URL || "scrims.html").trim() || "scrims.html";
+      const clipTopLink = document.getElementById("clipTopLink");
+      const clipMainLink = document.getElementById("clipMainLink");
+      const scrimsUrl = String(window.SCRIMS_DASHBOARD_URL || "/scrims").trim() || "/scrims";
 
       if (scrimsLink) scrimsLink.href = scrimsUrl;
       if (scrimsTopLink) scrimsTopLink.href = scrimsUrl;
+
+      async function openClipAreaWithCode(event) {
+        event.preventDefault();
+        try {
+          const statusResponse = await fetch("/api/clips/auth-status");
+          const statusPayload = await statusResponse.json().catch(() => ({}));
+          if (statusResponse.ok && statusPayload && statusPayload.ok && statusPayload.authenticated === true) {
+            window.location.href = "/clips";
+            return;
+          }
+
+          const code = window.prompt("Clip access code:", "") || "";
+          if (!String(code).trim()) return;
+
+          const authResponse = await fetch("/api/clips/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: String(code).trim() })
+          });
+          const authPayload = await authResponse.json().catch(() => ({}));
+          if (!authResponse.ok || !authPayload.ok) {
+            window.alert(authPayload.error || "Access denied.");
+            return;
+          }
+
+          window.location.href = "/clips";
+        } catch (error) {
+          window.alert("Could not open clip area right now.");
+        }
+      }
+
+      if (clipTopLink) clipTopLink.addEventListener("click", openClipAreaWithCode);
+      if (clipMainLink) clipMainLink.addEventListener("click", openClipAreaWithCode);
 
       function getInitialLang() {
         return "de";
       }
 
       function updateModeLinks(lang) {
-        impostorLink.href = new URL(`impostor.html?lang=${encodeURIComponent(lang)}`, window.location.href).toString();
+        impostorLink.href = new URL(`/impostor?lang=${encodeURIComponent(lang)}`, window.location.href).toString();
       }
 
       function applyLanguage(lang) {

@@ -12,56 +12,6 @@
         gap: 14px;
       }
 
-      .clip-access {
-        border: 1px solid rgba(109, 208, 255, 0.35);
-        border-radius: 12px;
-        background: rgba(8, 22, 44, 0.7);
-        padding: 12px;
-        display: grid;
-        gap: 10px;
-      }
-
-      .clip-access-form {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 8px;
-      }
-
-      .clip-access-input {
-        width: 100%;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(7, 13, 30, 0.76);
-        color: var(--text);
-        min-height: 40px;
-        padding: 8px 10px;
-      }
-
-      .clip-access-btn {
-        border: none;
-        border-radius: 10px;
-        min-height: 40px;
-        padding: 8px 14px;
-        font-weight: 800;
-        color: #06121f;
-        background: linear-gradient(115deg, #35e2ff, #7dffb3);
-        cursor: pointer;
-      }
-
-      .clip-access-error {
-        display: none;
-        border: 1px solid rgba(255, 123, 123, 0.45);
-        background: rgba(44, 12, 18, 0.62);
-        border-radius: 10px;
-        padding: 8px 10px;
-        color: #ffd0d7;
-        margin: 0;
-      }
-
-      .clip-access-error.show {
-        display: block;
-      }
-
       .promo-strip {
         border: 1px solid rgba(125, 245, 206, 0.35);
         background: linear-gradient(115deg, rgba(19, 62, 68, 0.85), rgba(8, 35, 55, 0.88));
@@ -345,20 +295,8 @@
 
         <section class="promo-strip" aria-label="Promotion">
           Built for creators, teams, and communities.
-          <small>Fast upload. Instant share link. Mobile-friendly player. Access-code protected.</small>
+          <small>Fast upload. Instant share link. Mobile-friendly player.</small>
         </section>
-
-        <section id="clipAccessGate" class="clip-access" aria-label="Clip access gate">
-          <h2 class="gallery-title">Protected Area</h2>
-          <p class="clip-meta">Enter the access code to open clip upload and your private clip gallery.</p>
-          <form id="clipAccessForm" class="clip-access-form" novalidate>
-            <input id="clipAccessCodeInput" class="clip-access-input" type="password" placeholder="Enter access code" autocomplete="off" required />
-            <button id="clipAccessSubmitBtn" class="clip-access-btn" type="submit">Enter</button>
-          </form>
-          <p id="clipAccessError" class="clip-access-error" role="alert"></p>
-        </section>
-
-        <div id="clipProtectedArea" hidden>
 
         <section class="promo-grid" aria-label="Why ClipDrop">
           <article class="promo-card">
@@ -414,17 +352,10 @@
           <p id="galleryEmpty" class="gallery-empty">Loading gallery...</p>
           <div id="galleryGrid" class="gallery-grid" hidden></div>
         </section>
-        </div>
       </section>
     </main>
 
     <script>
-      const clipAccessGate = document.getElementById("clipAccessGate");
-      const clipProtectedArea = document.getElementById("clipProtectedArea");
-      const clipAccessForm = document.getElementById("clipAccessForm");
-      const clipAccessCodeInput = document.getElementById("clipAccessCodeInput");
-      const clipAccessSubmitBtn = document.getElementById("clipAccessSubmitBtn");
-      const clipAccessError = document.getElementById("clipAccessError");
       const clipForm = document.getElementById("clipForm");
       const clipTitle = document.getElementById("clipTitle");
       const clipFile = document.getElementById("clipFile");
@@ -438,34 +369,6 @@
       const retentionInfo = document.getElementById("retentionInfo");
       const gallerySearchInput = document.getElementById("gallerySearchInput");
       let galleryClips = [];
-
-      function showAccessError(message) {
-        clipAccessError.textContent = String(message || "Access failed.");
-        clipAccessError.classList.add("show");
-      }
-
-      function clearAccessError() {
-        clipAccessError.textContent = "";
-        clipAccessError.classList.remove("show");
-      }
-
-      function setAccessLoading(loading) {
-        clipAccessSubmitBtn.disabled = loading;
-        clipAccessSubmitBtn.textContent = loading ? "Checking..." : "Enter";
-      }
-
-      function setAccessState(authenticated) {
-        const isAuthed = !!authenticated;
-        clipAccessGate.hidden = isAuthed;
-        clipProtectedArea.hidden = !isAuthed;
-      }
-
-      async function checkAccessStatus() {
-        const response = await fetch("/api/clips/auth-status", { method: "GET" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload.ok) return false;
-        return payload.authenticated === true;
-      }
 
       function showError(message) {
         clipError.textContent = String(message || "Unknown error.");
@@ -720,50 +623,7 @@
       gallerySearchInput.addEventListener("input", () => {
         renderGallery();
       });
-
-      clipAccessForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        clearAccessError();
-
-        const code = String(clipAccessCodeInput.value || "").trim();
-        if (!code) {
-          showAccessError("Please enter the access code.");
-          return;
-        }
-
-        setAccessLoading(true);
-        try {
-          const response = await fetch("/api/clips/auth", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code })
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok || !payload.ok) {
-            throw new Error(payload.error || "Access denied.");
-          }
-
-          clipAccessCodeInput.value = "";
-          setAccessState(true);
-          await loadGallery();
-        } catch (error) {
-          showAccessError(error && error.message ? error.message : "Access denied.");
-        } finally {
-          setAccessLoading(false);
-        }
-      });
-
-      (async () => {
-        try {
-          const authenticated = await checkAccessStatus();
-          setAccessState(authenticated);
-          if (authenticated) {
-            await loadGallery();
-          }
-        } catch (error) {
-          setAccessState(false);
-        }
-      })();
+      loadGallery();
     </script>
   </body>
 </html>
