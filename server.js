@@ -13,6 +13,7 @@ const app = express();
 const server = http.createServer(app);
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
+const PUBLIC_STATIC_DIR = path.join(__dirname, "public");
 
 function parseSocketIoCorsOrigin(raw) {
   const value = String(raw || "").trim();
@@ -114,6 +115,10 @@ const CLIPS_PUBLIC_LOCKDOWN = String(process.env.CLIPS_PUBLIC_LOCKDOWN || "false
 const CLIPS_OWNER_COOKIE_ID = "clip_owner_id";
 const CLIPS_OWNER_COOKIE_SIG = "clip_owner_sig";
 const CLIPS_OWNER_SECRET = String(process.env.CLIPS_OWNER_SECRET || process.env.SESSION_SECRET || `${ADMIN_OWNER_KEY}:${ADMIN_EDITOR_KEY}:clips-owner-v1`).trim();
+const CLIPS_ACCESS_CODE = String(process.env.CLIPS_ACCESS_CODE || "Anna").trim();
+const CLIPS_ACCESS_COOKIE = "clip_access_token";
+const CLIPS_ACCESS_SECRET = String(process.env.CLIPS_ACCESS_SECRET || CLIPS_OWNER_SECRET).trim();
+const CLIPS_ACCESS_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 const CLIPS_OWNER_ID_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 365;
 const CLIPS_MUTATION_RATE_LIMIT_WINDOW_MS = 1000 * 60 * 10;
 const CLIPS_MUTATION_RATE_LIMIT_MAX = 30;
@@ -166,18 +171,20 @@ app.use((req, res, next) => {
   }
 
   if (req.path === "/") {
-    res.redirect(302, "/clips.html");
+    res.redirect(302, "/clips");
     return;
   }
 
   const allowedExactPaths = new Set([
-    "/clips.html",
-    "/admin.html",
+    "/clips",
+    "/admin",
     "/admin.js",
     "/styles.css",
     "/pwa.js",
     "/manifest.webmanifest",
     "/api/admin",
+    "/api/clips/auth",
+    "/api/clips/auth-status",
     "/api/clips/upload",
     "/api/clips/latest",
     "/api/modmail/create"
@@ -185,7 +192,7 @@ app.use((req, res, next) => {
 
   const allowedPrefixPaths = [
     "/clip/",
-    "/clips/",
+    "/clip-files/",
     "/api/clips/",
     "/api/admin/"
   ];
@@ -226,8 +233,52 @@ const globalApiLimiter = rateLimit({
 
 app.use("/api", globalApiLimiter);
 
-app.use(express.static("public"));
-app.use("/clips", express.static(CLIPS_PUBLIC_DIR));
+app.use((req, res, next) => {
+  if (req.method !== "GET") {
+    next();
+    return;
+  }
+
+  const rawPath = String(req.path || "").trim();
+  if (!rawPath) {
+    next();
+    return;
+  }
+
+  if (rawPath.endsWith(".html")) {
+    const cleanPath = rawPath.slice(0, -5) || "/";
+    res.redirect(301, cleanPath);
+    return;
+  }
+
+  const blockedPrefix = rawPath.startsWith("/api/")
+    || rawPath.startsWith("/auth/")
+    || rawPath.startsWith("/clip/")
+    || rawPath.startsWith("/clip-files/")
+    || rawPath.startsWith("/clips/");
+
+  if (blockedPrefix) {
+    next();
+    return;
+  }
+
+  const htmlRelative = rawPath === "/" ? "index.html" : `${rawPath.slice(1)}.html`;
+  const htmlAbs = path.join(PUBLIC_STATIC_DIR, htmlRelative);
+  if (!htmlAbs.startsWith(PUBLIC_STATIC_DIR)) {
+    next();
+    return;
+  }
+
+  if (fs.existsSync(htmlAbs) && fs.statSync(htmlAbs).isFile()) {
+    res.sendFile(htmlAbs);
+    return;
+  }
+
+  next();
+});
+
+app.use(express.static(PUBLIC_STATIC_DIR));
+app.use("/clip-files", clipsRequireAccess, express.static(CLIPS_PUBLIC_DIR));
 app.use(express.json({ limit: "256kb" }));
 
 function scrimsNowMs() {
@@ -288,11 +339,75 @@ function clipsParseTimestamp(value) {
 }
 
 function clipsBuildVideoPath(fileName = "") {
-  return `/clips/${encodeURIComponent(String(fileName || ""))}`;
+  return `/clip-files/${encodeURIComponent(String(fileName || ""))}`;
 }
 
 function clipsBuildSharePath(id = "") {
   return `/clip/${encodeURIComponent(String(id || ""))}`;
+}
+
+function clipsSafeEqualText(leftRaw = "", rightRaw = "") {
+  try {
+    const left = Buffer.from(String(leftRaw || ""), "utf8");
+    const right = Buffer.from(String(rightRaw || ""), "utf8");
+    if (left.length !== right.length) return false;
+    return crypto.timingSafeEqual(left, right);
+  } catch (error) {
+    return false;
+  }
+}
+
+function clipsSignAccessPayload(payload = "") {
+  return crypto.createHmac("sha256", CLIPS_ACCESS_SECRET).update(String(payload || "")).digest("hex");
+}
+
+function clipsCreateAccessToken() {
+  const expiresAt = Date.now() + CLIPS_ACCESS_MAX_AGE_MS;
+  const payload = `v1.${expiresAt}`;
+  const signature = clipsSignAccessPayload(payload);
+  return `${payload}.${signature}`;
+}
+
+function clipsHasValidAccess(req) {
+  const cookies = scrimsParseCookies(req);
+  const token = String(cookies[CLIPS_ACCESS_COOKIE] || "").trim();
+  if (!token) return false;
+
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "v1") return false;
+
+  const expiresAt = Number(parts[1]);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return false;
+
+  const payload = `${parts[0]}.${parts[1]}`;
+  const expectedSig = clipsSignAccessPayload(payload);
+  if (!/^[a-f0-9]{64}$/.test(parts[2])) return false;
+  return clipsSafeEqualText(parts[2], expectedSig);
+}
+
+function clipsGrantAccess(req, res) {
+  const token = clipsCreateAccessToken();
+  const secureCookie = req.secure || String(req.get("x-forwarded-proto") || "").toLowerCase() === "https";
+  appendSetCookie(res, scrimsSerializeCookie(CLIPS_ACCESS_COOKIE, token, {
+    maxAge: Math.floor(CLIPS_ACCESS_MAX_AGE_MS / 1000),
+    sameSite: "Strict",
+    secure: secureCookie
+  }));
+}
+
+function clipsRequireAccess(req, res, next) {
+  if (clipsHasValidAccess(req)) {
+    next();
+    return;
+  }
+
+  const wantsJson = req.path.startsWith("/api/") || String(req.headers.accept || "").includes("application/json");
+  if (wantsJson) {
+    res.status(401).json({ ok: false, error: "Access code required." });
+    return;
+  }
+
+  res.status(401).type("text/plain; charset=utf-8").send("Access code required.");
 }
 
 function clipsSignOwnerId(ownerId = "") {
@@ -596,10 +711,30 @@ function scrimsLoadJson(filePath, fallback) {
 }
 
 function scrimsSaveJson(filePath, data) {
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const backupPath = `${filePath}.bak`;
   try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf8");
+
+    if (fs.existsSync(filePath)) {
+      fs.copyFileSync(filePath, backupPath);
+    }
+
+    try {
+      fs.renameSync(tmpPath, filePath);
+    } catch (renameError) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      fs.renameSync(tmpPath, filePath);
+    }
+
     return true;
   } catch (error) {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch (cleanupError) {}
     return false;
   }
 }
@@ -1314,7 +1449,32 @@ async function proxyScrimsApi(req, res, upstreamPath) {
   }
 }
 
-app.post("/api/clips/upload", (req, res) => {
+app.get("/api/clips/auth-status", (req, res) => {
+  const authenticated = clipsHasValidAccess(req);
+  if (authenticated) {
+    clipsEnsureOwnerSession(req, res);
+  }
+  res.json({ ok: true, authenticated });
+});
+
+app.post("/api/clips/auth", (req, res) => {
+  const submittedCode = String(req.body?.code || "").trim();
+  if (!submittedCode) {
+    res.status(400).json({ ok: false, error: "Access code is required." });
+    return;
+  }
+
+  if (!clipsSafeEqualText(submittedCode, CLIPS_ACCESS_CODE)) {
+    res.status(401).json({ ok: false, error: "Invalid access code." });
+    return;
+  }
+
+  clipsGrantAccess(req, res);
+  clipsEnsureOwnerSession(req, res);
+  res.json({ ok: true, message: "Access granted." });
+});
+
+app.post("/api/clips/upload", clipsRequireAccess, (req, res) => {
   if (!clipsIsTrustedMutationRequest(req)) {
     res.status(403).json({ ok: false, error: "Blocked by security policy." });
     return;
@@ -1332,7 +1492,7 @@ app.post("/api/clips/upload", (req, res) => {
       res.status(400).json({
         ok: false,
         error: isLimit
-          ? `Datei zu gross. Maximal ${CLIPS_MAX_SIZE_MB} MB erlaubt.`
+          ? `File too large. Maximum allowed size is ${CLIPS_MAX_SIZE_MB} MB.`
           : String(uploadError.message || "Upload failed")
       });
       return;
@@ -1340,7 +1500,7 @@ app.post("/api/clips/upload", (req, res) => {
 
     const file = req.file;
     if (!file) {
-      res.status(400).json({ ok: false, error: "Keine Video-Datei erhalten." });
+      res.status(400).json({ ok: false, error: "No video file received." });
       return;
     }
 
@@ -1418,7 +1578,7 @@ app.post("/api/modmail/create", (req, res) => {
   res.json({ ok: true, id: item.id, message: "Your request has been sent to the admin inbox." });
 });
 
-app.get("/api/clips/latest", (req, res) => {
+app.get("/api/clips/latest", clipsRequireAccess, (req, res) => {
   clipsPurgeExpired("latest-api");
   const ownerId = clipsEnsureOwnerSession(req, res);
   const index = clipsLoadIndex();
@@ -1440,7 +1600,7 @@ app.get("/api/clips/latest", (req, res) => {
   });
 });
 
-app.get("/api/clips/:id", (req, res) => {
+app.get("/api/clips/:id", clipsRequireAccess, (req, res) => {
   clipsPurgeExpired("clip-detail");
   const ownerId = clipsEnsureOwnerSession(req, res);
   const id = String(req.params.id || "").trim();
@@ -1471,6 +1631,11 @@ app.get("/api/clips/:id", (req, res) => {
 });
 
 app.get("/clip/:id", (req, res) => {
+  if (!clipsHasValidAccess(req)) {
+    res.status(401).send("Access code required.");
+    return;
+  }
+
   clipsPurgeExpired("share-view");
   const ownerId = clipsEnsureOwnerSession(req, res);
   const id = String(req.params.id || "").trim();
@@ -1494,7 +1659,7 @@ app.get("/clip/:id", (req, res) => {
   const title = clipsEscapeHtml(item.title || item.originalName || "Clip");
   const uploaded = clipsEscapeHtml(item.uploadedAt || "");
   const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -1542,7 +1707,7 @@ app.get("/clip/:id", (req, res) => {
   <body>
     <main class="shell">
       <h1>${title}</h1>
-      <p>Hochgeladen: ${uploaded}</p>
+      <p>Uploaded: ${uploaded}</p>
       <video controls autoplay preload="metadata" src="${videoPath}"></video>
     </main>
   </body>
@@ -2679,7 +2844,7 @@ app.post("/api/admin/clips/delete", (req, res) => {
   res.json({ ok: true, deletedId: id });
 });
 
-app.post("/api/clips/delete", (req, res) => {
+app.post("/api/clips/delete", clipsRequireAccess, (req, res) => {
   if (!clipsIsTrustedMutationRequest(req)) {
     res.status(403).json({ ok: false, error: "Blocked by security policy." });
     return;
