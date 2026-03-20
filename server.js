@@ -6,9 +6,13 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 const multer = require("multer");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
 
 const app = express();
 const server = http.createServer(app);
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
 function parseSocketIoCorsOrigin(raw) {
   const value = String(raw || "").trim();
@@ -77,7 +81,7 @@ const WICK_SETTINGS_GITHUB_PATH = String(process.env.WICK_SETTINGS_GITHUB_PATH |
 const WICK_SETTINGS_GITHUB_BRANCH = String(process.env.WICK_SETTINGS_GITHUB_BRANCH || DISCORD_COMMANDS_GITHUB_BRANCH).trim();
 const WICK_SETTINGS_GITHUB_TOKEN = String(process.env.WICK_SETTINGS_GITHUB_TOKEN || DISCORD_COMMANDS_GITHUB_TOKEN).trim();
 const DISCORD_COMMANDS_BOT_KEY = String(process.env.DISCORD_COMMANDS_BOT_KEY || "").trim();
-const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "true").trim().toLowerCase() === "true";
+const DISCORD_COMMANDS_ALLOW_PUBLIC_READ = String(process.env.DISCORD_COMMANDS_ALLOW_PUBLIC_READ || "false").trim().toLowerCase() === "true";
 const BOT_DYNAMIC_COMMANDS_REFRESH_URL = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_URL || "").trim();
 const BOT_DYNAMIC_COMMANDS_REFRESH_KEY = String(process.env.BOT_DYNAMIC_COMMANDS_REFRESH_KEY || "").trim();
 const BOT_WICK_SETTINGS_REFRESH_URL = String(process.env.BOT_WICK_SETTINGS_REFRESH_URL || BOT_DYNAMIC_COMMANDS_REFRESH_URL).trim();
@@ -107,11 +111,20 @@ const CLIPS_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const CLIPS_GALLERY_DEFAULT_LIMIT = 12;
 const CLIPS_GALLERY_MAX_LIMIT = 50;
 const CLIPS_PUBLIC_LOCKDOWN = String(process.env.CLIPS_PUBLIC_LOCKDOWN || "false").trim().toLowerCase() === "true";
+const CLIPS_OWNER_COOKIE_ID = "clip_owner_id";
+const CLIPS_OWNER_COOKIE_SIG = "clip_owner_sig";
+const CLIPS_OWNER_SECRET = String(process.env.CLIPS_OWNER_SECRET || process.env.SESSION_SECRET || `${ADMIN_OWNER_KEY}:${ADMIN_EDITOR_KEY}:clips-owner-v1`).trim();
+const CLIPS_OWNER_ID_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 365;
+const CLIPS_MUTATION_RATE_LIMIT_WINDOW_MS = 1000 * 60 * 10;
+const CLIPS_MUTATION_RATE_LIMIT_MAX = 30;
+const GLOBAL_API_RATE_LIMIT_WINDOW_MS = 1000 * 60;
+const GLOBAL_API_RATE_LIMIT_MAX = Math.max(60, Number(process.env.GLOBAL_API_RATE_LIMIT_MAX || 240));
 const MODMAIL_STORE_PATH = path.join(CLIPS_STORAGE_DIR, "modmail_messages.json");
 const MODMAIL_MAX_ENTRIES = 3000;
 const MODMAIL_RATE_LIMIT_WINDOW_MS = 1000 * 60 * 10;
 const MODMAIL_RATE_LIMIT_MAX = 6;
 const modmailRateLimit = new Map();
+const clipsMutationRateLimit = new Map();
 const ALLOWED_VIDEO_MIME_TYPES = new Set([
   "video/mp4",
   "video/webm",
@@ -125,6 +138,17 @@ try {
 } catch (error) {
   console.error("Failed to create clips directory:", error);
 }
+
+app.use((req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("X-Frame-Options", "SAMEORIGIN");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (req.secure) {
+    res.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -183,9 +207,28 @@ app.use((req, res, next) => {
   res.status(403).type("text/plain; charset=utf-8").send("Access denied. This service is limited to the clip upload area.");
 });
 
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "same-origin" }
+}));
+
+const globalApiLimiter = rateLimit({
+  windowMs: GLOBAL_API_RATE_LIMIT_WINDOW_MS,
+  max: GLOBAL_API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    error: "Too many requests. Please retry in a minute."
+  }
+});
+
+app.use("/api", globalApiLimiter);
+
 app.use(express.static("public"));
 app.use("/clips", express.static(CLIPS_PUBLIC_DIR));
-app.use(express.json());
+app.use(express.json({ limit: "256kb" }));
 
 function scrimsNowMs() {
   return Date.now();
@@ -250,6 +293,105 @@ function clipsBuildVideoPath(fileName = "") {
 
 function clipsBuildSharePath(id = "") {
   return `/clip/${encodeURIComponent(String(id || ""))}`;
+}
+
+function clipsSignOwnerId(ownerId = "") {
+  return crypto.createHmac("sha256", CLIPS_OWNER_SECRET).update(String(ownerId || "")).digest("hex");
+}
+
+function clipsCreateOwnerId() {
+  return `co_${crypto.randomBytes(12).toString("hex")}`;
+}
+
+function clipsParseOwnerCookies(req) {
+  const cookies = scrimsParseCookies(req);
+  const ownerId = String(cookies[CLIPS_OWNER_COOKIE_ID] || "").trim();
+  const ownerSig = String(cookies[CLIPS_OWNER_COOKIE_SIG] || "").trim();
+  if (!/^co_[a-f0-9]{24}$/.test(ownerId)) return "";
+  if (!/^[a-f0-9]{64}$/.test(ownerSig)) return "";
+
+  const expected = clipsSignOwnerId(ownerId);
+  try {
+    const left = Buffer.from(ownerSig, "hex");
+    const right = Buffer.from(expected, "hex");
+    if (left.length !== right.length) return "";
+    if (!crypto.timingSafeEqual(left, right)) return "";
+  } catch (error) {
+    return "";
+  }
+  return ownerId;
+}
+
+function appendSetCookie(res, cookieValue) {
+  const current = res.getHeader("Set-Cookie");
+  if (!current) {
+    res.setHeader("Set-Cookie", cookieValue);
+    return;
+  }
+  if (Array.isArray(current)) {
+    res.setHeader("Set-Cookie", [...current, cookieValue]);
+    return;
+  }
+  res.setHeader("Set-Cookie", [String(current), cookieValue]);
+}
+
+function clipsEnsureOwnerSession(req, res) {
+  const existing = clipsParseOwnerCookies(req);
+  if (existing) return existing;
+
+  const ownerId = clipsCreateOwnerId();
+  const ownerSig = clipsSignOwnerId(ownerId);
+  const cookieMaxAge = Math.floor(CLIPS_OWNER_ID_MAX_AGE_MS / 1000);
+  const secureCookie = req.secure || String(req.get("x-forwarded-proto") || "").toLowerCase() === "https";
+  appendSetCookie(res, scrimsSerializeCookie(CLIPS_OWNER_COOKIE_ID, ownerId, {
+    maxAge: cookieMaxAge,
+    sameSite: "Strict",
+    secure: secureCookie
+  }));
+  appendSetCookie(res, scrimsSerializeCookie(CLIPS_OWNER_COOKIE_SIG, ownerSig, {
+    maxAge: cookieMaxAge,
+    sameSite: "Strict",
+    secure: secureCookie
+  }));
+  return ownerId;
+}
+
+function clipsIsTrustedMutationRequest(req) {
+  const host = String(req.get("host") || "").trim().toLowerCase();
+  if (!host) return false;
+  const candidates = [req.get("origin"), req.get("referer")].filter(Boolean);
+  for (const raw of candidates) {
+    try {
+      const parsed = new URL(String(raw));
+      if (String(parsed.host || "").trim().toLowerCase() !== host) return false;
+    } catch (error) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function clipsRateLimitKey(req, ownerId = "") {
+  const ip = String(req.ip || req.headers["x-forwarded-for"] || "unknown").trim();
+  return `${ownerId || "anon"}|${ip}`;
+}
+
+function clipsIsRateLimited(req, ownerId = "") {
+  const key = clipsRateLimitKey(req, ownerId);
+  const now = Date.now();
+  const prev = clipsMutationRateLimit.get(key) || [];
+  const kept = prev.filter((ts) => ts > now - CLIPS_MUTATION_RATE_LIMIT_WINDOW_MS);
+  kept.push(now);
+  clipsMutationRateLimit.set(key, kept);
+  return kept.length > CLIPS_MUTATION_RATE_LIMIT_MAX;
+}
+
+function clipsListForOwner(index, ownerId, limit = CLIPS_GALLERY_DEFAULT_LIMIT) {
+  const max = Math.max(1, Math.min(CLIPS_GALLERY_MAX_LIMIT, Number(limit) || CLIPS_GALLERY_DEFAULT_LIMIT));
+  return Object.values(index.items || {})
+    .filter((item) => item && item.id && item.fileName && item.ownerId === ownerId)
+    .sort((a, b) => clipsParseTimestamp(b.uploadedAt) - clipsParseTimestamp(a.uploadedAt))
+    .slice(0, max);
 }
 
 function clipsListLatest(index, limit = CLIPS_GALLERY_DEFAULT_LIMIT) {
@@ -1173,6 +1315,16 @@ async function proxyScrimsApi(req, res, upstreamPath) {
 }
 
 app.post("/api/clips/upload", (req, res) => {
+  if (!clipsIsTrustedMutationRequest(req)) {
+    res.status(403).json({ ok: false, error: "Blocked by security policy." });
+    return;
+  }
+  const ownerId = clipsEnsureOwnerSession(req, res);
+  if (clipsIsRateLimited(req, ownerId)) {
+    res.status(429).json({ ok: false, error: "Too many upload requests. Please try again in a few minutes." });
+    return;
+  }
+
   clipsPurgeExpired("pre-upload");
   clipsUpload.single("clip")(req, res, (uploadError) => {
     if (uploadError) {
@@ -1200,6 +1352,7 @@ app.post("/api/clips/upload", (req, res) => {
 
     index.items[clipId] = {
       id: clipId,
+      ownerId,
       fileName: file.filename,
       originalName: String(file.originalname || "").slice(0, 180),
       title,
@@ -1267,10 +1420,12 @@ app.post("/api/modmail/create", (req, res) => {
 
 app.get("/api/clips/latest", (req, res) => {
   clipsPurgeExpired("latest-api");
+  const ownerId = clipsEnsureOwnerSession(req, res);
   const index = clipsLoadIndex();
-  const list = clipsListLatest(index, req.query.limit);
+  const list = clipsListForOwner(index, ownerId, req.query.limit);
   res.json({
     ok: true,
+    privateScope: "owner_only",
     retentionDays: CLIPS_RETENTION_DAYS,
     clips: list.map((item) => ({
       id: item.id,
@@ -1287,6 +1442,7 @@ app.get("/api/clips/latest", (req, res) => {
 
 app.get("/api/clips/:id", (req, res) => {
   clipsPurgeExpired("clip-detail");
+  const ownerId = clipsEnsureOwnerSession(req, res);
   const id = String(req.params.id || "").trim();
   if (!id) {
     res.status(400).json({ ok: false, error: "Missing clip id." });
@@ -1295,7 +1451,7 @@ app.get("/api/clips/:id", (req, res) => {
 
   const index = clipsLoadIndex();
   const item = index?.items?.[id];
-  if (!item) {
+  if (!item || item.ownerId !== ownerId) {
     res.status(404).json({ ok: false, error: "Clip not found." });
     return;
   }
@@ -1316,11 +1472,12 @@ app.get("/api/clips/:id", (req, res) => {
 
 app.get("/clip/:id", (req, res) => {
   clipsPurgeExpired("share-view");
+  const ownerId = clipsEnsureOwnerSession(req, res);
   const id = String(req.params.id || "").trim();
   const index = clipsLoadIndex();
   const item = index?.items?.[id];
 
-  if (!item) {
+  if (!item || item.ownerId !== ownerId) {
     res.status(404).send("Clip not found.");
     return;
   }
@@ -2516,6 +2673,40 @@ app.post("/api/admin/clips/delete", (req, res) => {
   if (!out.ok) {
     const status = String(out.error || "").toLowerCase().includes("not found") ? 404 : 400;
     res.status(status).json({ ok: false, error: out.error || "Could not delete clip." });
+    return;
+  }
+
+  res.json({ ok: true, deletedId: id });
+});
+
+app.post("/api/clips/delete", (req, res) => {
+  if (!clipsIsTrustedMutationRequest(req)) {
+    res.status(403).json({ ok: false, error: "Blocked by security policy." });
+    return;
+  }
+
+  const ownerId = clipsEnsureOwnerSession(req, res);
+  if (clipsIsRateLimited(req, ownerId)) {
+    res.status(429).json({ ok: false, error: "Too many delete requests. Please try again later." });
+    return;
+  }
+
+  const id = String(req.body?.id || "").trim();
+  if (!id) {
+    res.status(400).json({ ok: false, error: "Missing clip id." });
+    return;
+  }
+
+  const index = clipsLoadIndex();
+  const item = index?.items?.[id];
+  if (!item || item.ownerId !== ownerId) {
+    res.status(404).json({ ok: false, error: "Clip not found." });
+    return;
+  }
+
+  const out = clipsDeleteById(id, "owner-self-delete", ownerId);
+  if (!out.ok) {
+    res.status(400).json({ ok: false, error: out.error || "Could not delete clip." });
     return;
   }
 

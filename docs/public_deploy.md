@@ -36,10 +36,13 @@ läuft Socket.IO auf Render und die Webseite verbindet sich cross-origin.
 
 - `ADMIN_OWNER_KEY` (empfohlen setzen)
 - `ADMIN_ACCESS_CODES` (optional)
+- `CLIPS_OWNER_SECRET` (dringend empfohlen, lange zufaellige Zeichenfolge)
+- `GLOBAL_API_RATE_LIMIT_MAX` (z. B. `240`)
+- `DISCORD_COMMANDS_ALLOW_PUBLIC_READ=false` (sicherer Default)
 
 ### Clip Upload (Render + GitHub Workflow)
 
-Der Clip-Upload laeuft serverseitig auf Render und ist fuer oeffentliche Share-Links gedacht.
+Der Clip-Upload laeuft serverseitig auf Render und ist jetzt auf private Nutzer-Sessions gehaertet.
 
 Neu konfiguriert:
 
@@ -54,18 +57,16 @@ Wichtig:
 - Dadurch bleiben hochgeladene Videos und Index-Daten auch nach Redeploys erhalten.
 - Alte Clips werden automatisch geloescht (Auto-Delete nach 10 Tagen).
 - Bei aktiviertem Lockdown sind nur Clip-Seiten und Clip-APIs erreichbar.
+- Nur eigene Clips sind sichtbar (owner-only Galerie per signiertem Cookie).
+- Eigene Clips koennen direkt geloescht werden (`/api/clips/delete`).
+- Upload/Delete sind zusaetzlich gegen Missbrauch begrenzt (Rate-Limits + Origin/Referer-Check).
 
 Clip-Endpunkte:
 
 - Upload: `POST /api/clips/upload`
 - Galerie (neueste Clips): `GET /api/clips/latest?limit=12`
+- Self-Delete: `POST /api/clips/delete`
 - Share-Link: `GET /clip/:id`
-
-Modmail-Endpunkte:
-
-- Public submit: `POST /api/modmail/create`
-- Admin inbox: `GET /api/admin/modmail`
-- Admin update: `POST /api/admin/modmail`
 
 ### KI aktivieren (Render) - GitHub kostenlos (empfohlen)
 
@@ -126,6 +127,19 @@ Danach reicht ein Push auf `main`.
 4. Render deployed den Web Service
 
 So sind beide Ziele immer gleichzeitig aktuell.
+
+## 5) GitHub Security (empfohlen)
+
+Neu im Repo:
+
+- `.github/workflows/security-checks.yml`
+
+Der Workflow fuehrt automatisch aus:
+
+- CodeQL Analyse (JavaScript)
+- `npm audit --omit=dev --audit-level=high`
+
+Damit bekommst du bei Push/PR frueh Hinweise auf Sicherheitsprobleme in Code und Abhaengigkeiten.
 
 ## 4) GitHub -> Render + Pages (konkret)
 

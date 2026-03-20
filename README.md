@@ -121,16 +121,20 @@ Für dieses Repo ist Deploy auf beide Plattformen vorbereitet:
 Clip Upload ist ebenfalls produktionsbereit enthalten:
 
 - Auto-Delete nach 10 Tagen
-- Galerie der zuletzt hochgeladenen Clips
+- Private Galerie (nur eigene Session)
 - Persistente Speicherung über Render Disk (`/var/data`)
-- Modmail-Form auf der Clip-Seite (Bug/Change Requests direkt ins Admin-Dashboard)
+- Self-Delete fuer eigene Clips ohne Admin-Key
+- Signierte Owner-Cookies + zusaetzliche API Rate-Limits
 
 Relevante ENV Variablen:
 
 - `CLIPS_STORAGE_DIR` (empfohlen: `/var/data/clips`)
 - `CLIPS_RETENTION_DAYS` (Standard: `10`)
 - `CLIPS_MAX_SIZE_MB` (Standard: `200`)
+- `CLIPS_OWNER_SECRET` (unbedingt setzen)
+- `GLOBAL_API_RATE_LIMIT_MAX` (Standard: `240` pro Minute/IP)
 - `CLIPS_PUBLIC_LOCKDOWN` (`true` = nur Clip-Service ist erreichbar)
+- `DISCORD_COMMANDS_ALLOW_PUBLIC_READ` (`false` fuer sichere Default-Einstellung)
 
 Setup und Schritte stehen in:
 

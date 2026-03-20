@@ -13,6 +13,8 @@ services:
         mountPath: /var/data
         sizeGB: 1
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: AI_PROVIDER
         value: github
       - key: GITHUB_TOKEN
@@ -44,19 +46,23 @@ services:
       - key: DISCORD_COMMANDS_GITHUB_TOKEN
         sync: false
       - key: DISCORD_COMMANDS_ALLOW_PUBLIC_READ
-        value: "true"
+        value: "false"
       - key: BOT_DYNAMIC_COMMANDS_REFRESH_URL
         value: http://cybrancee-bot-eu-central-21.cybrancee.com:4173/internal/dynamic-commands/refresh
       - key: BOT_DYNAMIC_COMMANDS_REFRESH_KEY
         sync: false
       - key: SOCKET_IO_CORS_ORIGIN
-        value: ""
+        value: https://hanno-s-website.onrender.com,https://hanno123345234.github.io/Hanno-s-website
       - key: CLIPS_STORAGE_DIR
         value: /var/data/clips
       - key: CLIPS_RETENTION_DAYS
         value: "10"
       - key: CLIPS_MAX_SIZE_MB
         value: "200"
+      - key: CLIPS_OWNER_SECRET
+        sync: false
+      - key: GLOBAL_API_RATE_LIMIT_MAX
+        value: "240"
       - key: CLIPS_PUBLIC_LOCKDOWN
         value: "true"
 
