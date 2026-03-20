@@ -113,29 +113,29 @@ Firestore entities suggestion:
 
 ## Deploy (Render + GitHub)
 
-Für dieses Repo ist Deploy auf beide Plattformen vorbereitet:
+This repository is prepared for deployment on both platforms:
 
-- **Render**: Node Web Service über `render.yaml` (`npm install` + `npm start`)
-- **GitHub Pages**: statisches Frontend aus `public/` via `.github/workflows/web-pages.yml`
+- **Render**: Node web service via `render.yaml` (`npm install` + `npm start`)
+- **GitHub Pages**: static frontend from `public/` via `.github/workflows/web-pages.yml`
 
-Clip Upload ist ebenfalls produktionsbereit enthalten:
+Clip upload is also production-ready:
 
-- Auto-Delete nach 10 Tagen
-- Private Galerie (nur eigene Session)
-- Persistente Speicherung über Render Disk (`/var/data`)
-- Self-Delete fuer eigene Clips ohne Admin-Key
-- Signierte Owner-Cookies + zusaetzliche API Rate-Limits
+- Auto-delete after 10 days
+- Private gallery (owner session only)
+- Persistent storage on Render disk (`/var/data`)
+- Self-delete for own clips without admin key
+- Signed owner cookies plus additional API rate limits
 
-Relevante ENV Variablen:
+Relevant environment variables:
 
-- `CLIPS_STORAGE_DIR` (empfohlen: `/var/data/clips`)
-- `CLIPS_RETENTION_DAYS` (Standard: `10`)
-- `CLIPS_MAX_SIZE_MB` (Standard: `200`)
-- `CLIPS_OWNER_SECRET` (unbedingt setzen)
-- `GLOBAL_API_RATE_LIMIT_MAX` (Standard: `240` pro Minute/IP)
-- `CLIPS_PUBLIC_LOCKDOWN` (`true` = nur Clip-Service ist erreichbar)
-- `DISCORD_COMMANDS_ALLOW_PUBLIC_READ` (`false` fuer sichere Default-Einstellung)
+- `CLIPS_STORAGE_DIR` (recommended: `/var/data/clips`)
+- `CLIPS_RETENTION_DAYS` (default: `10`)
+- `CLIPS_MAX_SIZE_MB` (default: `200`)
+- `CLIPS_OWNER_SECRET` (required in production)
+- `GLOBAL_API_RATE_LIMIT_MAX` (default: `240` per minute/IP)
+- `CLIPS_PUBLIC_LOCKDOWN` (`true` = only clip service routes are reachable)
+- `DISCORD_COMMANDS_ALLOW_PUBLIC_READ` (`false` for secure default behavior)
 
-Setup und Schritte stehen in:
+Setup details and deployment steps are documented in:
 
 - `docs/public_deploy.md`

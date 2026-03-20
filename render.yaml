@@ -61,6 +61,8 @@ services:
         value: "200"
       - key: CLIPS_OWNER_SECRET
         sync: false
+      - key: CLIPS_ACCESS_CODE
+        value: Anna
       - key: GLOBAL_API_RATE_LIMIT_MAX
         value: "240"
       - key: CLIPS_PUBLIC_LOCKDOWN
