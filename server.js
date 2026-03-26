@@ -13,7 +13,8 @@ const app = express();
 const server = http.createServer(app);
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
-const PUBLIC_STATIC_DIR = path.join(__dirname, "public");
+const STATIC_SITE_DIR = String(process.env.STATIC_SITE_DIR || "public").trim() || "public";
+const PUBLIC_STATIC_DIR = path.resolve(__dirname, STATIC_SITE_DIR);
 
 function parseSocketIoCorsOrigin(raw) {
   const value = String(raw || "").trim();
@@ -287,6 +288,11 @@ function scrimsNowMs() {
 
 function scrimsRandomToken(bytes = 24) {
   return crypto.randomBytes(bytes).toString("hex");
+}
+
+function scrimsAuthFailureRedirect(reason = "callback") {
+  const safeReason = String(reason || "callback").trim() || "callback";
+  return `/dropmap.html?auth=failed&reason=${encodeURIComponent(safeReason)}`;
 }
 
 function clipsLoadIndex() {
@@ -1723,7 +1729,7 @@ clipsPurgeExpired("startup");
 
 app.get("/auth/discord", async (req, res) => {
   if (!SCRIMS_DISCORD_CLIENT_ID || !SCRIMS_DISCORD_CLIENT_SECRET) {
-    res.status(500).send("Missing DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET in Render env.");
+    res.redirect(302, scrimsAuthFailureRedirect("config"));
     return;
   }
   const state = scrimsRandomToken(18);
@@ -1761,7 +1767,7 @@ app.get("/auth/discord/callback", async (req, res) => {
   if (!code || !state || !cookieState || state !== cookieState || !stateMeta || Number(stateMeta.expiresAt || 0) <= scrimsNowMs()) {
     if (state) scrimsOAuthStates.delete(state);
     res.setHeader("Set-Cookie", clearStateCookie);
-    res.redirect(302, "/dropmap.html?auth=failed");
+    res.redirect(302, scrimsAuthFailureRedirect("state"));
     return;
   }
 
@@ -1782,13 +1788,21 @@ app.get("/auth/discord/callback", async (req, res) => {
     });
     const tokenJson = await tokenRes.json().catch(() => ({}));
     const accessToken = String(tokenJson && tokenJson.access_token ? tokenJson.access_token : "");
-    if (!tokenRes.ok || !accessToken) throw new Error("oauth token failed");
+    if (!tokenRes.ok || !accessToken) {
+      res.setHeader("Set-Cookie", clearStateCookie);
+      res.redirect(302, scrimsAuthFailureRedirect("token"));
+      return;
+    }
 
     const meRes = await fetch("https://discord.com/api/v10/users/@me", {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     const me = await meRes.json().catch(() => ({}));
-    if (!meRes.ok || !me || !me.id) throw new Error("user fetch failed");
+    if (!meRes.ok || !me || !me.id) {
+      res.setHeader("Set-Cookie", clearStateCookie);
+      res.redirect(302, scrimsAuthFailureRedirect("user"));
+      return;
+    }
 
     const sid = scrimsRandomToken(24);
     scrimsWebSessions.set(sid, {
@@ -1811,7 +1825,7 @@ app.get("/auth/discord/callback", async (req, res) => {
     res.redirect(302, "/dropmap.html?auth=ok");
   } catch (error) {
     res.setHeader("Set-Cookie", clearStateCookie);
-    res.redirect(302, "/dropmap.html?auth=failed");
+    res.redirect(302, scrimsAuthFailureRedirect("callback"));
   }
 });
 
@@ -1878,6 +1892,18 @@ app.get("/api/wick-settings", async (req, res) => {
 });
 
 app.get("/api/scrims/health", async (req, res) => {
+  const missing = scrimsMissingConfig({});
+  res.json({
+    ok: missing.length === 0,
+    hasDiscordToken: !!SCRIMS_DISCORD_TOKEN,
+    guildIdConfigured: !!resolveScrimsGuildId({}),
+    oauthConfigured: !!(SCRIMS_DISCORD_CLIENT_ID && SCRIMS_DISCORD_CLIENT_SECRET),
+    redirectUri: SCRIMS_DISCORD_REDIRECT_URI,
+    missing
+  });
+});
+
+app.get("/api/health", async (req, res) => {
   const missing = scrimsMissingConfig({});
   res.json({
     ok: missing.length === 0,
@@ -2025,6 +2051,33 @@ app.post("/api/scrims/create-lobby", async (req, res) => {
       ok: false,
       error: String(error?.message || "Lobby creation failed")
     });
+  }
+});
+
+app.post("/api/create-lobby", async (req, res) => {
+  const session = scrimsGetSession(req);
+  if (!session) {
+    res.status(401).json({
+      ok: false,
+      error: "Please connect Discord first."
+    });
+    return;
+  }
+
+  try {
+    const missing = scrimsMissingConfig(req.body || {});
+    if (missing.length) {
+      res.status(500).json({ ok: false, error: `Render env missing: ${missing.join(", ")}` });
+      return;
+    }
+
+    const result = SCRIMS_API_BASE || SCRIMS_API_BASES.length
+      ? await scrimsCreateLobbyForward(req.body || {})
+      : await scrimsCreateLobbyLocal(req.body || {});
+    scrimsRememberCreate(req.body || {}, result, session);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error && error.message ? error.message : error || "Lobby creation failed.") });
   }
 });
 

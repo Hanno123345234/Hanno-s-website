@@ -7,7 +7,7 @@ services:
     autoDeploy: true
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     disks:
       - name: clip-storage
         mountPath: /var/data
@@ -67,4 +67,13 @@ services:
         value: "240"
       - key: CLIPS_PUBLIC_LOCKDOWN
         value: "true"
-
+      - key: STATIC_SITE_DIR
+        value: cf_pages_public
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_REDIRECT_URI
+        sync: false
+      - key: SCRIMS_GUILD_ID
+        sync: false
